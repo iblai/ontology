@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://ibl.ai"><img src="https://ibl.ai/logo.png" alt="ibl.ai" height="64"></a>
+  <a href="https://ibl.ai"><img src="https://ibl.ai/images/iblai-logo.png" alt="ibl.ai" width="300"></a>
 </p>
 
 <h1 align="center">Ontology</h1>
