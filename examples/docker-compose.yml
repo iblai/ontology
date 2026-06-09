@@ -1,0 +1,39 @@
+# Run an OpenClaw sandbox with Ontology-managed mounts.
+#
+# The `ontology-mount` init container reads the registry, mounts the
+# filesystems this sandbox is permitted, and shares them with the claw
+# container through a bind-propagated volume. The claw process then sees its
+# world under /mnt, plus a manifest.json describing what it can read/write.
+#
+#   EFS_KNOWLEDGE_ID=fs-0abc... docker compose up
+version: "3.9"
+
+services:
+  ontology-mount:
+    image: ghcr.io/iblai/ontology:0.1.0
+    privileged: true                      # required to call mount(8)
+    environment:
+      ONTOLOGY_CONFIG: /etc/ontology/ontology.yaml
+      EFS_KNOWLEDGE_ID: ${EFS_KNOWLEDGE_ID}
+      EFS_VAULT_ID: ${EFS_VAULT_ID}
+      EFS_VAULT_ACCESS_POINT: ${EFS_VAULT_ACCESS_POINT}
+    volumes:
+      - ../config/ontology.example.yaml:/etc/ontology/ontology.yaml:ro
+      - mnt:/mnt:rshared
+    command: >
+      sh -c "ontology mount --sandbox openclaw-prod &&
+             ontology manifest --sandbox openclaw-prod > /mnt/manifest.json &&
+             sleep infinity"
+
+  openclaw:
+    image: ghcr.io/iblai/openclaw:latest
+    depends_on:
+      - ontology-mount
+    volumes:
+      - mnt:/mnt:rslave                   # inherits the Ontology mounts
+    environment:
+      IBL_GATEWAY_URL: ${IBL_GATEWAY_URL}
+      IBL_DEVICE_TOKEN: ${IBL_DEVICE_TOKEN}
+
+volumes:
+  mnt:
