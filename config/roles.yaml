@@ -1,0 +1,107 @@
+# ============================================================
+# ROLE DEFINITIONS — what each role can access in iblai-ontology.
+#
+# Role *assignment* (who has which role) is managed in the ibl.ai platform and
+# arrives on each MCP request via the `X-Iblai-Role` header. This file only
+# defines what a given role is permitted to access (Component 3, Option A).
+# ============================================================
+roles:
+  default:
+    display_name: "Authenticated User (No Role Assigned)"
+    memory_paths:
+      - /ontology/courses/_index.md
+      - /ontology/courses/by-dept/**
+    mcp_toolsets: []
+    cache_tables: []
+    agents:
+      - general-info-agent
+
+  FinancialAidCounselor:
+    display_name: "Financial Aid Counselor"
+    memory_paths:
+      - /ontology/financial-aid/**
+      - /ontology/students/**
+      - /ontology/enrollment/**
+    mcp_toolsets:
+      - financial-aid-tools
+      - enrollment-tools
+    cache_tables:
+      - students
+      - financial_aid
+      - sap_status
+      - isir_data
+      - enrollment
+      - holds
+    agents:
+      - financial-aid-agent
+
+  AcademicAdvisor:
+    display_name: "Academic Advisor"
+    memory_paths:
+      - /ontology/students/**
+      - /ontology/courses/**
+      - /ontology/enrollment/**
+    mcp_toolsets:
+      - enrollment-tools
+    cache_tables:
+      - students
+      - enrollment
+      - term_summary
+      - courses
+      - course_sections
+      - canvas_activity
+      - advising
+    agents:
+      - advising-agent
+
+  Registrar:
+    display_name: "Registrar Staff"
+    memory_paths:
+      - /ontology/**
+    mcp_toolsets:
+      - enrollment-tools
+      - admin-analytics-tools
+    cache_tables:
+      - "*"
+    agents:
+      - registrar-agent
+      - analytics-agent
+
+  Student:
+    display_name: "Student"
+    memory_paths:
+      - /ontology/students/by-id/${USER_EMPLID}.md
+      - /ontology/courses/_index.md
+      - /ontology/courses/by-dept/**
+    mcp_toolsets:
+      - student-self-service-tools
+    cache_tables: []
+    concurrency_limits:
+      max_records_per_query: 1
+    agents:
+      - student-self-service-agent
+
+  Executive:
+    display_name: "University Executive"
+    memory_paths:
+      - /ontology/**
+    mcp_toolsets:
+      - "*"
+    cache_tables:
+      - "*"
+    concurrency_limits:
+      max_records_per_query: 1000
+      max_export_rows: 500
+    agents:
+      - executive-dashboard-agent
+
+  IblaiOntologyAdmin:
+    display_name: "Ontology Administrator"
+    memory_paths:
+      - /ontology/_audit/**
+    mcp_toolsets:
+      - admin-analytics-tools
+    cache_tables:
+      - sync_runs
+      - audit_log
+    admin_dashboard: true
