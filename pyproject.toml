@@ -1,28 +1,74 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "ontology-fs"
+name = "iblai-ontology"
 version = "0.1.0"
-description = "Filesystem registry that grounds ibl.ai OpenClaw / NemoClaw sandboxes in AWS EFS and NFS"
+description = "On-premise knowledge layer that makes a university's systems queryable by AI agents over MCP — no data extraction."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "ibl.ai", email = "hello@ibl.ai" }]
-keywords = ["ibl.ai", "openclaw", "nemoclaw", "efs", "nfs", "ontology", "ai-agents", "sandbox"]
-dependencies = []
+authors = [{ name = "ibl.ai" }]
+keywords = ["mcp", "ontology", "higher-education", "knowledge-layer", "peoplesoft", "canvas", "entra-id"]
+
+# Core deps: the CLI and config layer run with just these (no Django needed).
+dependencies = [
+    "typer==0.25.0",
+    "rich==15.0.0",
+    "questionary==2.1.1",
+    "pydantic==2.13.3",
+    "pyyaml>=6.0",
+    "pyjwt[crypto]>=2.8",
+    "httpx>=0.27",
+]
 
 [project.optional-dependencies]
-yaml = ["PyYAML>=6.0"]
-dev = ["PyYAML>=6.0", "pytest>=7.0"]
+# Long-running backend services (gateway, sync, discovery state).
+django = [
+    "django>=5.0,<6.0",
+    "celery>=5.3",
+    "cryptography>=42.0",
+]
+# BYOK schema analysis — only needed when LLM discovery is enabled.
+llm = [
+    "anthropic>=0.40",
+    "openai>=1.40",
+]
+# Source-system drivers — install only the ones a deployment actually uses.
+db = [
+    "oracledb>=2.0",
+    "psycopg2-binary>=2.9",
+    "pymysql>=1.1",
+    "pyodbc>=5.0",
+]
+# Vector index for semantic search over text memories.
+vector = [
+    "chromadb>=0.6",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+]
 
 [project.scripts]
-ontology = "ontology.cli:main"
+ontology = "iblai_ontology.cli:app"
 
 [project.urls]
 Homepage = "https://ibl.ai/ontology"
 Repository = "https://github.com/iblai/ontology"
 
-[tool.setuptools.packages.find]
-include = ["ontology*"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/iblai_ontology/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/iblai_ontology"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "django: tests that require the Django backend extra",
+    "db: tests that require a live source-system database driver",
+]

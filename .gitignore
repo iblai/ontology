@@ -8,5 +8,15 @@ dist/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 *.local.yaml
 .claude/
+
+# iblai-ontology runtime artifacts
+config/generated/
+config/manifests/
+ontology-data/
+.ontology/
+*.sqlite3
+caddy-data/
