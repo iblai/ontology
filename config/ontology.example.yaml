@@ -1,0 +1,54 @@
+# ============================================================
+# ontology.example.yaml — TEMPLATE for ontology.yaml
+#
+# Copy this file to config/ontology.yaml and fill in the values for your
+# deployment:
+#
+#     cp config/ontology.example.yaml config/ontology.yaml
+#
+# Secrets should be supplied via environment variables (see .env.example),
+# never committed in plaintext.
+# ============================================================
+
+# ------------------------------------------------------------
+# LLM (BYOK — bring your own key)
+#
+# Leave provider/api_key/model null to disable LLM-assisted features
+# (e.g. schema discovery). When enabled, defaults per provider are:
+#   anthropic -> claude-opus-4-8
+#   openai    -> gpt-4o
+# Override `model` here only to pin a specific model id.
+# ------------------------------------------------------------
+llm:
+  provider: null          # "anthropic" | "openai" | null
+  api_key: null           # BYOK; or set via environment
+  model: null             # null = provider default (see note above)
+  max_tokens: 4096
+  temperature: 0.2
+
+# ------------------------------------------------------------
+# Paths
+# ------------------------------------------------------------
+paths:
+  text_memories: /ontology   # root of the Markdown text-memory tree
+  config: ./config           # directory holding this and the other YAML files
+
+# ------------------------------------------------------------
+# Structured cache (PostgreSQL) — placeholder
+# The local cache runs as the "ontology-db" service in docker-compose.yml.
+# Connection is supplied via ONTOLOGY_DB_URL / ONTOLOGY_DB_PASSWORD env vars.
+# ------------------------------------------------------------
+# db:
+#   host: ontology-db
+#   port: 5432
+#   database: ontology
+#   user: ontology
+#   password: ${ONTOLOGY_DB_PASSWORD}
+
+# ------------------------------------------------------------
+# Microsoft Entra ID (identity) — placeholder
+# Supplied via ENTRA_TENANT_ID / ENTRA_CLIENT_ID env vars.
+# ------------------------------------------------------------
+# entra:
+#   tenant_id: ${ENTRA_TENANT_ID}
+#   client_id: ${ENTRA_CLIENT_ID}

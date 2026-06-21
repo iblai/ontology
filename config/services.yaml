@@ -1,0 +1,49 @@
+# ============================================================
+# services.yaml — service registry (Component 5.7)
+#
+# Generated and maintained by the service registry (`ontology service ...`).
+# One entry per connected source system, with its adapter, connection
+# metadata, and the results of the most recent discovery / safety / sync runs.
+# Secrets (passwords, API tokens) are stored encrypted in the database,
+# NOT in this file.
+# ============================================================
+services:
+  - name: peoplesoft
+    display_name: "PeopleSoft (Oracle)"
+    type: database
+    adapter: peoplesoft
+    status: active
+    connection:
+      db_type: oracle
+      host: ps-db.university.edu
+      port: 1521
+      database: CSPRD
+      username: iblai_readonly
+      # password stored encrypted in the database, not in this file
+    discovery:
+      last_run: "2026-06-15T10:30:00Z"
+      tables_discovered: 847
+      schemas: ["SYSADM"]
+    safety:
+      last_check: "2026-06-15T10:28:00Z"
+      status: passed
+      tests_passed: 7
+      tests_failed: 0
+    sync:
+      last_run: "2026-06-20T14:00:00Z"
+      status: success
+      tables_synced: 42
+      rows_synced: 1234567
+      next_run: "2026-06-20T15:00:00Z"
+
+  - name: canvas
+    display_name: "Canvas LMS"
+    type: api
+    adapter: canvas_api
+    status: active
+    connection:
+      base_url: https://canvas.university.edu
+      # api_token stored encrypted in the database
+    sync:
+      last_run: "2026-06-20T14:15:00Z"
+      status: success
