@@ -32,7 +32,11 @@ INSTALLED_APPS = [
     "iblai_ontology.backend.mcp_server",
 ]
 
-MIDDLEWARE: list[str] = []
+MIDDLEWARE: list[str] = [
+    "iblai_ontology.backend.identity.middleware.OntologyIdentityMiddleware",
+]
+
+ROOT_URLCONF = "iblai_ontology.backend.urls"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True

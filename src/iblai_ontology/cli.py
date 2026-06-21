@@ -23,6 +23,7 @@ from iblai_ontology.commands import (
     deploy,
     health,
     mcp,
+    platform,
     roles,
     service,
     sync,
@@ -43,6 +44,7 @@ app.add_typer(health.app, name="health")
 app.add_typer(data.app, name="data")
 app.add_typer(deploy.app, name="deploy")
 app.add_typer(mcp.app, name="mcp")
+app.add_typer(platform.app, name="platform")
 
 
 def _version_callback(value: bool) -> None:

@@ -1,10 +1,15 @@
 """URL routing for the backend.
 
-The MCP outbound gateway and admin/health endpoints are mounted here. The MCP
-handlers themselves live in :mod:`iblai_ontology.backend.mcp_server` and are
-wired in Component 4.
+The MCP outbound gateway is mounted at ``/mcp``; the identity middleware
+authenticates every request before the view scopes results to the caller's role.
 """
 
 from __future__ import annotations
 
-urlpatterns: list = []
+from django.urls import path
+
+from iblai_ontology.backend.mcp_server.server import mcp_view
+
+urlpatterns = [
+    path("mcp", mcp_view, name="mcp"),
+]

@@ -88,8 +88,12 @@ class OntologyIdentityMiddleware:
         from django.conf import settings
 
         self.get_response = get_response
-        self.validator = EntraValidator(settings.ENTRA_TENANT_ID, settings.ENTRA_CLIENT_ID)
         self.resolver = RoleResolver()
+        # Construct the validator lazily — a deployment without Entra config can
+        # still boot (requests will simply be unauthenticated/401).
+        self.validator = None
+        if settings.ENTRA_TENANT_ID and settings.ENTRA_CLIENT_ID:
+            self.validator = EntraValidator(settings.ENTRA_TENANT_ID, settings.ENTRA_CLIENT_ID)
 
     def __call__(self, request):
         from django.http import JsonResponse
@@ -97,7 +101,7 @@ class OntologyIdentityMiddleware:
         from iblai_ontology.backend.identity.entra import EntraTokenError
 
         auth = request.headers.get("Authorization", "")
-        if auth.lower().startswith("bearer "):
+        if auth.lower().startswith("bearer ") and self.validator is not None:
             token = auth[7:]
             try:
                 request.ontology = resolve_request(

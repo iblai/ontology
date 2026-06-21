@@ -13,7 +13,7 @@ from iblai_ontology.cli import app
 
 runner = CliRunner()
 
-GROUPS = ["service", "config", "sync", "roles", "health", "data", "deploy", "mcp"]
+GROUPS = ["service", "config", "sync", "roles", "health", "data", "deploy", "mcp", "platform"]
 
 
 def test_root_help():
