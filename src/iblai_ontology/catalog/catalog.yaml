@@ -1,0 +1,118 @@
+# ============================================================
+# Built-in service catalog — defaults for common higher-ed systems.
+#
+# Each entry seeds `ontology service add --from <key>` (and is the target of
+# `ontology catalog show <key>`). API entries mirror the SKILL.md definitions in
+# iblai/higher-education-agents; the database entry (peoplesoft) comes from the
+# architecture doc. Vendored skill files live in catalog/skills/.
+# ============================================================
+entries:
+  peoplesoft:
+    display_name: "PeopleSoft (Oracle)"
+    type: database
+    adapter: peoplesoft
+    connection: {driver: oracle, default_port: 1521}
+    env: [PEOPLESOFT_DB_HOST, PEOPLESOFT_DB_PORT, PEOPLESOFT_DB_NAME, PEOPLESOFT_RO_USER, PEOPLESOFT_RO_PASSWORD]
+    default_toolset: enrollment-tools
+    sync_defaults: {students: 1h, courses: 6h, financial_aid: 1h, demographics: 24h}
+    summary: "Campus Solutions SIS on Oracle — students, enrollment, financial aid, courses, HR (PS_* tables, EMPLID keys)."
+
+  banner:
+    display_name: "Ellucian Banner (REST)"
+    type: api
+    adapter: banner_api
+    connection: {base_url_env: BANNER_BASE_URL}
+    env: [BANNER_API_KEY, BANNER_BASE_URL, BANNER_CLIENT_ID, BANNER_CLIENT_SECRET]
+    default_toolset: enrollment-tools
+    sync_defaults: {students: 1h, registration: 1h, financial_aid: 6h}
+    skill: banner.md
+
+  canvas:
+    display_name: "Instructure Canvas LMS"
+    type: api
+    adapter: canvas_api
+    connection: {base_url_env: CANVAS_BASE_URL}
+    env: [CANVAS_API_TOKEN, CANVAS_BASE_URL]
+    default_toolset: enrollment-tools
+    sync_defaults: {activity: 4h, submissions: 1h}
+    skill: canvas.md
+
+  slate:
+    display_name: "Technolutions Slate CRM"
+    type: api
+    adapter: slate_api
+    connection: {base_url_env: SLATE_BASE_URL}
+    env: [SLATE_API_KEY, SLATE_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {applications: 6h}
+    skill: slate.md
+
+  workday:
+    display_name: "Workday HCM / Student"
+    type: api
+    adapter: workday_api
+    connection: {base_url_env: WORKDAY_BASE_URL}
+    env: [WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, WORKDAY_BASE_URL, WORKDAY_TENANT]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {workers: 24h, financial_aid: 6h}
+    skill: workday.md
+
+  eab-navigate:
+    display_name: "EAB Navigate"
+    type: api
+    adapter: navigate_api
+    connection: {base_url_env: EAB_NAVIGATE_BASE_URL}
+    env: [EAB_NAVIGATE_API_KEY, EAB_NAVIGATE_BASE_URL]
+    default_toolset: enrollment-tools
+    sync_defaults: {alerts: 1h, appointments: 6h}
+    skill: eab-navigate.md
+
+  salesforce-education-cloud:
+    display_name: "Salesforce Education Cloud"
+    type: api
+    adapter: salesforce_api
+    connection: {base_url_env: SALESFORCE_INSTANCE_URL}
+    env: [SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, SALESFORCE_INSTANCE_URL, SALESFORCE_USERNAME, SALESFORCE_PASSWORD]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {contacts: 6h, opportunities: 6h}
+    skill: salesforce-education-cloud.md
+
+  servicenow:
+    display_name: "ServiceNow ITSM"
+    type: api
+    adapter: servicenow_api
+    connection: {base_url_env: SERVICENOW_BASE_URL}
+    env: [SERVICENOW_CLIENT_ID, SERVICENOW_CLIENT_SECRET, SERVICENOW_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {incidents: 1h}
+    skill: servicenow.md
+
+  civitas-learning:
+    display_name: "Civitas Learning"
+    type: api
+    adapter: civitas_api
+    connection: {base_url_env: CIVITAS_BASE_URL}
+    env: [CIVITAS_API_KEY, CIVITAS_BASE_URL]
+    default_toolset: enrollment-tools
+    sync_defaults: {risk_scores: 6h}
+    skill: civitas-learning.md
+
+  handshake:
+    display_name: "Handshake Careers"
+    type: api
+    adapter: handshake_api
+    connection: {base_url_env: HANDSHAKE_BASE_URL}
+    env: [HANDSHAKE_API_KEY, HANDSHAKE_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {jobs: 24h}
+    skill: handshake.md
+
+  blackbaud-raisers-edge:
+    display_name: "Blackbaud Raiser's Edge NXT"
+    type: api
+    adapter: raisers_edge_api
+    connection: {base_url_env: RAISERS_EDGE_BASE_URL}
+    env: [RAISERS_EDGE_API_KEY, RAISERS_EDGE_CLIENT_ID, RAISERS_EDGE_CLIENT_SECRET, RAISERS_EDGE_BASE_URL, RAISERS_EDGE_REDIRECT_URI]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {constituents: 24h, gifts: 6h}
+    skill: blackbaud-raisers-edge.md
