@@ -1,0 +1,81 @@
+# ============================================================
+# sync-schedules.yaml — sync engine schedule definitions
+# (Component 2A: Sync Engine)
+#
+# Each schedule pulls from a source via the MCP connectivity layer,
+# transforms the result, and writes it into text memories and/or the
+# structured Postgres cache. Cron times are local to the deployment.
+# ============================================================
+schedules:
+  # ----------------------------------------------------------
+  # NIGHTLY FULL REFRESHES (run at 2:00 AM local time)
+  # ----------------------------------------------------------
+  - name: students-full
+    cron: "0 2 * * *"
+    source: peoplesoft-oracle
+    tool: get-all-active-students
+    output:
+      text_memories: /ontology/students/
+      structured_cache: students
+    description: Full refresh of all active student records
+
+  - name: courses-full
+    cron: "0 2 * * *"
+    source: peoplesoft-oracle
+    tool: get-course-catalog
+    output:
+      text_memories: /ontology/courses/
+      structured_cache: courses
+    description: Full refresh of course catalog
+
+  - name: financial-aid-full
+    cron: "0 3 * * *"
+    source: peoplesoft-oracle
+    tool: get-all-aid-packages
+    output:
+      text_memories: /ontology/financial-aid/
+      structured_cache: financial_aid
+    description: Full refresh of financial aid data
+
+  # ----------------------------------------------------------
+  # FREQUENT DELTA REFRESHES
+  # ----------------------------------------------------------
+  - name: student-holds-delta
+    cron: "*/5 * * * *"
+    source: peoplesoft-oracle
+    tool: get-recent-hold-changes
+    output:
+      text_memories: /ontology/students/by-id/
+      structured_cache: holds
+    description: Check for new/changed holds every 5 minutes
+
+  - name: enrollment-changes-delta
+    cron: "*/15 * * * *"
+    source: peoplesoft-oracle
+    tool: get-enrollment-changes
+    output:
+      text_memories: /ontology/enrollment/
+      structured_cache: enrollment
+    description: Check for enrollment changes every 15 minutes
+
+  # ----------------------------------------------------------
+  # CANVAS SYNC (API-based, respecting rate limits)
+  # ----------------------------------------------------------
+  - name: canvas-activity
+    cron: "0 */4 * * *"
+    source: canvas-mcp
+    tool: get-student-activity-bulk
+    output:
+      text_memories: /ontology/students/by-id/
+    description: Sync Canvas activity data every 4 hours
+
+  # ----------------------------------------------------------
+  # WEEKLY
+  # ----------------------------------------------------------
+  - name: org-chart
+    cron: "0 6 * * 1"
+    source: ldap-mcp
+    tool: get-org-structure
+    output:
+      text_memories: /ontology/hr/
+    description: Weekly org chart refresh from LDAP/AD

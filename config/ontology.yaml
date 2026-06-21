@@ -1,13 +1,5 @@
 # ============================================================
-# ontology.example.yaml — TEMPLATE for ontology.yaml
-#
-# Copy this file to config/ontology.yaml and fill in the values for your
-# deployment:
-#
-#     cp config/ontology.example.yaml config/ontology.yaml
-#
-# Secrets should be supplied via environment variables (see .env.example),
-# never committed in plaintext.
+# ontology.yaml — main iblai-ontology configuration
 # ============================================================
 
 # ------------------------------------------------------------

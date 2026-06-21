@@ -1,0 +1,22 @@
+# ============================================================
+# Caddyfile — HTTPS reverse proxy for the iblai-ontology stack
+#
+# Caddy auto-provisions TLS via Let's Encrypt (or use a university-provided
+# certificate). Replace <domain> with the institution's domain.
+#   ontology.<domain>        -> ontology-gateway:8080  (MCP exposure)
+#   admin.ontology.<domain>  -> admin-dashboard:8080   (admin UI)
+# ============================================================
+
+ontology.{$ONTOLOGY_DOMAIN} {
+    reverse_proxy ontology-gateway:8080
+    log {
+        output file /var/log/caddy/access.log
+    }
+}
+
+admin.ontology.{$ONTOLOGY_DOMAIN} {
+    reverse_proxy admin-dashboard:8080
+    log {
+        output file /var/log/caddy/admin-access.log
+    }
+}

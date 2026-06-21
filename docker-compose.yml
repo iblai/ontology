@@ -1,0 +1,155 @@
+# ============================================================
+# docker-compose.yml — iblai-ontology on-premise knowledge layer
+#
+# This stack does NOT include the agent runtime. It includes only the
+# knowledge layer, the identity gateway, and the MCP exposure endpoint.
+#
+# Networking: the `ontology-internal` network is `internal: true`, so the
+# MCP servers, database, vector store, and sync engine cannot reach the
+# internet. Only `ontology-gateway` and `proxy` bridge to `ontology-exposed`.
+# ============================================================
+version: "3.9"
+
+services:
+  # --- MCP Inbound: Database Connectivity ---
+  mcp-toolbox:
+    image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.5.0
+    volumes:
+      - ./config/tools.yaml:/app/tools.yaml
+    env_file: .env.mcp
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  mcp-canvas:
+    build: ./mcp-servers/canvas
+    env_file: .env.canvas
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  mcp-slate:
+    build: ./mcp-servers/slate
+    env_file: .env.slate
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  mcp-navigate:
+    build: ./mcp-servers/navigate
+    env_file: .env.navigate
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  mcp-ldap:
+    build: ./mcp-servers/ldap
+    env_file: .env.ldap
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  # --- Knowledge Store ---
+  ontology-db:
+    image: postgres:16-alpine
+    volumes:
+      - ontology-data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./sql/views.sql:/docker-entrypoint-initdb.d/02-views.sql
+    environment:
+      POSTGRES_DB: ontology
+      POSTGRES_USER: ontology
+      POSTGRES_PASSWORD: ${ONTOLOGY_DB_PASSWORD}
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  vector-store:
+    image: chromadb/chroma:0.6.3
+    volumes:
+      - vector-data:/chroma/chroma
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  # --- Sync Engine ---
+  sync-engine:
+    build: ./sync-engine
+    volumes:
+      - ontology-files:/ontology
+      - ./config/sync-schedules.yaml:/app/config.yaml
+    environment:
+      MCP_TOOLBOX_URL: http://mcp-toolbox:5000
+      MCP_CANVAS_URL: http://mcp-canvas:3000
+      ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      CHROMA_URL: http://vector-store:8000
+    depends_on:
+      - mcp-toolbox
+      - mcp-canvas
+      - ontology-db
+      - vector-store
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
+  # --- MCP Outbound: Exposure Gateway ---
+  ontology-gateway:
+    build: ./gateway
+    volumes:
+      - ontology-files:/ontology:ro
+      - ./config/roles.yaml:/app/roles.yaml
+    environment:
+      MCP_TOOLBOX_URL: http://mcp-toolbox:5000
+      ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      CHROMA_URL: http://vector-store:8000
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
+    depends_on:
+      - mcp-toolbox
+      - ontology-db
+      - vector-store
+    networks:
+      - ontology-internal
+      - ontology-exposed
+    restart: unless-stopped
+
+  # --- HTTPS Reverse Proxy ---
+  proxy:
+    image: caddy:2-alpine
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+    ports:
+      - "443:443"
+    depends_on:
+      - ontology-gateway
+    networks:
+      - ontology-exposed
+    restart: unless-stopped
+
+  # --- Admin Dashboard ---
+  admin-dashboard:
+    build: ./admin-dashboard
+    environment:
+      ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
+    networks:
+      - ontology-internal
+      - ontology-exposed
+    restart: unless-stopped
+
+networks:
+  ontology-internal:
+    driver: bridge
+    internal: true            # No external access to internal services
+  ontology-exposed:
+    driver: bridge            # Gateway and proxy can reach the outside
+
+volumes:
+  ontology-data:
+  ontology-files:
+  vector-data:
+  caddy-data:
