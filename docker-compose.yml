@@ -12,8 +12,12 @@ version: "3.9"
 
 services:
   # --- MCP Inbound: Database Connectivity ---
+  # Google MCP Toolbox for Databases — github.com/googleapis/mcp-toolbox
+  # Connects to external DB interfaces (PeopleSoft Oracle, Postgres, Snowflake,
+  # …) via the kind:source/tool/toolset definitions in config/tools.yaml.
   mcp-toolbox:
     image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.5.0
+    command: ["toolbox", "--tools-file", "/app/tools.yaml", "--address", "0.0.0.0", "--port", "5000"]
     volumes:
       - ./config/tools.yaml:/app/tools.yaml
     env_file: .env.mcp
