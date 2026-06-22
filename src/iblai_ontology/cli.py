@@ -26,6 +26,7 @@ from iblai_ontology.commands import (
     platform,
     roles,
     service,
+    skill,
     sync,
 )
 
@@ -45,6 +46,7 @@ app.add_typer(data.app, name="data")
 app.add_typer(deploy.app, name="deploy")
 app.add_typer(mcp.app, name="mcp")
 app.add_typer(platform.app, name="platform")
+app.add_typer(skill.app, name="skill")
 
 
 def _version_callback(value: bool) -> None:
