@@ -37,6 +37,26 @@ def test_unknown_table_cadence_scales_with_size():
     assert a.suggest_sync_cadence("PS_UNKNOWN", 100) == "6h"
 
 
+def test_every_catalog_adapter_resolves():
+    from iblai_ontology.catalog import list_entries
+
+    for entry in list_entries():
+        adapter = get_adapter(entry.adapter)
+        # API entries resolve to an api-typed adapter; databases to a db adapter.
+        if entry.type == "api":
+            assert adapter.SERVICE_TYPE == "api", f"{entry.key} -> {entry.adapter}"
+        else:
+            assert adapter.SERVICE_TYPE == "database", f"{entry.key} -> {entry.adapter}"
+
+
+def test_snowflake_adapter_is_database():
+    from iblai_ontology.backend.discovery.adapters.oracle import SnowflakeAdapter
+
+    snow = get_adapter("snowflake")
+    assert isinstance(snow, SnowflakeAdapter)
+    assert snow.DB_TYPE == "snowflake"
+
+
 def test_rule_based_analyzer_groups_tables():
     from iblai_ontology.backend.discovery.introspection import SchemaManifest, TableInfo
     from iblai_ontology.backend.discovery.llm_analyzer import RuleBasedAnalyzer
