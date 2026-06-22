@@ -20,3 +20,5 @@ ontology-data/
 .ontology/
 *.sqlite3
 caddy-data/
+.coverage
+htmlcov/
