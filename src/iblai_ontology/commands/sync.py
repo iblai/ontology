@@ -37,9 +37,11 @@ def status() -> None:
     from iblai_ontology.backend.sync.models import SyncRun
     from iblai_ontology.utils.output import print_table
 
-    latest = (
-        SyncRun.objects.order_by("schedule_name", "-started_at").distinct("schedule_name")
-    )
+    # Latest run per schedule (DB-agnostic — dedupe in Python, no DISTINCT ON).
+    latest = {}
+    for r in SyncRun.objects.order_by("-started_at"):
+        latest.setdefault(r.schedule_name, r)
+    latest = list(latest.values())
     print_table(
         title="Sync Status",
         columns=["Schedule", "Service", "Status", "Last Run", "Duration", "Records"],
