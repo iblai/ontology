@@ -17,9 +17,13 @@ import yaml
 
 _CATALOG_DIR = Path(__file__).resolve().parent
 _SKILLS_DIR = _CATALOG_DIR / "skills"
-_SKILL_URL_BASE = (
-    "https://github.com/iblai/higher-education-agents/blob/main/skills/{key}/SKILL.md"
-)
+
+# Each skill is vendored from one of the ibl.ai agent-skill repos.
+_DOMAIN_REPO = {
+    "higher-ed": "iblai/higher-education-agents",
+    "enterprise": "iblai/enterprise-agents",
+}
+_SKILL_URL = "https://github.com/{repo}/blob/main/skills/{name}/SKILL.md"
 
 
 @dataclass
@@ -28,6 +32,7 @@ class CatalogEntry:
     display_name: str
     type: str  # "database" | "api"
     adapter: str
+    domain: str = "higher-ed"  # "higher-ed" | "enterprise"
     env: list[str] = field(default_factory=list)
     connection: dict = field(default_factory=dict)
     default_toolset: str = ""
@@ -46,7 +51,8 @@ class CatalogEntry:
     def skill_url(self) -> Optional[str]:
         if not self.skill:
             return None
-        return _SKILL_URL_BASE.format(key=self.skill.removesuffix(".md"))
+        repo = _DOMAIN_REPO.get(self.domain, _DOMAIN_REPO["higher-ed"])
+        return _SKILL_URL.format(repo=repo, name=self.skill.removesuffix(".md"))
 
 
 @lru_cache(maxsize=1)

@@ -116,3 +116,125 @@ entries:
     default_toolset: admin-analytics-tools
     sync_defaults: {constituents: 24h, gifts: 6h}
     skill: blackbaud-raisers-edge.md
+
+  # --- Enterprise systems (iblai/enterprise-agents) ---------------------
+  snowflake:
+    display_name: "Snowflake Data Warehouse"
+    type: database
+    adapter: snowflake
+    domain: enterprise
+    connection: {driver: snowflake}
+    env: [SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA, SNOWFLAKE_ROLE]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {tables: 6h}
+    skill: snowflake.md
+
+  salesforce:
+    display_name: "Salesforce CRM / Sales Cloud"
+    type: api
+    adapter: salesforce_api
+    domain: enterprise
+    connection: {base_url_env: SALESFORCE_INSTANCE_URL}
+    env: [SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, SALESFORCE_INSTANCE_URL, SALESFORCE_USERNAME, SALESFORCE_PASSWORD, SALESFORCE_SECURITY_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {opportunities: 6h, accounts: 6h}
+    skill: salesforce.md
+
+  hubspot:
+    display_name: "HubSpot CRM"
+    type: api
+    adapter: hubspot_api
+    domain: enterprise
+    connection: {base_url: "https://api.hubapi.com"}
+    env: [HUBSPOT_ACCESS_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {deals: 6h, contacts: 6h}
+    skill: hubspot.md
+
+  servicenow-itsm:
+    display_name: "ServiceNow ITSM (enterprise)"
+    type: api
+    adapter: servicenow_api
+    domain: enterprise
+    connection: {base_url_env: SERVICENOW_BASE_URL}
+    env: [SERVICENOW_CLIENT_ID, SERVICENOW_CLIENT_SECRET, SERVICENOW_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {incidents: 1h}
+    skill: servicenow.md
+
+  jira:
+    display_name: "Jira"
+    type: api
+    adapter: jira_api
+    domain: enterprise
+    connection: {base_url_env: JIRA_BASE_URL}
+    env: [JIRA_BASE_URL, JIRA_USER_EMAIL, JIRA_API_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {issues: 1h}
+    skill: jira.md
+
+  confluence:
+    display_name: "Confluence"
+    type: api
+    adapter: confluence_api
+    domain: enterprise
+    connection: {base_url_env: CONFLUENCE_BASE_URL}
+    env: [CONFLUENCE_BASE_URL, CONFLUENCE_USER_EMAIL, CONFLUENCE_API_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {pages: 24h}
+    skill: confluence.md
+
+  github:
+    display_name: "GitHub"
+    type: api
+    adapter: github_api
+    domain: enterprise
+    connection: {base_url: "https://api.github.com"}
+    env: [GITHUB_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {repos: 24h}
+    skill: github.md
+
+  okta:
+    display_name: "Okta Identity"
+    type: api
+    adapter: okta_api
+    domain: enterprise
+    connection: {base_url_env: OKTA_DOMAIN}
+    env: [OKTA_DOMAIN, OKTA_API_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {users: 24h}
+    skill: okta.md
+
+  slack:
+    display_name: "Slack"
+    type: api
+    adapter: slack_api
+    domain: enterprise
+    connection: {base_url: "https://slack.com/api"}
+    env: [SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {channels: 24h}
+    skill: slack.md
+
+  zendesk:
+    display_name: "Zendesk"
+    type: api
+    adapter: zendesk_api
+    domain: enterprise
+    connection: {base_url_env: ZENDESK_SUBDOMAIN}
+    env: [ZENDESK_SUBDOMAIN, ZENDESK_EMAIL, ZENDESK_API_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {tickets: 1h}
+    skill: zendesk.md
+
+  zoom:
+    display_name: "Zoom"
+    type: api
+    adapter: zoom_api
+    domain: enterprise
+    connection: {base_url: "https://api.zoom.us/v2"}
+    env: [ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {meetings: 24h}
+    skill: zoom.md
