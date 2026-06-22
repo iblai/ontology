@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger("iblai_ontology.llm_analyzer")
 

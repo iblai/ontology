@@ -12,7 +12,7 @@ app = typer.Typer(no_args_is_help=True, help="Inspect SKILL.md files and seed di
 @app.command(name="list")
 def list_skills() -> None:
     """List the vendored SKILL.md files available offline."""
-    from iblai_ontology.catalog import get_entry, list_entries
+    from iblai_ontology.catalog import list_entries
     from iblai_ontology.catalog.skill_parser import list_vendored
     from iblai_ontology.utils.output import print_table
 
