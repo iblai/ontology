@@ -7,8 +7,6 @@ It powers the rule-based fallback used when no LLM key is configured.
 
 from __future__ import annotations
 
-from typing import Optional
-
 
 class BaseAdapter:
     """Rule-based knowledge about a source system."""
