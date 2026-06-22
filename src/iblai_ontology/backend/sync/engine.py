@@ -117,18 +117,54 @@ class SyncRunner:
         )
 
     def _write(self, sched: dict, rows: list[dict]) -> dict:
-        """Transform + upsert rows into cache/text-memories/vector index.
+        """Transform + upsert rows into cache, text memories, and vector index.
 
-        Concrete per-service writers (generated during provisioning) override
-        this. The generic path documents the seam rather than guessing a schema.
+        Uses the schedule's ``output`` config: ``structured_cache`` names the
+        cache table, ``text_memories`` selects the entity group. The primary key
+        is detected heuristically from the rows (id/emplid/*_id).
         """
-        raise NotImplementedError(
-            "per-service transform/upsert is generated during provisioning"
-        )
+        from django.db import connection
+
+        from iblai_ontology.backend.sync.writer import detect_primary_key, write_entities
+
+        if not rows:
+            return {"created": 0, "updated": 0}
+
+        output = sched.get("output", {}) or {}
+        cache_table = output.get("structured_cache")
+        entity_group = self._entity_group(sched, output)
+        primary_key = detect_primary_key(rows[0])
+
+        indexer = self._indexer()
+        with connection.cursor() as cursor:
+            result = write_entities(
+                cursor,
+                rows,
+                cache_table=cache_table,
+                primary_key=primary_key,
+                entity_group=entity_group,
+                indexer=indexer,
+            )
+        return {"created": result.created, "updated": result.updated, "files": len(result.files)}
+
+    @staticmethod
+    def _entity_group(sched: dict, output: dict) -> str:
+        text_path = output.get("text_memories", "")
+        if text_path:
+            return text_path.strip("/").split("/")[-1] or "generic"
+        return sched.get("name", "generic").split("-")[0]
+
+    @staticmethod
+    def _indexer():
+        try:
+            from iblai_ontology.backend.search.vector import VectorSearch
+
+            return VectorSearch()
+        except Exception:  # pragma: no cover - optional extra
+            return None
 
     # -- validation helper (used by ProvisioningValidator) --------------
     def test_sync_table(self, service: str, table: str, *, limit: int = 100) -> int:
         """Pull a bounded sample for one table to validate connectivity."""
-        raise NotImplementedError(
-            "test_sync_table requires a generated per-service tool mapping"
-        )
+        rows = self.pull(f"get-{table.lower()}", {"limit": limit})
+        return len(rows)

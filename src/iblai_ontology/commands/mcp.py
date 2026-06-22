@@ -50,6 +50,23 @@ def toolsets() -> None:
 
 
 @app.command()
+def validate() -> None:
+    """Validate tools.yaml against the Google MCP Toolbox resource schema."""
+    from iblai_ontology.backend.mcp_server.toolbox_compat import validate_tools_yaml
+    from iblai_ontology.config import config_dir
+
+    report = validate_tools_yaml(config_dir() / "tools.yaml")
+    typer.echo(f"sources: {report.sources}  tools: {report.tools}  toolsets: {report.toolsets}")
+    for issue in report.issues:
+        marker = "ERR" if issue.severity == "error" else "WARN"
+        typer.echo(f"  [{marker}] {issue.message}")
+    if report.ok:
+        typer.echo("tools.yaml is MCP Toolbox compliant.")
+    else:
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def test(
     tool: str = typer.Argument(..., help="Tool name."),
     params: Optional[str] = typer.Option(None, help="JSON params."),

@@ -68,6 +68,33 @@ def test_runner_pull_invokes_toolbox(monkeypatch):
     assert captured["json"] == {"student_id": "001"}
 
 
-def test_generic_write_seam_raises():
-    with pytest.raises(NotImplementedError):
-        SyncRunner()._write({"name": "x"}, [{"a": 1}])
+def test_detect_primary_key():
+    from iblai_ontology.backend.sync.writer import detect_primary_key
+
+    assert detect_primary_key({"EMPLID": "1", "name": "x"}) == "emplid"
+    assert detect_primary_key({"id": 1}) == "id"
+    assert detect_primary_key({"course_id": 1, "title": "x"}) == "course_id"
+    assert detect_primary_key({"foo": 1}) == "foo"
+
+
+def test_write_memories_no_db(tmp_path):
+    from iblai_ontology.backend.sync.writer import write_memories
+
+    class FakeIndexer:
+        def __init__(self):
+            self.indexed = []
+
+        def index_file(self, path, text):
+            self.indexed.append(path)
+
+    idx = FakeIndexer()
+    files = write_memories(
+        [{"id": "001", "full_name": "Jane", "fields": {}}],
+        entity_group="students",
+        primary_key="id",
+        files_root=str(tmp_path),
+        indexer=idx,
+    )
+    assert len(files) == 1
+    assert (tmp_path / "students" / "001.md").exists()
+    assert idx.indexed == ["/ontology/students/001.md"]

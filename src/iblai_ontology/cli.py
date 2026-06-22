@@ -18,14 +18,17 @@ import typer
 
 from iblai_ontology import __version__
 from iblai_ontology.commands import (
+    catalog,
     config,
     data,
     deploy,
+    doctor,
     health,
     mcp,
     platform,
     roles,
     service,
+    skill,
     sync,
 )
 
@@ -45,6 +48,9 @@ app.add_typer(data.app, name="data")
 app.add_typer(deploy.app, name="deploy")
 app.add_typer(mcp.app, name="mcp")
 app.add_typer(platform.app, name="platform")
+app.add_typer(skill.app, name="skill")
+app.add_typer(catalog.app, name="catalog")
+app.add_typer(doctor.app, name="doctor")
 
 
 def _version_callback(value: bool) -> None:

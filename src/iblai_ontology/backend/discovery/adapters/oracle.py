@@ -128,3 +128,11 @@ class BannerAdapter(BaseAdapter):
             "sync_cadence": "1h",
         },
     }
+
+
+@register("snowflake")
+class SnowflakeAdapter(BaseAdapter):
+    """Snowflake data warehouse (read-only SQL). Schema discovered live."""
+
+    SYSTEM_NAME = "snowflake"
+    DB_TYPE = "snowflake"
