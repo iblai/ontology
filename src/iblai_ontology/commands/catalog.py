@@ -6,12 +6,14 @@ import typer
 
 from iblai_ontology.ui import console
 
-app = typer.Typer(no_args_is_help=True, help="Browse built-in service defaults (higher-ed + enterprise).")
+app = typer.Typer(no_args_is_help=True, help="Browse built-in service defaults across every solution segment.")
+
+_DOMAINS = "higher-ed | enterprise | k-12 | government | legal | financial-services | medical-healthcare"
 
 
 @app.command(name="list")
 def list_catalog(
-    domain: str = typer.Option(None, help="Filter by domain: higher-ed | enterprise."),
+    domain: str = typer.Option(None, help=f"Filter by domain: {_DOMAINS}."),
 ) -> None:
     """List built-in service defaults, each linking its SKILL.md."""
     from iblai_ontology.catalog import list_entries

@@ -22,6 +22,11 @@ _SKILLS_DIR = _CATALOG_DIR / "skills"
 _DOMAIN_REPO = {
     "higher-ed": "iblai/higher-education-agents",
     "enterprise": "iblai/enterprise-agents",
+    "k-12": "iblai/k-12-agents",
+    "government": "iblai/government-agents",
+    "legal": "iblai/legal-agents",
+    "financial-services": "iblai/financial-services-agents",
+    "medical-healthcare": "iblai/medical-healthcare-agents",
 }
 _SKILL_URL = "https://github.com/{repo}/blob/main/skills/{name}/SKILL.md"
 
