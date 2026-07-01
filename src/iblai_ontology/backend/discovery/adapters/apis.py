@@ -8,33 +8,15 @@ cadences) live in the catalog and the vendored SKILL.md rather than in code.
 
 from __future__ import annotations
 
+from iblai_ontology.catalog import list_entries
+
 from .base import BaseAdapter, register
 
-# Every API adapter name referenced by catalog.yaml, plus the bare service-type
-# names the `service add` enum uses.
-_API_ADAPTERS = [
-    "canvas",
-    "slate",
-    "workday",
-    "navigate",
-    "canvas_api",
-    "slate_api",
-    "workday_api",
-    "navigate_api",
-    "banner_api",
-    "salesforce_api",
-    "servicenow_api",
-    "civitas_api",
-    "handshake_api",
-    "raisers_edge_api",
-    "hubspot_api",
-    "jira_api",
-    "confluence_api",
-    "github_api",
-    "okta_api",
-    "slack_api",
-    "zendesk_api",
-    "zoom_api",
+# Bare service-type names the `service add` enum uses, plus every API adapter
+# referenced by catalog.yaml (derived so the two never drift apart).
+_BARE_NAMES = ["canvas", "slate", "workday", "navigate"]
+_API_ADAPTERS = _BARE_NAMES + [
+    e.adapter for e in list_entries() if e.type == "api"
 ]
 
 

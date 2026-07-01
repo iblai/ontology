@@ -31,8 +31,78 @@ ENTERPRISE_KEYS = {
     "slack",
     "zendesk",
     "zoom",
+    "oracle-epm-cloud",
 }
-EXPECTED_KEYS = HIGHER_ED_KEYS | ENTERPRISE_KEYS
+K12_KEYS = {
+    "classdojo",
+    "ebsco",
+    "edulastic",
+    "frontline",
+    "google-classroom",
+    "google-workspace-edu",
+    "iready",
+    "khan-academy",
+    "nwea-map",
+    "parentsquare",
+    "powerschool",
+}
+GOVERNMENT_KEYS = {
+    "congress-gov",
+    "cornerstone-ondemand",
+    "federal-register",
+    "granicus-govdelivery",
+    "microsoft-entra-id",
+    "salesforce-government-cloud",
+    "sam-gov",
+    "usaspending",
+    "workday-government",
+}
+LEGAL_KEYS = {
+    "clio",
+    "docket-alarm",
+    "docusign",
+    "imanage",
+    "intapp-conflicts",
+    "ironclad",
+    "netdocuments",
+    "pacer",
+    "relativity",
+    "westlaw",
+}
+FINANCIAL_SERVICES_KEYS = {
+    "blackrock-aladdin",
+    "bloomberg-terminal",
+    "factset",
+    "lexisnexis-worldcompliance",
+    "morningstar-direct",
+    "nice-actimize",
+    "salesforce-financial-services-cloud",
+    "splunk",
+    "workiva",
+}
+MEDICAL_HEALTHCARE_KEYS = {
+    "availity",
+    "cerner-fhir",
+    "epic-fhir",
+    "healthstream",
+    "innovaccer",
+    "micromedex",
+    "nuance-dax",
+    "pubmed",
+    "uptodate",
+}
+
+# domain key (CatalogEntry.domain) -> expected entry keys
+DOMAIN_KEYS = {
+    "higher-ed": HIGHER_ED_KEYS,
+    "enterprise": ENTERPRISE_KEYS,
+    "k-12": K12_KEYS,
+    "government": GOVERNMENT_KEYS,
+    "legal": LEGAL_KEYS,
+    "financial-services": FINANCIAL_SERVICES_KEYS,
+    "medical-healthcare": MEDICAL_HEALTHCARE_KEYS,
+}
+EXPECTED_KEYS = set().union(*DOMAIN_KEYS.values())
 
 
 def test_catalog_covers_all_systems():
@@ -41,10 +111,10 @@ def test_catalog_covers_all_systems():
 
 
 def test_domains_partition_catalog():
-    by_domain = {"higher-ed": set(), "enterprise": set()}
+    by_domain = {}
     for e in list_entries():
-        by_domain[e.domain].add(e.key)
-    assert ENTERPRISE_KEYS <= by_domain["enterprise"]
+        by_domain.setdefault(e.domain, set()).add(e.key)
+    assert by_domain == DOMAIN_KEYS
     assert "peoplesoft" in by_domain["higher-ed"]
 
 

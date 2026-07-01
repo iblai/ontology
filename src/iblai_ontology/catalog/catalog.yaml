@@ -1,10 +1,12 @@
 # ============================================================
-# Built-in service catalog — defaults for common higher-ed systems.
+# Built-in service catalog — defaults for common systems across every ibl.ai
+# solution segment (higher-ed, enterprise, k-12, government, legal,
+# financial-services, medical-healthcare).
 #
 # Each entry seeds `ontology service add --from <key>` (and is the target of
 # `ontology catalog show <key>`). API entries mirror the SKILL.md definitions in
-# iblai/higher-education-agents; the database entry (peoplesoft) comes from the
-# architecture doc. Vendored skill files live in catalog/skills/.
+# the per-segment iblai/<segment>-agents repos; the database entry (peoplesoft)
+# comes from the architecture doc. Vendored skill files live in catalog/skills/.
 # ============================================================
 entries:
   peoplesoft:
@@ -238,3 +240,504 @@ entries:
     default_toolset: admin-analytics-tools
     sync_defaults: {meetings: 24h}
     skill: zoom.md
+
+  oracle-epm-cloud:
+    display_name: "Oracle EPM Cloud"
+    type: api
+    adapter: oracle_epm_api
+    domain: enterprise
+    connection: {base_url_env: ORACLE_EPM_BASE_URL}
+    env: [ORACLE_EPM_BASE_URL, ORACLE_EPM_IDENTITY_DOMAIN, ORACLE_EPM_USERNAME, ORACLE_EPM_PASSWORD]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {applications: 24h, jobs: 6h}
+    skill: oracle-epm-cloud.md
+
+  # --- K-12 education systems (iblai/k-12-agents) ----------------
+  classdojo:
+    display_name: "ClassDojo"
+    type: api
+    adapter: classdojo_api
+    domain: k-12
+    connection: {}
+    env: [CLASSDOJO_API_KEY, CLASSDOJO_TEACHER_ID]
+    default_toolset: enrollment-tools
+    sync_defaults: {activity: 6h}
+    skill: classdojo.md
+  ebsco:
+    display_name: "EBSCO Discovery"
+    type: api
+    adapter: ebsco_api
+    domain: k-12
+    connection: {base_url_env: EBSCO_BASE_URL}
+    env: [EBSCO_API_KEY, EBSCO_PROFILE_ID, EBSCO_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {catalog: 24h}
+    skill: ebsco.md
+  edulastic:
+    display_name: "Edulastic Assessments"
+    type: api
+    adapter: edulastic_api
+    domain: k-12
+    connection: {}
+    env: [EDULASTIC_API_KEY, EDULASTIC_DISTRICT_ID]
+    default_toolset: enrollment-tools
+    sync_defaults: {assessments: 24h}
+    skill: edulastic.md
+  frontline:
+    display_name: "Frontline Education"
+    type: api
+    adapter: frontline_api
+    domain: k-12
+    connection: {base_url_env: FRONTLINE_BASE_URL}
+    env: [FRONTLINE_CLIENT_ID, FRONTLINE_CLIENT_SECRET, FRONTLINE_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {absences: 6h}
+    skill: frontline.md
+  google-classroom:
+    display_name: "Google Classroom"
+    type: api
+    adapter: google_classroom_api
+    domain: k-12
+    connection: {base_url: "https://classroom.googleapis.com"}
+    env: [GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN]
+    default_toolset: enrollment-tools
+    sync_defaults: {coursework: 6h}
+    skill: google-classroom.md
+  google-workspace-edu:
+    display_name: "Google Workspace for Education"
+    type: api
+    adapter: google_workspace_edu_api
+    domain: k-12
+    connection: {base_url: "https://admin.googleapis.com"}
+    env: [GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {users: 24h}
+    skill: google-workspace-edu.md
+  iready:
+    display_name: "i-Ready"
+    type: api
+    adapter: iready_api
+    domain: k-12
+    connection: {}
+    env: [IREADY_API_KEY, IREADY_DISTRICT_ID]
+    default_toolset: enrollment-tools
+    sync_defaults: {assessments: 24h}
+    skill: iready.md
+  khan-academy:
+    display_name: "Khan Academy"
+    type: api
+    adapter: khan_academy_api
+    domain: k-12
+    connection: {}
+    env: [KHAN_ACADEMY_CLIENT_ID, KHAN_ACADEMY_CLIENT_SECRET, KHAN_ACADEMY_REDIRECT_URI]
+    default_toolset: enrollment-tools
+    sync_defaults: {progress: 24h}
+    skill: khan-academy.md
+  nwea-map:
+    display_name: "NWEA MAP Growth"
+    type: api
+    adapter: nwea_map_api
+    domain: k-12
+    connection: {base_url_env: NWEA_MAP_BASE_URL}
+    env: [NWEA_MAP_API_KEY, NWEA_MAP_BASE_URL]
+    default_toolset: enrollment-tools
+    sync_defaults: {assessments: 24h}
+    skill: nwea-map.md
+  parentsquare:
+    display_name: "ParentSquare"
+    type: api
+    adapter: parentsquare_api
+    domain: k-12
+    connection: {}
+    env: [PARENTSQUARE_API_KEY, PARENTSQUARE_DISTRICT_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {messages: 6h}
+    skill: parentsquare.md
+  powerschool:
+    display_name: "PowerSchool SIS"
+    type: api
+    adapter: powerschool_api
+    domain: k-12
+    connection: {base_url_env: POWERSCHOOL_BASE_URL}
+    env: [POWERSCHOOL_CLIENT_ID, POWERSCHOOL_CLIENT_SECRET, POWERSCHOOL_BASE_URL]
+    default_toolset: enrollment-tools
+    sync_defaults: {students: 1h, enrollment: 1h}
+    skill: powerschool.md
+
+  # --- Government systems (iblai/government-agents) --------------
+  congress-gov:
+    display_name: "Congress.gov"
+    type: api
+    adapter: congress_gov_api
+    domain: government
+    connection: {base_url: "https://api.congress.gov/v3"}
+    env: [CONGRESS_GOV_API_KEY]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {bills: 24h}
+    skill: congress-gov.md
+  cornerstone-ondemand:
+    display_name: "Cornerstone OnDemand"
+    type: api
+    adapter: cornerstone_ondemand_api
+    domain: government
+    connection: {base_url_env: CSOD_BASE_URL}
+    env: [CSOD_BASE_URL, CSOD_CLIENT_ID, CSOD_CLIENT_SECRET, CSOD_CORP_NAME]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {courses: 24h}
+    skill: cornerstone-ondemand.md
+  federal-register:
+    display_name: "Federal Register"
+    type: api
+    adapter: federal_register_api
+    domain: government
+    connection: {base_url_env: FEDERAL_REGISTER_API_BASE_URL}
+    env: [FEDERAL_REGISTER_API_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {documents: 24h}
+    skill: federal-register.md
+  granicus-govdelivery:
+    display_name: "Granicus GovDelivery"
+    type: api
+    adapter: granicus_govdelivery_api
+    domain: government
+    connection: {base_url_env: GRANICUS_API_BASE_URL}
+    env: [GRANICUS_API_BASE_URL, GRANICUS_API_TOKEN]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {bulletins: 24h}
+    skill: granicus-govdelivery.md
+  microsoft-entra-id:
+    display_name: "Microsoft Entra ID"
+    type: api
+    adapter: microsoft_entra_id_api
+    domain: government
+    connection: {base_url_env: ENTRA_GRAPH_ENDPOINT}
+    env: [ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET, ENTRA_GRAPH_ENDPOINT]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {users: 24h}
+    skill: microsoft-entra-id.md
+  salesforce-government-cloud:
+    display_name: "Salesforce Government Cloud"
+    type: api
+    adapter: salesforce_government_cloud_api
+    domain: government
+    connection: {base_url_env: SALESFORCE_GOV_INSTANCE_URL}
+    env: [SALESFORCE_GOV_INSTANCE_URL, SALESFORCE_GOV_CLIENT_ID, SALESFORCE_GOV_CLIENT_SECRET, SALESFORCE_GOV_USERNAME, SALESFORCE_GOV_PASSWORD]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {cases: 6h}
+    skill: salesforce-government-cloud.md
+  sam-gov:
+    display_name: "SAM.gov"
+    type: api
+    adapter: sam_gov_api
+    domain: government
+    connection: {base_url: "https://api.sam.gov"}
+    env: [SAM_GOV_API_KEY]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {entities: 24h}
+    skill: sam-gov.md
+  usaspending:
+    display_name: "USAspending.gov"
+    type: api
+    adapter: usaspending_api
+    domain: government
+    connection: {base_url_env: USASPENDING_API_BASE_URL}
+    env: [USASPENDING_API_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {awards: 24h}
+    skill: usaspending.md
+  workday-government:
+    display_name: "Workday Government"
+    type: api
+    adapter: workday_government_api
+    domain: government
+    connection: {base_url_env: WORKDAY_BASE_URL}
+    env: [WORKDAY_BASE_URL, WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, WORKDAY_REFRESH_TOKEN, WORKDAY_RAAS_ENDPOINT]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {workers: 24h}
+    skill: workday-government.md
+
+  # --- Legal systems (iblai/legal-agents) ------------------------
+  clio:
+    display_name: "Clio"
+    type: api
+    adapter: clio_api
+    domain: legal
+    connection: {base_url_env: CLIO_BASE_URL}
+    env: [CLIO_CLIENT_ID, CLIO_CLIENT_SECRET, CLIO_REFRESH_TOKEN, CLIO_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {matters: 6h}
+    skill: clio.md
+  docket-alarm:
+    display_name: "Docket Alarm"
+    type: api
+    adapter: docket_alarm_api
+    domain: legal
+    connection: {base_url_env: DOCKET_ALARM_BASE_URL}
+    env: [DOCKET_ALARM_USERNAME, DOCKET_ALARM_PASSWORD, DOCKET_ALARM_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {dockets: 6h}
+    skill: docket-alarm.md
+  docusign:
+    display_name: "DocuSign"
+    type: api
+    adapter: docusign_api
+    domain: legal
+    connection: {base_url_env: DOCUSIGN_BASE_URL}
+    env: [DOCUSIGN_ACCOUNT_ID, DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_USER_ID, DOCUSIGN_PRIVATE_KEY, DOCUSIGN_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {envelopes: 6h}
+    skill: docusign.md
+  imanage:
+    display_name: "iManage Work"
+    type: api
+    adapter: imanage_api
+    domain: legal
+    connection: {base_url_env: IMANAGE_BASE_URL}
+    env: [IMANAGE_CLIENT_ID, IMANAGE_CLIENT_SECRET, IMANAGE_BASE_URL, IMANAGE_CUSTOMER_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {documents: 24h}
+    skill: imanage.md
+  intapp-conflicts:
+    display_name: "Intapp Conflicts"
+    type: api
+    adapter: intapp_conflicts_api
+    domain: legal
+    connection: {base_url_env: INTAPP_BASE_URL}
+    env: [INTAPP_CLIENT_ID, INTAPP_CLIENT_SECRET, INTAPP_BASE_URL, INTAPP_TENANT_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {checks: 6h}
+    skill: intapp-conflicts.md
+  ironclad:
+    display_name: "Ironclad CLM"
+    type: api
+    adapter: ironclad_api
+    domain: legal
+    connection: {base_url_env: IRONCLAD_BASE_URL}
+    env: [IRONCLAD_API_KEY, IRONCLAD_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {contracts: 6h}
+    skill: ironclad.md
+  netdocuments:
+    display_name: "NetDocuments"
+    type: api
+    adapter: netdocuments_api
+    domain: legal
+    connection: {base_url_env: NETDOCUMENTS_BASE_URL}
+    env: [NETDOCUMENTS_CLIENT_ID, NETDOCUMENTS_CLIENT_SECRET, NETDOCUMENTS_REFRESH_TOKEN, NETDOCUMENTS_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {documents: 24h}
+    skill: netdocuments.md
+  pacer:
+    display_name: "PACER"
+    type: api
+    adapter: pacer_api
+    domain: legal
+    connection: {base_url_env: PACER_BASE_URL}
+    env: [PACER_USERNAME, PACER_PASSWORD, PACER_CLIENT_CODE, PACER_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {dockets: 6h}
+    skill: pacer.md
+  relativity:
+    display_name: "Relativity"
+    type: api
+    adapter: relativity_api
+    domain: legal
+    connection: {base_url_env: RELATIVITY_BASE_URL}
+    env: [RELATIVITY_BASE_URL, RELATIVITY_USERNAME, RELATIVITY_PASSWORD, RELATIVITY_WORKSPACE_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {documents: 24h}
+    skill: relativity.md
+  westlaw:
+    display_name: "Westlaw Edge"
+    type: api
+    adapter: westlaw_api
+    domain: legal
+    connection: {base_url_env: WESTLAW_BASE_URL}
+    env: [WESTLAW_CLIENT_ID, WESTLAW_CLIENT_SECRET, WESTLAW_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {searches: 24h}
+    skill: westlaw.md
+
+  # --- Financial-services systems (iblai/financial-services-agents) 
+  blackrock-aladdin:
+    display_name: "BlackRock Aladdin"
+    type: api
+    adapter: blackrock_aladdin_api
+    domain: financial-services
+    connection: {base_url_env: ALADDIN_BASE_URL}
+    env: [ALADDIN_API_KEY, ALADDIN_BASE_URL, ALADDIN_CLIENT_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {positions: 6h}
+    skill: blackrock-aladdin.md
+  bloomberg-terminal:
+    display_name: "Bloomberg Terminal"
+    type: api
+    adapter: bloomberg_terminal_api
+    domain: financial-services
+    connection: {base_url_env: BLOOMBERG_API_HOST}
+    env: [BLOOMBERG_API_HOST, BLOOMBERG_API_PORT, BLOOMBERG_DATA_LICENSE_KEY]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {securities: 1h}
+    skill: bloomberg-terminal.md
+  factset:
+    display_name: "FactSet"
+    type: api
+    adapter: factset_api
+    domain: financial-services
+    connection: {base_url_env: FACTSET_BASE_URL}
+    env: [FACTSET_API_KEY, FACTSET_API_SECRET, FACTSET_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {fundamentals: 24h}
+    skill: factset.md
+  lexisnexis-worldcompliance:
+    display_name: "LexisNexis WorldCompliance"
+    type: api
+    adapter: lexisnexis_worldcompliance_api
+    domain: financial-services
+    connection: {base_url_env: LEXISNEXIS_WC_BASE_URL}
+    env: [LEXISNEXIS_WC_API_KEY, LEXISNEXIS_WC_API_SECRET, LEXISNEXIS_WC_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {screenings: 24h}
+    skill: lexisnexis-worldcompliance.md
+  morningstar-direct:
+    display_name: "Morningstar Direct"
+    type: api
+    adapter: morningstar_direct_api
+    domain: financial-services
+    connection: {base_url_env: MORNINGSTAR_BASE_URL}
+    env: [MORNINGSTAR_CLIENT_ID, MORNINGSTAR_CLIENT_SECRET, MORNINGSTAR_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {funds: 24h}
+    skill: morningstar-direct.md
+  nice-actimize:
+    display_name: "NICE Actimize"
+    type: api
+    adapter: nice_actimize_api
+    domain: financial-services
+    connection: {base_url_env: ACTIMIZE_BASE_URL}
+    env: [ACTIMIZE_BASE_URL, ACTIMIZE_API_KEY, ACTIMIZE_CLIENT_ID, ACTIMIZE_CLIENT_SECRET]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {alerts: 1h}
+    skill: nice-actimize.md
+  salesforce-financial-services-cloud:
+    display_name: "Salesforce Financial Services Cloud"
+    type: api
+    adapter: salesforce_financial_services_cloud_api
+    domain: financial-services
+    connection: {base_url_env: SFDC_FSC_BASE_URL}
+    env: [SFDC_FSC_CLIENT_ID, SFDC_FSC_CLIENT_SECRET, SFDC_FSC_USERNAME, SFDC_FSC_PASSWORD, SFDC_FSC_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {households: 6h}
+    skill: salesforce-financial-services-cloud.md
+  splunk:
+    display_name: "Splunk"
+    type: api
+    adapter: splunk_api
+    domain: financial-services
+    connection: {base_url_env: SPLUNK_BASE_URL}
+    env: [SPLUNK_BASE_URL, SPLUNK_API_TOKEN, SPLUNK_APP]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {events: 1h}
+    skill: splunk.md
+  workiva:
+    display_name: "Workiva"
+    type: api
+    adapter: workiva_api
+    domain: financial-services
+    connection: {base_url_env: WORKIVA_BASE_URL}
+    env: [WORKIVA_CLIENT_ID, WORKIVA_CLIENT_SECRET, WORKIVA_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {filings: 24h}
+    skill: workiva.md
+
+  # --- Medical / healthcare systems (iblai/medical-healthcare-agents) 
+  availity:
+    display_name: "Availity"
+    type: api
+    adapter: availity_api
+    domain: medical-healthcare
+    connection: {base_url_env: AVAILITY_BASE_URL}
+    env: [AVAILITY_CLIENT_ID, AVAILITY_CLIENT_SECRET, AVAILITY_BASE_URL, AVAILITY_ORG_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {claims: 6h}
+    skill: availity.md
+  cerner-fhir:
+    display_name: "Oracle Cerner (FHIR)"
+    type: api
+    adapter: cerner_fhir_api
+    domain: medical-healthcare
+    connection: {base_url_env: CERNER_FHIR_BASE_URL}
+    env: [CERNER_CLIENT_ID, CERNER_FHIR_BASE_URL, CERNER_CLIENT_SECRET, CERNER_TENANT_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {patients: 6h}
+    skill: cerner-fhir.md
+  epic-fhir:
+    display_name: "Epic (FHIR)"
+    type: api
+    adapter: epic_fhir_api
+    domain: medical-healthcare
+    connection: {base_url_env: EPIC_FHIR_BASE_URL}
+    env: [EPIC_CLIENT_ID, EPIC_FHIR_BASE_URL, EPIC_PRIVATE_KEY_PATH, EPIC_SCOPE]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {patients: 6h}
+    skill: epic-fhir.md
+  healthstream:
+    display_name: "HealthStream"
+    type: api
+    adapter: healthstream_api
+    domain: medical-healthcare
+    connection: {base_url_env: HEALTHSTREAM_BASE_URL}
+    env: [HEALTHSTREAM_API_KEY, HEALTHSTREAM_BASE_URL, HEALTHSTREAM_FACILITY_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {courses: 24h}
+    skill: healthstream.md
+  innovaccer:
+    display_name: "Innovaccer"
+    type: api
+    adapter: innovaccer_api
+    domain: medical-healthcare
+    connection: {base_url_env: INNOVACCER_BASE_URL}
+    env: [INNOVACCER_API_KEY, INNOVACCER_BASE_URL, INNOVACCER_TENANT_ID, INNOVACCER_CLIENT_SECRET]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {cohorts: 6h}
+    skill: innovaccer.md
+  micromedex:
+    display_name: "IBM Micromedex"
+    type: api
+    adapter: micromedex_api
+    domain: medical-healthcare
+    connection: {base_url_env: MICROMEDEX_BASE_URL}
+    env: [MICROMEDEX_API_KEY, MICROMEDEX_BASE_URL, MICROMEDEX_FACILITY_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {monographs: 24h}
+    skill: micromedex.md
+  nuance-dax:
+    display_name: "Nuance DAX"
+    type: api
+    adapter: nuance_dax_api
+    domain: medical-healthcare
+    connection: {base_url_env: NUANCE_DAX_BASE_URL}
+    env: [NUANCE_DAX_API_KEY, NUANCE_DAX_BASE_URL, NUANCE_DAX_FACILITY_ID]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {encounters: 6h}
+    skill: nuance-dax.md
+  pubmed:
+    display_name: "PubMed"
+    type: api
+    adapter: pubmed_api
+    domain: medical-healthcare
+    connection: {base_url_env: PUBMED_BASE_URL}
+    env: [PUBMED_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {articles: 24h}
+    skill: pubmed.md
+  uptodate:
+    display_name: "UpToDate"
+    type: api
+    adapter: uptodate_api
+    domain: medical-healthcare
+    connection: {base_url_env: UPTODATE_BASE_URL}
+    env: [UPTODATE_API_KEY, UPTODATE_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {topics: 24h}
+    skill: uptodate.md

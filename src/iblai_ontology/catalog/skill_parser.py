@@ -25,6 +25,10 @@ from iblai_ontology.catalog import skills_dir
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 # Matches "- `GET /path` — description" or "... - description" (em dash or hyphen).
 _OP_RE = re.compile(r"^[-*]\s*`([A-Z]+)\s+([^`]+)`\s*[—\-:]*\s*(.*)$")
+# Fallback for non-REST APIs (e.g. Bloomberg BLPAPI, RPC, GraphQL) whose
+# operations are named request types rather than `METHOD /path`. These are
+# query/data-fetch operations, so they're treated as read-only (GET-equivalent).
+_NAMED_OP_RE = re.compile(r"^[-*]\s*`([A-Za-z][A-Za-z0-9_]*)`.*?[—\-:]\s*(.*)$")
 
 
 @dataclass
@@ -114,9 +118,14 @@ def parse_skill(markdown: str) -> DiscoverySeed:
 
     operations: list[Operation] = []
     for line in _section(markdown, "Key operations").splitlines():
-        m = _OP_RE.match(line.strip())
+        line = line.strip()
+        m = _OP_RE.match(line)
         if m:
             operations.append(Operation(m.group(1), m.group(2).strip(), m.group(3).strip()))
+            continue
+        named = _NAMED_OP_RE.match(line)
+        if named:
+            operations.append(Operation("GET", named.group(1).strip(), named.group(2).strip()))
 
     return DiscoverySeed(
         name=name,
