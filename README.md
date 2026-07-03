@@ -78,6 +78,19 @@ pip install -e ".[vector]"   # ChromaDB vector index
 
 Names: distribution **`iblai-ontology`** · import package **`iblai_ontology`** · command **`ontology`**.
 
+### Local checks
+
+`./dev.sh` mirrors the CI gates so you can confirm everything passes before committing:
+
+```bash
+./dev.sh setup            # install into the active venv (dev + django extras)
+./dev.sh test -k canvas   # pytest (args passed through)
+./dev.sh fmt              # auto-fix ruff format + import sort
+./dev.sh check            # ruff format/lint/import-sort + full pytest (== CI)
+```
+
+CI runs the same on every PR to `main`: `.github/workflows/ruff-format.yml` (ruff) and `.github/workflows/tests.yml` (pytest).
+
 ## End to end
 
 ### 1 · Discover a service — two ways
