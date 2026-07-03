@@ -9,7 +9,7 @@ from iblai_ontology.config.validator import ConfigValidator
 # tools.higher-ed.example.yaml and are not loaded by default).
 REQUIRED_TOOLSETS = {
     "admin-analytics-tools",
-    "client-db-tools",
+    "client-postgres-tools",
 }
 
 

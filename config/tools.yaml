@@ -24,17 +24,31 @@ password: ${ONTOLOGY_DB_PASSWORD}
 ---
 # ============================================================
 # SOURCE: Generic remote PostgreSQL (any client DB)
-# Connection is fully env-driven — point CLIENT_DB_* at any reachable
+# Connection is fully env-driven — point CLIENT_POSTGRES_* at any reachable
 # Postgres. Use a read-only role (see docs/read-only-db-user.md).
 # ============================================================
 kind: source
 name: client-postgres
 type: postgres
-host: ${CLIENT_DB_HOST}
-port: ${CLIENT_DB_PORT}
-database: ${CLIENT_DB_NAME}
-user: ${CLIENT_DB_RO_USER}
-password: ${CLIENT_DB_RO_PASSWORD}
+host: ${CLIENT_POSTGRES_HOST}
+port: ${CLIENT_POSTGRES_PORT}
+database: ${CLIENT_POSTGRES_NAME}
+user: ${CLIENT_POSTGRES_RO_USER}
+password: ${CLIENT_POSTGRES_RO_PASSWORD}
+---
+# ============================================================
+# SOURCE: Generic remote MySQL (any client DB)
+# Connection is fully env-driven — point CLIENT_MYSQL_* at any reachable
+# MySQL. Use a read-only user (GRANT SELECT); see docs/read-only-db-user.md.
+# ============================================================
+kind: source
+name: client-mysql
+type: mysql
+host: ${CLIENT_MYSQL_HOST}
+port: ${CLIENT_MYSQL_PORT}
+database: ${CLIENT_MYSQL_NAME}
+user: ${CLIENT_MYSQL_RO_USER}
+password: ${CLIENT_MYSQL_RO_PASSWORD}
 ---
 # ============================================================
 # TOOL: Query ontology structured cache
@@ -113,7 +127,7 @@ statement: >
 # TOOL: List tables in the client Postgres
 # ============================================================
 kind: tool
-name: list-client-tables
+name: list-postgres-tables
 type: postgres-sql
 source: client-postgres
 description: >
@@ -136,7 +150,7 @@ statement: >
 # TOOL: Describe a table's columns in the client Postgres
 # ============================================================
 kind: tool
-name: describe-client-table
+name: describe-postgres-table
 type: postgres-sql
 source: client-postgres
 description: >
@@ -160,6 +174,51 @@ statement: >
     AND table_name = $2
   ORDER BY ordinal_position
 ---
+# ============================================================
+# TOOL: List tables in the client MySQL database
+# (MySQL uses ? placeholders, not $1)
+# ============================================================
+kind: tool
+name: list-mysql-tables
+type: mysql-sql
+source: client-mysql
+description: >
+  List tables in the client MySQL database with approximate row counts —
+  useful for exploring an unfamiliar DB.
+parameters:
+  - name: schema
+    type: string
+    description: Database name (e.g., "appdb")
+statement: >
+  SELECT table_name, table_rows AS approx_rows
+  FROM information_schema.tables
+  WHERE table_schema = ?
+  ORDER BY table_rows DESC
+---
+# ============================================================
+# TOOL: Describe a table's columns in the client MySQL database
+# ============================================================
+kind: tool
+name: describe-mysql-table
+type: mysql-sql
+source: client-mysql
+description: >
+  List the columns, data types, and nullability of a table in the
+  client MySQL database — for understanding an unfamiliar schema.
+parameters:
+  - name: schema
+    type: string
+    description: Database name (e.g., "appdb")
+  - name: table_name
+    type: string
+    description: Table name to describe
+statement: >
+  SELECT column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+  WHERE table_schema = ?
+    AND table_name = ?
+  ORDER BY ordinal_position
+---
 kind: toolset
 name: admin-analytics-tools
 tools:
@@ -168,7 +227,13 @@ tools:
   - search-students
 ---
 kind: toolset
-name: client-db-tools
+name: client-postgres-tools
 tools:
-  - list-client-tables
-  - describe-client-table
+  - list-postgres-tables
+  - describe-postgres-table
+---
+kind: toolset
+name: client-mysql-tools
+tools:
+  - list-mysql-tables
+  - describe-mysql-table

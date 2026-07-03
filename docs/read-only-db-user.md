@@ -156,6 +156,30 @@ toolbox to that network and use the DB's network hostname). Note the Toolbox
 connects to every source at startup, so keep only reachable sources in
 `tools.yaml` (see [deployment.md](deployment.md#mcp-toolbox-config-generation)).
 
+## MySQL variant
+
+The same principle applies to a MySQL source. Run as an admin, replacing `<db>`
+with your database name and the password:
+
+```sql
+CREATE USER IF NOT EXISTS 'ontology_ro'@'%' IDENTIFIED BY '<STRONG_PASSWORD_HERE>';
+GRANT SELECT ON `<db>`.* TO 'ontology_ro'@'%';
+FLUSH PRIVILEGES;
+```
+
+Verify (read works, write denied — `ERROR 1142 ... command denied`):
+
+```bash
+mysql -h "$DB_HOST" -P 3306 -u ontology_ro -p"$RO_PW" -N \
+  -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='<db>';"
+mysql -h "$DB_HOST" -P 3306 -u ontology_ro -p"$RO_PW" \
+  -e "CREATE TABLE \`<db>\`.__ro_probe (id int);"   # must be denied
+```
+
+Wire it into `tools.yaml` as a `type: mysql` source; its tools use `mysql-sql`
+with `?` placeholders (not `$1`). See the `client-mysql` source and the
+`list-mysql-tables` / `describe-mysql-table` tools for a working example.
+
 ## Rotate / revoke
 
 ```sql

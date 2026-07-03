@@ -25,7 +25,8 @@ roles:
       - /ontology/**
     mcp_toolsets:
       - admin-analytics-tools
-      - client-db-tools
+      - client-postgres-tools
+      - client-mysql-tools
     cache_tables:
       - "*"
     agents:
@@ -51,7 +52,8 @@ roles:
       - /ontology/_audit/**
     mcp_toolsets:
       - admin-analytics-tools
-      - client-db-tools
+      - client-postgres-tools
+      - client-mysql-tools
     cache_tables:
       - sync_runs
       - audit_log

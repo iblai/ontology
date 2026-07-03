@@ -26,9 +26,10 @@ services:
     env_file: .env.mcp
     networks:
       - ontology-internal
-      # Also join the external network of any DB source it must reach by
-      # hostname (e.g. the ibl-dm data-manager Postgres on ibl-dm-pro_internal).
-      - ibl-dm-pro_internal
+      # To reach source databases, add mcp-toolbox to the right network in a
+      # docker-compose.override.yml (see docker-compose.override.example.yml):
+      #   * a LOCAL source container's docker network (connect by hostname), or
+      #   * an egress-capable network for a REMOTE source (connect by host/IP).
     restart: unless-stopped
 
   mcp-canvas:
@@ -157,8 +158,6 @@ networks:
     internal: true            # No external access to internal services
   ontology-exposed:
     driver: bridge            # Gateway and proxy can reach the outside
-  ibl-dm-pro_internal:
-    external: true            # Pre-existing network of the ibl-dm-pro stack (DB source)
 
 volumes:
   ontology-data:

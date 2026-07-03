@@ -234,6 +234,20 @@ endpoint (the legacy `/api/tool/<name>` REST path is disabled in Toolbox ≥1.5)
 > with `config/roles.higher-ed.example.yaml`). Merge it in only when you have a
 > real PeopleSoft to point at; otherwise the `mcp-toolbox` container crash-loops.
 
+### Reaching source databases (local or remote)
+
+Source connections (`client-postgres`, `client-mysql`, …) are host/credential-driven
+via `.env.mcp`, so the same config connects to a **local container** or a
+**remote host** — only the network path differs. That path is deployment-specific
+and lives in a git-ignored `docker-compose.override.yml` (copy from
+`docker-compose.override.example.yml`), not the committed compose:
+
+- **Local source containers:** add `mcp-toolbox` to the source's docker network
+  and set `*_HOST` to the container name (e.g. `my-postgres`, `my-mysql`).
+- **Remote sources:** `ontology-internal` is `internal: true` (no egress), so add
+  `mcp-toolbox` to an egress-capable network and set `*_HOST` to the remote
+  hostname/IP.
+
 ## Operating the Stack
 
 The `ontology deploy` commands wrap Docker Compose (see [CLI reference](components/07-cli.md#ontology-deploy--docker-compose-lifecycle)):

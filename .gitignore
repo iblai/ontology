@@ -13,6 +13,7 @@ venv/
 !.env.example
 !.env.*.example
 *.local.yaml
+docker-compose.override.yml
 .claude/
 
 # iblai-ontology runtime artifacts
