@@ -22,7 +22,11 @@ def up(
     # Regenerate the Toolbox-native config the mcp-toolbox container mounts.
     src = config_dir() / "tools.yaml"
     if src.exists():
-        result = write_toolbox_config(src, config_dir() / "generated" / "toolbox.yaml")
+        try:
+            result = write_toolbox_config(src, config_dir() / "generated" / "toolbox.yaml")
+        except Exception as exc:  # surface a clean message, not a traceback
+            typer.echo(f"Failed to generate toolbox config from {src}: {exc}", err=True)
+            raise typer.Exit(code=1)
         typer.echo(
             f"Generated toolbox config: {result.sources} sources, {result.tools} tools."
         )

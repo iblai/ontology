@@ -141,53 +141,17 @@ class MCPHandlers:
         return self._proxy_to_toolbox(name, arguments)
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:
-        """Call a tool on the inbound MCP Toolbox via its /mcp JSON-RPC endpoint.
-
-        Toolbox 1.5+ disables the legacy ``/api/tool/<name>`` REST endpoints by
-        default and serves tools over the standard MCP ``/mcp`` JSON-RPC channel.
-        The response may be JSON or an SSE ``data:`` frame; both are handled.
-        """
-        toolbox_url = os.environ.get("MCP_TOOLBOX_URL", "http://mcp-toolbox:5000")
-        import json as _json
-
-        import httpx
-
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        }
-        resp = httpx.post(
-            f"{toolbox_url}/mcp",
-            json=payload,
-            headers={"Accept": "application/json, text/event-stream"},
-            timeout=30,
+        """Call a tool on the inbound MCP Toolbox via the shared /mcp client."""
+        from iblai_ontology.backend.mcp_server.toolbox_client import (
+            ToolboxError,
+            call_tool,
         )
-        resp.raise_for_status()
 
-        body = resp.text
-        if "text/event-stream" in resp.headers.get("content-type", ""):
-            # SSE: take the JSON from the last non-empty `data:` line.
-            data_lines = [ln[5:].strip() for ln in body.splitlines() if ln.startswith("data:")]
-            body = data_lines[-1] if data_lines else "{}"
-        message = _json.loads(body)
-
-        if message.get("error"):
-            raise MCPError(message["error"].get("message", "toolbox error"))
-        result = message.get("result", {})
-        # MCP tools/call returns {content: [{type: "text", text: "..."}]}; unwrap
-        # the text payloads into JSON rows when possible for a clean tool result.
-        rows = []
-        for item in result.get("content", []):
-            text = item.get("text") if isinstance(item, dict) else None
-            if text is None:
-                continue
-            try:
-                rows.append(_json.loads(text))
-            except (ValueError, TypeError):
-                rows.append(text)
-        return rows if rows else result
+        toolbox_url = os.environ.get("MCP_TOOLBOX_URL", "http://mcp-toolbox:5000")
+        try:
+            return call_tool(toolbox_url, name, arguments)
+        except ToolboxError as exc:
+            raise MCPError(str(exc)) from exc
 
 
 def dispatch(handlers: MCPHandlers, request: dict) -> dict:

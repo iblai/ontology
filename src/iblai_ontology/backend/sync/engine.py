@@ -17,8 +17,6 @@ import logging
 import os
 from dataclasses import dataclass
 
-import httpx
-
 logger = logging.getLogger("iblai_ontology.sync")
 
 
@@ -42,15 +40,15 @@ class SyncRunner:
 
     # -- source pulls ----------------------------------------------------
     def pull(self, tool: str, arguments: dict | None = None) -> list[dict]:
-        """Pull rows from a source by invoking an inbound MCP tool."""
-        resp = httpx.post(
-            f"{self.toolbox_url}/api/tool/{tool}", json=arguments or {}, timeout=120
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict) and "result" in data:
-            return data["result"]
-        return data if isinstance(data, list) else [data]
+        """Pull rows from a source by invoking an inbound MCP tool.
+
+        Uses the shared /mcp Toolbox client (Toolbox 1.5+ disables the legacy
+        /api/tool REST endpoints).
+        """
+        from iblai_ontology.backend.mcp_server.toolbox_client import call_tool
+
+        rows = call_tool(self.toolbox_url, tool, arguments, timeout=120)
+        return rows if isinstance(rows, list) else [rows]
 
     # -- schedule execution ---------------------------------------------
     def run_service(self, service: str, *, schedule_name: str | None = None, force_full: bool = False):

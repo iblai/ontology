@@ -190,7 +190,7 @@ parameters:
     type: string
     description: Database name (e.g., "appdb")
 statement: >
-  SELECT table_name, table_rows AS approx_rows
+  SELECT table_name AS `table_name`, table_rows AS `approx_rows`
   FROM information_schema.tables
   WHERE table_schema = ?
   ORDER BY table_rows DESC
@@ -213,7 +213,8 @@ parameters:
     type: string
     description: Table name to describe
 statement: >
-  SELECT column_name, data_type, is_nullable, column_default
+  SELECT column_name AS `column_name`, data_type AS `data_type`,
+         is_nullable AS `is_nullable`, column_default AS `column_default`
   FROM information_schema.columns
   WHERE table_schema = ?
     AND table_name = ?

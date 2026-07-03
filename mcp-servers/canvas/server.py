@@ -22,15 +22,13 @@ _AUTH = {"Authorization": f"Bearer {CANVAS_TOKEN}"}
 def _user_ref_path(user: str) -> str:
     """Map a user reference to a Canvas ``users/:id`` path segment.
 
-    Accepts a numeric Canvas user id (``"116"``), an already-qualified
-    reference (``"sis_login_id:jane@x.edu"``), or a bare SIS id (mapped to
-    ``sis_user_id:``). Instances that don't populate SIS ids can pass the
-    Canvas user id directly.
+    A bare value is looked up as a **Canvas user id**. SIS references must be
+    explicitly qualified — e.g. ``"sis_user_id:001234567"`` or
+    ``"sis_login_id:jane@x.edu"`` — because SIS ids are frequently numeric and
+    cannot be reliably distinguished from a Canvas id. A qualified reference is
+    already valid Canvas path syntax, so it is passed through unchanged.
     """
-    ref = str(user).strip()
-    if ref.isdigit() or ":" in ref:
-        return ref
-    return f"sis_user_id:{ref}"
+    return str(user).strip()
 
 
 async def _resolve_user_id(client: httpx.AsyncClient, user: str) -> int:
@@ -42,27 +40,39 @@ async def _resolve_user_id(client: httpx.AsyncClient, user: str) -> int:
     return resp.json()["id"]
 
 
+async def _get_all(client: httpx.AsyncClient, url: str, params: dict) -> list:
+    """GET a Canvas list endpoint, following ``Link rel="next"`` pagination.
+
+    Raises ``httpx.HTTPStatusError`` on a non-2xx response.
+    """
+    rows: list = []
+    next_url: str | None = url
+    while next_url:
+        resp = await client.get(next_url, headers=_AUTH, params=params)
+        resp.raise_for_status()
+        rows.extend(resp.json())
+        # The next-page URL already carries the query string.
+        next_url = resp.links.get("next", {}).get("url")
+        params = None
+    return rows
+
+
 @server.tool()
 async def get_student_courses(student: str) -> list[TextContent]:
     """Get all courses a student is enrolled in for the current term.
 
-    ``student`` is a Canvas user id (e.g. "116"), a SIS id, or a qualified
-    reference such as "sis_login_id:jane@x.edu".
+    ``student``: Canvas user id (e.g. "116"), or a qualified reference such as
+    "sis_user_id:001234567" / "sis_login_id:jane@x.edu" (SIS ids must be
+    prefixed — they are often numeric and are not auto-detected).
     """
     async with httpx.AsyncClient() as client:
         user_id = await _resolve_user_id(client, student)
 
-        enrollments_resp = await client.get(
+        enrollments = await _get_all(
+            client,
             f"{CANVAS_BASE_URL}/api/v1/users/{user_id}/enrollments",
-            headers=_AUTH,
-            params={
-                "state[]": "active",
-                "type[]": "StudentEnrollment",
-                "per_page": 50
-            }
+            {"state[]": "active", "type[]": "StudentEnrollment", "per_page": 100},
         )
-        enrollments_resp.raise_for_status()
-        enrollments = enrollments_resp.json()
 
         results = []
         for e in enrollments:
@@ -85,8 +95,9 @@ async def get_student_submissions(
 ) -> list[TextContent]:
     """Get a student's recent assignment submissions across all courses.
 
-    ``student`` is a Canvas user id (e.g. "116"), a SIS id, or a qualified
-    reference such as "sis_login_id:jane@x.edu".
+    ``student``: Canvas user id (e.g. "116"), or a qualified reference such as
+    "sis_user_id:001234567" / "sis_login_id:jane@x.edu" (SIS ids must be
+    prefixed — they are often numeric and are not auto-detected).
     """
     since = (datetime.utcnow() - timedelta(days=days_back)).isoformat() + "Z"
     async with httpx.AsyncClient() as client:
@@ -94,27 +105,26 @@ async def get_student_submissions(
 
         # Canvas has no cross-course user submissions endpoint; the per-course
         # students/submissions endpoint is queried for each active enrollment.
-        enrollments_resp = await client.get(
+        enrollments = await _get_all(
+            client,
             f"{CANVAS_BASE_URL}/api/v1/users/{user_id}/enrollments",
-            headers=_AUTH,
-            params={"state[]": "active", "type[]": "StudentEnrollment", "per_page": 100}
+            {"state[]": "active", "type[]": "StudentEnrollment", "per_page": 100},
         )
-        enrollments_resp.raise_for_status()
-        course_ids = [e["course_id"] for e in enrollments_resp.json()]
+        course_ids = [e["course_id"] for e in enrollments]
 
         results = []
         for course_id in course_ids:
-            subs_resp = await client.get(
-                f"{CANVAS_BASE_URL}/api/v1/courses/{course_id}/students/submissions",
-                headers=_AUTH,
-                params={
-                    "student_ids[]": user_id,
-                    "submitted_since": since,
-                    "per_page": 100,
-                }
-            )
-            subs_resp.raise_for_status()
-            for s in subs_resp.json():
+            try:
+                submissions = await _get_all(
+                    client,
+                    f"{CANVAS_BASE_URL}/api/v1/courses/{course_id}/students/submissions",
+                    {"student_ids[]": user_id, "submitted_since": since, "per_page": 100},
+                )
+            except httpx.HTTPStatusError:
+                # Skip courses this user/token can't read submissions for
+                # (e.g. concluded or access-restricted) rather than failing all.
+                continue
+            for s in submissions:
                 results.append({
                     "assignment_id": s.get("assignment_id"),
                     "course_id": course_id,

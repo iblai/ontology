@@ -10,6 +10,7 @@ from iblai_ontology.config.validator import ConfigValidator
 REQUIRED_TOOLSETS = {
     "admin-analytics-tools",
     "client-postgres-tools",
+    "client-mysql-tools",
 }
 
 
