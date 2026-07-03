@@ -29,7 +29,9 @@ class SyncScheduleGenerator:
         for s in incoming:
             by_name[s["name"]] = s
         return yaml.dump(
-            {"schedules": list(by_name.values())}, default_flow_style=False, sort_keys=False
+            {"schedules": list(by_name.values())},
+            default_flow_style=False,
+            sort_keys=False,
         )
 
     def apply(self, generated_sync_yaml: str) -> str:

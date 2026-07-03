@@ -25,7 +25,9 @@ def test_peoplesoft_known_table_description_and_cadence():
     a = PeopleSoftAdapter()
     desc = a.describe_table("PS_STDNT_CAR_TERM")
     assert "career/term" in desc.lower()
-    assert a.suggest_sync_cadence("PS_STDNT_CAR_TERM", 2_000_000) == "1h"  # known overrides size
+    assert (
+        a.suggest_sync_cadence("PS_STDNT_CAR_TERM", 2_000_000) == "1h"
+    )  # known overrides size
     tools = a.suggested_tools("PS_STDNT_CAR_TERM")
     assert any(t["name"] == "get-student-enrollment" for t in tools)
 

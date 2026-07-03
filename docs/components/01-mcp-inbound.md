@@ -214,44 +214,50 @@ Systems that are not databases (Canvas, Slate, Navigate, LDAP) get a lightweight
 
 ```python
 # mcp-servers/canvas/server.py
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 import httpx, json, os
 from datetime import datetime, timedelta
 
 CANVAS_BASE_URL = os.environ["CANVAS_BASE_URL"]
 CANVAS_TOKEN = os.environ["CANVAS_API_TOKEN"]
 
-server = Server("canvas-mcp")
+server = FastMCP("canvas-mcp")
+_AUTH = {"Authorization": f"Bearer {CANVAS_TOKEN}"}
+
+
+def _user_ref_path(user: str) -> str:
+    """A numeric Canvas user id is used directly; an already-qualified ref
+    (``sis_login_id:jane@x.edu``) passes through; a bare value is treated as
+    ``sis_user_id:``. Instances that don't populate SIS ids pass the Canvas id."""
+    ref = str(user).strip()
+    return ref if (ref.isdigit() or ":" in ref) else f"sis_user_id:{ref}"
+
+
+async def _resolve_user_id(client: httpx.AsyncClient, user: str) -> int:
+    resp = await client.get(f"{CANVAS_BASE_URL}/api/v1/users/{_user_ref_path(user)}", headers=_AUTH)
+    resp.raise_for_status()
+    return resp.json()["id"]
 
 @server.tool()
-async def get_student_courses(student_sis_id: str) -> list[TextContent]:
-    """Get all courses a student is enrolled in for the current term."""
+async def get_student_courses(student: str) -> list[TextContent]:
+    """Courses a student is enrolled in. `student` is a Canvas user id,
+    a SIS id, or a qualified ref like `sis_login_id:jane@x.edu`."""
     async with httpx.AsyncClient() as client:
-        user = (await client.get(
-            f"{CANVAS_BASE_URL}/api/v1/users/sis_user_id:{student_sis_id}",
-            headers={"Authorization": f"Bearer {CANVAS_TOKEN}"},
-        )).json()
+        user_id = await _resolve_user_id(client, student)
 
         enrollments = (await client.get(
-            f"{CANVAS_BASE_URL}/api/v1/users/{user['id']}/enrollments",
-            headers={"Authorization": f"Bearer {CANVAS_TOKEN}"},
+            f"{CANVAS_BASE_URL}/api/v1/users/{user_id}/enrollments",
+            headers=_AUTH,
             params={"state[]": "active", "type[]": "StudentEnrollment", "per_page": 50},
         )).json()
-
-        results = [{
-            "course_id": e["course_id"],
-            "course_name": e.get("course_name", ""),
-            "enrollment_state": e["enrollment_state"],
-            "current_grade": e.get("grades", {}).get("current_grade"),
-            "current_score": e.get("grades", {}).get("current_score"),
-            "last_activity_at": e.get("last_activity_at"),
-        } for e in enrollments]
-
+        # ... shape enrollments into results ...
         return [TextContent(type="text", text=json.dumps(results, indent=2))]
 ```
 
-A second tool, `get_student_submissions(student_sis_id, days_back=7)`, returns recent assignment submissions across courses with `late` / `missing` flags. Both are GET-only against the Canvas REST API, authenticated with a single Canvas admin token held only inside the `mcp-canvas` container.
+A second tool, `get_student_submissions(student, days_back=7)`, returns recent submissions with `late` / `missing` flags. Because Canvas has **no cross-course user-submissions endpoint**, it enumerates the student's active enrollments and queries `GET /api/v1/courses/:id/students/submissions?student_ids[]=<uid>` per course. Both tools accept a Canvas user id, a SIS id, or a qualified ref (SIS is used when the instance populates it), are GET-only, call `raise_for_status()` so a bad response never silently corrupts output, and use a single Canvas admin token held only inside the `mcp-canvas` container.
+
+> **Framework note:** custom servers use `FastMCP` (`from mcp.server.fastmcp import FastMCP`), whose `@server.tool()` decorator registers tools. The low-level `mcp.server.Server` class has no `.tool()` decorator.
 
 Representative response from `get_student_courses`:
 

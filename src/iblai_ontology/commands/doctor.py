@@ -10,7 +10,9 @@ import typer
 
 from iblai_ontology.ui import console
 
-app = typer.Typer(invoke_without_command=True, help="Diagnose config, env, drivers, and connectivity.")
+app = typer.Typer(
+    invoke_without_command=True, help="Diagnose config, env, drivers, and connectivity."
+)
 
 
 @dataclass
@@ -76,7 +78,9 @@ def run_checks() -> list[Check]:
     checks.append(
         Check(
             "entra config",
-            bool(os.environ.get("ENTRA_TENANT_ID") and os.environ.get("ENTRA_CLIENT_ID")),
+            bool(
+                os.environ.get("ENTRA_TENANT_ID") and os.environ.get("ENTRA_CLIENT_ID")
+            ),
             "ENTRA_TENANT_ID + ENTRA_CLIENT_ID",
         )
     )
@@ -97,6 +101,8 @@ def doctor(ctx: typer.Context) -> None:
         if not c.ok and c.name.startswith("config:"):
             hard_fail = True
     console.print()
-    console.print("[dim]extras/env shown as advisory (•) — install or set as needed.[/dim]")
+    console.print(
+        "[dim]extras/env shown as advisory (•) — install or set as needed.[/dim]"
+    )
     if hard_fail:
         raise typer.Exit(code=1)

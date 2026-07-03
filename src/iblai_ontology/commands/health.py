@@ -70,6 +70,10 @@ def storage() -> None:
     from iblai_ontology.backend.health.checks import check_storage
 
     result = check_storage()
-    typer.echo(f"Text memories: {result.total_files:,} files, {result.total_size_mb:.1f} MB")
+    typer.echo(
+        f"Text memories: {result.total_files:,} files, {result.total_size_mb:.1f} MB"
+    )
     for domain, stats in result.by_domain.items():
-        typer.echo(f"  /ontology/{domain}/: {stats['files']} files, {stats['size_mb']:.1f} MB")
+        typer.echo(
+            f"  /ontology/{domain}/: {stats['files']} files, {stats['size_mb']:.1f} MB"
+        )

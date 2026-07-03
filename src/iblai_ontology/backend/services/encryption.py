@@ -13,8 +13,8 @@ def _fernet():
     if not key:
         raise RuntimeError(
             "ONTOLOGY_CREDENTIAL_KEY is not set. Generate one with:\n"
-            "    python -c \"from cryptography.fernet import Fernet; "
-            "print(Fernet.generate_key().decode())\""
+            '    python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
         )
     from cryptography.fernet import Fernet
 

@@ -32,7 +32,9 @@ def _assert_select_only(sql: str) -> None:
         raise ReadOnlyQueryError("Only SELECT/WITH queries are allowed.")
 
 
-def run_readonly_query(sql: str, *, limit: int = 100) -> tuple[list[tuple[Any, ...]], list[str]]:
+def run_readonly_query(
+    sql: str, *, limit: int = 100
+) -> tuple[list[tuple[Any, ...]], list[str]]:
     """Execute a read-only SELECT against the ontology cache.
 
     Returns ``(rows, column_names)``. Requires the ``[db]`` extra (psycopg2).

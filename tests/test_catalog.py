@@ -148,7 +148,9 @@ def test_api_entries_have_vendored_skill():
     for entry in list_entries():
         if entry.type == "api":
             assert entry.skill, f"{entry.key} api entry should reference a skill"
-            assert entry.skill_path is not None, f"{entry.key} skill file missing on disk"
+            assert entry.skill_path is not None, (
+                f"{entry.key} skill file missing on disk"
+            )
             assert entry.skill_url.startswith("https://github.com/iblai/")
 
 

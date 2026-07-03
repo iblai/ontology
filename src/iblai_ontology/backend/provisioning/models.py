@@ -21,7 +21,9 @@ class ProvisioningRun(models.Model):
     service = models.ForeignKey(
         "services.Service", on_delete=models.CASCADE, related_name="provisioning_runs"
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True, null=True)
@@ -51,9 +53,13 @@ class ProvisioningStep(models.Model):
         SKIPPED = "skipped", "Skipped"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    run = models.ForeignKey(ProvisioningRun, on_delete=models.CASCADE, related_name="steps")
+    run = models.ForeignKey(
+        ProvisioningRun, on_delete=models.CASCADE, related_name="steps"
+    )
     step_type = models.CharField(max_length=30, choices=StepType.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
     started_at = models.DateTimeField(null=True)
     completed_at = models.DateTimeField(null=True)
     output = models.JSONField(default=dict)

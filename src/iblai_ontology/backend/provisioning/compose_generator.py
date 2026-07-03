@@ -8,7 +8,9 @@ the shared MCP Toolbox and need no compose change.
 from __future__ import annotations
 
 
-def mcp_service_fragment(service_name: str, *, build_context: str | None = None) -> dict:
+def mcp_service_fragment(
+    service_name: str, *, build_context: str | None = None
+) -> dict:
     """Return a docker-compose service definition for a custom MCP server."""
     return {
         f"mcp-{service_name}": {

@@ -46,7 +46,9 @@ class RoleResolver:
     def _roles(self) -> dict:
         return self.reader.get_roles()
 
-    def resolve(self, role: Optional[str], *, user_emplid: Optional[str] = None) -> Permissions:
+    def resolve(
+        self, role: Optional[str], *, user_emplid: Optional[str] = None
+    ) -> Permissions:
         roles = self._roles()
         # Fall back to the default role for unknown/missing roles.
         if not role or role not in roles:
@@ -55,7 +57,9 @@ class RoleResolver:
 
         memory_paths = list(spec.get("memory_paths", []))
         if user_emplid is not None:
-            memory_paths = [p.replace("${USER_EMPLID}", user_emplid) for p in memory_paths]
+            memory_paths = [
+                p.replace("${USER_EMPLID}", user_emplid) for p in memory_paths
+            ]
 
         return Permissions(
             role=role,
@@ -69,6 +73,8 @@ class RoleResolver:
         )
 
 
-def resolve_permissions(role: Optional[str], *, user_emplid: Optional[str] = None) -> Permissions:
+def resolve_permissions(
+    role: Optional[str], *, user_emplid: Optional[str] = None
+) -> Permissions:
     """Convenience wrapper around :class:`RoleResolver`."""
     return RoleResolver().resolve(role, user_emplid=user_emplid)

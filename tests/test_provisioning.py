@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from iblai_ontology.backend.discovery.introspection import ColumnInfo, SchemaManifest, TableInfo
+from iblai_ontology.backend.discovery.introspection import (
+    ColumnInfo,
+    SchemaManifest,
+    TableInfo,
+)
 from iblai_ontology.backend.provisioning.schema_generator import CacheSchemaGenerator
 
 

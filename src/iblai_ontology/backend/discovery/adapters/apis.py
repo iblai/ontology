@@ -15,9 +15,7 @@ from .base import BaseAdapter, register
 # Bare service-type names the `service add` enum uses, plus every API adapter
 # referenced by catalog.yaml (derived so the two never drift apart).
 _BARE_NAMES = ["canvas", "slate", "workday", "navigate"]
-_API_ADAPTERS = _BARE_NAMES + [
-    e.adapter for e in list_entries() if e.type == "api"
-]
+_API_ADAPTERS = _BARE_NAMES + [e.adapter for e in list_entries() if e.type == "api"]
 
 
 @register(*_API_ADAPTERS)

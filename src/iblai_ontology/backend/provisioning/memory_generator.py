@@ -57,7 +57,9 @@ class MemoryGenerator:
         from jinja2 import Environment, StrictUndefined
 
         self.templates_dir = Path(templates_dir) if templates_dir else None
-        self.env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
+        self.env = Environment(
+            undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True
+        )
 
     def _template_source(self, entity_group: str) -> str:
         if self.templates_dir:

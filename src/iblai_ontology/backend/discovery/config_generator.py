@@ -84,7 +84,9 @@ class ConfigGenerator:
                     "description": f"Sync {table} every {cadence}",
                 }
             )
-        return yaml.dump({"schedules": schedules}, default_flow_style=False, sort_keys=False)
+        return yaml.dump(
+            {"schedules": schedules}, default_flow_style=False, sort_keys=False
+        )
 
     def entity_groups_yaml(self) -> str:
         return yaml.dump(
@@ -96,7 +98,9 @@ class ConfigGenerator:
     def table_descriptions_md(self) -> str:
         lines = [f"# {self.service_name} — Table Descriptions", ""]
         for td in self.analysis.table_descriptions:
-            lines.append(f"## {td.table_name}  _({td.entity_group}, sync {td.suggested_sync_cadence})_")
+            lines.append(
+                f"## {td.table_name}  _({td.entity_group}, sync {td.suggested_sync_cadence})_"
+            )
             lines.append("")
             lines.append(td.description)
             if td.sync_rationale:
@@ -109,9 +113,13 @@ class ConfigGenerator:
         if self.analysis.draft_cache_schema_sql:
             return self.analysis.draft_cache_schema_sql
         # Fall back to the provisioning generator's projection.
-        from iblai_ontology.backend.provisioning.schema_generator import CacheSchemaGenerator
+        from iblai_ontology.backend.provisioning.schema_generator import (
+            CacheSchemaGenerator,
+        )
 
-        return CacheSchemaGenerator(self.manifest, self.analysis.entity_groups).generate()
+        return CacheSchemaGenerator(
+            self.manifest, self.analysis.entity_groups
+        ).generate()
 
     # -- orchestration ---------------------------------------------------
     def generate_all(self, output_dir: str) -> dict[str, str]:

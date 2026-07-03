@@ -25,7 +25,9 @@ class Service(models.Model):
     display_name = models.CharField(max_length=255)
     service_type = models.CharField(max_length=20, choices=ServiceType.choices)
     adapter = models.CharField(max_length=100)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
 
     host = models.CharField(max_length=255, blank=True, default="")
     # Connection details, Fernet-encrypted JSON (see encryption.py).
@@ -57,7 +59,9 @@ class ServiceHealth(models.Model):
     """A point-in-time health observation for a service."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="health_checks")
+    service = models.ForeignKey(
+        Service, on_delete=models.CASCADE, related_name="health_checks"
+    )
     connected = models.BooleanField(default=False)
     read_only = models.BooleanField(default=False)
     latency_ms = models.IntegerField(default=0)

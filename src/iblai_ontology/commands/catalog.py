@@ -6,7 +6,10 @@ import typer
 
 from iblai_ontology.ui import console
 
-app = typer.Typer(no_args_is_help=True, help="Browse built-in service defaults across every solution segment.")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="Browse built-in service defaults across every solution segment.",
+)
 
 _DOMAINS = "higher-ed | enterprise | k-12 | government | legal | financial-services | medical-healthcare"
 
@@ -23,7 +26,16 @@ def list_catalog(
     for e in list_entries():
         if domain and e.domain != domain:
             continue
-        rows.append([e.key, e.display_name, e.type, e.domain, e.default_toolset, e.skill_url or "—"])
+        rows.append(
+            [
+                e.key,
+                e.display_name,
+                e.type,
+                e.domain,
+                e.default_toolset,
+                e.skill_url or "—",
+            ]
+        )
     print_table(
         title="Service catalog",
         columns=["Key", "Name", "Type", "Domain", "Default toolset", "Skill"],
@@ -32,7 +44,11 @@ def list_catalog(
 
 
 @app.command()
-def show(key: str = typer.Argument(..., help="Catalog key, e.g. canvas, peoplesoft, snowflake.")) -> None:
+def show(
+    key: str = typer.Argument(
+        ..., help="Catalog key, e.g. canvas, peoplesoft, snowflake."
+    ),
+) -> None:
     """Show a catalog entry: connection shape, default toolset, sync cadences, skill."""
     from iblai_ontology.catalog import get_entry
 
@@ -42,11 +58,15 @@ def show(key: str = typer.Argument(..., help="Catalog key, e.g. canvas, peopleso
         console.print(f"[error]{exc}[/error]")
         raise typer.Exit(code=1)
 
-    console.print(f"[brand]{entry.display_name}[/brand]  [dim]({entry.key}, {entry.domain})[/dim]")
+    console.print(
+        f"[brand]{entry.display_name}[/brand]  [dim]({entry.key}, {entry.domain})[/dim]"
+    )
     if entry.summary:
         console.print(entry.summary)
     console.print()
-    console.print(f"[highlight]Type:[/highlight] {entry.type}    [highlight]Adapter:[/highlight] {entry.adapter}")
+    console.print(
+        f"[highlight]Type:[/highlight] {entry.type}    [highlight]Adapter:[/highlight] {entry.adapter}"
+    )
     console.print(f"[highlight]Default toolset:[/highlight] {entry.default_toolset}")
     if entry.connection:
         console.print(f"[highlight]Connection:[/highlight] {entry.connection}")
@@ -59,5 +79,7 @@ def show(key: str = typer.Argument(..., help="Catalog key, e.g. canvas, peopleso
             console.print(f"  - {k}: {v}")
     if entry.skill_url:
         console.print(f"[highlight]Skill:[/highlight] {entry.skill_url}")
-        console.print("  Seed discovery from it with: "
-                      f"[dim]ontology skill import {entry.skill.removesuffix('.md')}[/dim]")
+        console.print(
+            "  Seed discovery from it with: "
+            f"[dim]ontology skill import {entry.skill.removesuffix('.md')}[/dim]"
+        )

@@ -18,7 +18,9 @@ def django_conn(tmp_path, monkeypatch):
     from django.db import connection
 
     with connection.cursor() as cur:
-        cur.execute("CREATE TABLE IF NOT EXISTS cache_demo (id TEXT PRIMARY KEY, name TEXT)")
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS cache_demo (id TEXT PRIMARY KEY, name TEXT)"
+        )
     return connection
 
 

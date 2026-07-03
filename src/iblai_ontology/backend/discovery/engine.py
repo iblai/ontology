@@ -141,8 +141,12 @@ class DiscoveryEngine:
                     username=user,
                     status=safety.overall_status.value,
                     tests_run=len(safety.tests),
-                    tests_passed=sum(1 for t in safety.tests if t.result.value == "passed"),
-                    tests_failed=sum(1 for t in safety.tests if t.result.value == "failed"),
+                    tests_passed=sum(
+                        1 for t in safety.tests if t.result.value == "passed"
+                    ),
+                    tests_failed=sum(
+                        1 for t in safety.tests if t.result.value == "failed"
+                    ),
                     details={t.test_name: t.result.value for t in safety.tests},
                 )
                 service.last_safety_check_at = timezone.now()
@@ -200,7 +204,11 @@ class DiscoveryEngine:
             try:
                 return SchemaAnalyzer().analyze(manifest)
             except ValueError as exc:
-                logger.warning("LLM not configured (%s); using rule-based analysis", exc)
+                logger.warning(
+                    "LLM not configured (%s); using rule-based analysis", exc
+                )
             except Exception as exc:  # pragma: no cover - network/provider errors
-                logger.warning("LLM analysis failed (%s); using rule-based analysis", exc)
+                logger.warning(
+                    "LLM analysis failed (%s); using rule-based analysis", exc
+                )
         return RuleBasedAnalyzer(adapter).analyze(manifest)

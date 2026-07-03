@@ -87,13 +87,19 @@ def test_validator_requires_tenant_and_client():
 # --- Role resolution ------------------------------------------------------
 @pytest.fixture()
 def resolver(tmp_path, monkeypatch):
-    # Point the config layer at the repo's canonical roles.yaml via a temp copy.
-    import shutil
+    # Merge the baseline roles.yaml with the higher-ed sample roles so these
+    # tests can exercise higher-ed semantics (Student EMPLID, financial-aid-tools).
     from pathlib import Path
+
+    import yaml
 
     cfg = tmp_path / "config"
     cfg.mkdir()
-    shutil.copy(Path("config/roles.yaml"), cfg / "roles.yaml")
+    merged: dict = {"roles": {}}
+    for name in ("config/roles.yaml", "config/roles.higher-ed.example.yaml"):
+        data = yaml.safe_load(Path(name).read_text()) or {}
+        merged["roles"].update(data.get("roles", {}))
+    (cfg / "roles.yaml").write_text(yaml.safe_dump(merged))
     monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
     return RoleResolver()
 

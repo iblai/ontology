@@ -46,8 +46,12 @@ def test_sync_schedule(seeded):
 def test_config_show_validate_set_llm(seeded):
     assert runner.invoke(app, ["config", "validate"]).exit_code == 0
     assert runner.invoke(app, ["config", "show"]).exit_code == 0
-    assert runner.invoke(app, ["config", "set", "llm.temperature", "0.5"]).exit_code == 0
-    r = runner.invoke(app, ["config", "llm", "--provider", "anthropic", "--api-key", "sk-x"])
+    assert (
+        runner.invoke(app, ["config", "set", "llm.temperature", "0.5"]).exit_code == 0
+    )
+    r = runner.invoke(
+        app, ["config", "llm", "--provider", "anthropic", "--api-key", "sk-x"]
+    )
     assert r.exit_code == 0
 
 
@@ -63,7 +67,9 @@ def test_data_query_table(monkeypatch):
         "iblai_ontology.utils.db.run_readonly_query",
         lambda sql, limit=100: ([("Freshman", 10)], ["classification", "n"]),
     )
-    r = runner.invoke(app, ["data", "query", "SELECT classification, count(*) n FROM students"])
+    r = runner.invoke(
+        app, ["data", "query", "SELECT classification, count(*) n FROM students"]
+    )
     assert r.exit_code == 0
     assert "Freshman" in r.stdout
 

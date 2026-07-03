@@ -1,0 +1,39 @@
+# ============================================================
+# docker-compose.override.example.yml
+#
+# Deployment-specific wiring for how mcp-toolbox reaches your source databases.
+# Copy to docker-compose.override.yml (git-ignored) and keep only what you need.
+# Compose merges docker-compose.override.yml on top of docker-compose.yml
+# automatically.
+#
+# The `client-postgres` and `client-mysql` sources in config/tools.yaml are fully
+# env-driven (CLIENT_POSTGRES_* / CLIENT_MYSQL_* in .env.mcp), so the SAME config connects
+# to a LOCAL container or a REMOTE host — only the network path differs.
+# ============================================================
+services:
+  mcp-toolbox:
+    networks:
+      - ontology-internal
+
+      # --- Pattern A: LOCAL source containers -------------------------------
+      # Attach to the docker network your source container(s) run on, and set
+      # the *_HOST env var to the container name/alias. For example, if your
+      # Postgres and MySQL containers both run on the network `my_source_net`:
+      #   CLIENT_POSTGRES_HOST=my-postgres   CLIENT_MYSQL_HOST=my-mysql
+      - my_source_net
+
+      # --- Pattern B: REMOTE sources ----------------------------------------
+      # ontology-internal is `internal: true` (no internet egress). To reach a
+      # remote DB by host/IP, also put mcp-toolbox on an egress-capable network
+      # and set *_HOST to the remote hostname/IP, e.g.:
+      #   CLIENT_POSTGRES_HOST=db.customer.example.com   CLIENT_MYSQL_HOST=10.20.0.5
+      # - ontology-egress
+
+networks:
+  # A pre-existing external network of a local source stack (Pattern A).
+  my_source_net:
+    external: true
+
+  # An egress-capable bridge for reaching remote sources (Pattern B).
+  # ontology-egress:
+  #   driver: bridge

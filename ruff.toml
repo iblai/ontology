@@ -1,0 +1,6 @@
+target-version = "py311"
+
+exclude = [
+    "**/migrations/**",
+    "config/generated/**",
+]

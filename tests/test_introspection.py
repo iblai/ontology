@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from iblai_ontology.backend.discovery.introspection import (
     ColumnInfo,
-    SchemaManifest,
     SchemaIntrospector,
+    SchemaManifest,
     TableInfo,
 )
 

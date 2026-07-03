@@ -44,7 +44,9 @@ class SafetyVerificationResult:
 
     @property
     def all_passed(self) -> bool:
-        return bool(self.tests) and all(t.result == TestResult.PASSED for t in self.tests)
+        return bool(self.tests) and all(
+            t.result == TestResult.PASSED for t in self.tests
+        )
 
     @property
     def summary(self) -> str:
@@ -192,7 +194,9 @@ class SafetyVerifier:
         try:
             sql = self._get_test_sql(test_name, existing_table)
         except Exception as exc:  # building the SQL needs a read; surface as ERROR
-            return SafetyTestResult(test_name, "", TestResult.ERROR, error_message=str(exc)[:500])
+            return SafetyTestResult(
+                test_name, "", TestResult.ERROR, error_message=str(exc)[:500]
+            )
 
         cursor = self.connection.cursor()
         try:
@@ -239,7 +243,8 @@ class SafetyVerifier:
     # -- remediation -----------------------------------------------------
     def remediation_sql(self) -> str:
         return REMEDIATION_SQL.get(
-            self.db_type, "Unknown database type. Please create a read-only user manually."
+            self.db_type,
+            "Unknown database type. Please create a read-only user manually.",
         )
 
 

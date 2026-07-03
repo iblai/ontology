@@ -80,10 +80,20 @@ class SchemaManifest:
             )
             if table.comment:
                 lines.extend(["", table.comment])
-            lines.extend(["", "| Column | Type | Nullable | PK | FK |", "|--------|------|----------|----|----|"])
+            lines.extend(
+                [
+                    "",
+                    "| Column | Type | Nullable | PK | FK |",
+                    "|--------|------|----------|----|----|",
+                ]
+            )
             for col in table.columns:
                 pk = "✅" if col.is_primary_key else ""
-                fk = f"→ {col.foreign_key_table}.{col.foreign_key_column}" if col.foreign_key_table else ""
+                fk = (
+                    f"→ {col.foreign_key_table}.{col.foreign_key_column}"
+                    if col.foreign_key_table
+                    else ""
+                )
                 lines.append(
                     f"| {col.name} | {col.data_type} | "
                     f"{'YES' if col.nullable else 'NO'} | {pk} | {fk} |"
@@ -107,8 +117,12 @@ class SchemaIntrospector:
             tables.extend(self._list_tables(schema))
         for table in tables:
             table.columns = self._get_columns(table.schema_name, table.table_name)
-            table.primary_key_columns = [c.name for c in table.columns if c.is_primary_key]
-            table.foreign_keys = self._get_foreign_keys(table.schema_name, table.table_name)
+            table.primary_key_columns = [
+                c.name for c in table.columns if c.is_primary_key
+            ]
+            table.foreign_keys = self._get_foreign_keys(
+                table.schema_name, table.table_name
+            )
 
         return SchemaManifest(
             db_type=self.db_type,
@@ -299,11 +313,17 @@ class SchemaIntrospector:
             ),
         }
         cursor.execute(queries[self.db_type])
-        return {row[0]: {"table": row[1], "column": row[2]} for row in cursor.fetchall()}
+        return {
+            row[0]: {"table": row[1], "column": row[2]} for row in cursor.fetchall()
+        }
 
     def _get_foreign_keys(self, schema: str, table: str) -> list[dict]:
         return [
-            {"column": col, "references_table": info["table"], "references_column": info["column"]}
+            {
+                "column": col,
+                "references_table": info["table"],
+                "references_column": info["column"],
+            }
             for col, info in self._get_foreign_key_map(schema, table).items()
         ]
 
