@@ -93,7 +93,9 @@ def test_discovery_engine_end_to_end(django_db, tmp_path, monkeypatch):
     from iblai_ontology.backend.discovery.models import SafetyReport
     from iblai_ontology.backend.services.models import Service
 
-    monkeypatch.setattr(engine_mod, "create_connection", lambda *a, **k: CombinedPGConn())
+    monkeypatch.setattr(
+        engine_mod, "create_connection", lambda *a, **k: CombinedPGConn()
+    )
 
     out = tmp_path / "generated"
     result = DiscoveryEngine().run(

@@ -45,7 +45,11 @@ class PeopleSoftAdapter(BaseAdapter):
                     "description": "Get a student's enrollment by term",
                     "sql": "SELECT * FROM PS_STDNT_CAR_TERM WHERE EMPLID = :1 ORDER BY STRM DESC",
                     "parameters": [
-                        {"name": "student_id", "type": "string", "description": "EMPLID"}
+                        {
+                            "name": "student_id",
+                            "type": "string",
+                            "description": "EMPLID",
+                        }
                     ],
                     "toolset": "enrollment-tools",
                 }

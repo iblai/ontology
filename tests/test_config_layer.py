@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from iblai_ontology.config.initializer import Initializer
@@ -21,7 +19,13 @@ def cfgdir(tmp_path):
 def test_initializer_scaffolds_files(tmp_path):
     Initializer(tmp_path).run(with_samples=True)
     cfg = tmp_path / "config"
-    for name in ("ontology.yaml", "tools.yaml", "roles.yaml", "sync-schedules.yaml", "services.yaml"):
+    for name in (
+        "ontology.yaml",
+        "tools.yaml",
+        "roles.yaml",
+        "sync-schedules.yaml",
+        "services.yaml",
+    ):
         assert (cfg / name).exists()
     assert (tmp_path / "docker-compose.yml").exists()
     assert (tmp_path / ".env.example").exists()

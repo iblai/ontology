@@ -50,7 +50,9 @@ class EntraValidator:
         algorithms: tuple[str, ...] = ("RS256",),
     ) -> None:
         if not tenant_id or not client_id:
-            raise ValueError("tenant_id and client_id are required for Entra validation")
+            raise ValueError(
+                "tenant_id and client_id are required for Entra validation"
+            )
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.algorithms = list(algorithms)

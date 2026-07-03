@@ -42,7 +42,13 @@ def test_query_cache_rejects_non_select():
 
 
 def test_get_sync_status_requires_admin():
-    h = _handlers(Permissions(role="Student", display_name="x", mcp_toolsets=["student-self-service-tools"]))
+    h = _handlers(
+        Permissions(
+            role="Student",
+            display_name="x",
+            mcp_toolsets=["student-self-service-tools"],
+        )
+    )
     with pytest.raises(PermissionDenied):
         h.get_sync_status()
 
@@ -57,12 +63,21 @@ def test_dispatch_tool_call_read_memory(tmp_path):
     root = tmp_path / "ontology"
     (root / "courses").mkdir(parents=True)
     (root / "courses" / "_index.md").write_text("# Courses")
-    perms = Permissions(role="default", display_name="x", memory_paths=["/ontology/courses/**"])
+    perms = Permissions(
+        role="default", display_name="x", memory_paths=["/ontology/courses/**"]
+    )
     h = _handlers(perms, files_root=str(root))
     resp = dispatch(
         h,
-        {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
-         "params": {"name": "read-memory", "arguments": {"path": "/ontology/courses/_index.md"}}},
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "read-memory",
+                "arguments": {"path": "/ontology/courses/_index.md"},
+            },
+        },
     )
     assert resp["id"] == 5
     assert "Courses" in resp["result"]["content"][0]["text"]

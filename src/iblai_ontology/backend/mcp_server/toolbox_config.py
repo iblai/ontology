@@ -45,7 +45,9 @@ _SOURCE_FIELD_RENAMES: dict[str, dict[str, str]] = {
 @dataclass
 class ToolboxBuildResult:
     config: dict[str, Any]
-    native_tools: list[str] = field(default_factory=list)  # ${...} tools served by the gateway
+    native_tools: list[str] = field(
+        default_factory=list
+    )  # ${...} tools served by the gateway
     sources: int = 0
     tools: int = 0
     toolsets: int = 0
@@ -100,7 +102,8 @@ def build_toolbox_config(tools_path: str | Path) -> ToolboxBuildResult:
     # Never reference a native (omitted) tool from a generated toolset.
     native_set = set(native)
     toolsets = {
-        ts: [t for t in members if t not in native_set] for ts, members in toolsets.items()
+        ts: [t for t in members if t not in native_set]
+        for ts, members in toolsets.items()
     }
 
     config = {"sources": sources, "tools": tools, "toolsets": toolsets}
@@ -113,13 +116,19 @@ def build_toolbox_config(tools_path: str | Path) -> ToolboxBuildResult:
     )
 
 
-def write_toolbox_config(tools_path: str | Path, dest: str | Path) -> ToolboxBuildResult:
+def write_toolbox_config(
+    tools_path: str | Path, dest: str | Path
+) -> ToolboxBuildResult:
     """Generate the Toolbox config and write it to ``dest`` (parents created)."""
     result = build_toolbox_config(tools_path)
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     with open(dest, "w") as f:
-        f.write("# GENERATED from config/tools.yaml by `ontology mcp build` — do not edit.\n")
-        f.write("# Placeholder tokens are expanded by the Toolbox from its environment (.env.mcp).\n")
+        f.write(
+            "# GENERATED from config/tools.yaml by `ontology mcp build` — do not edit.\n"
+        )
+        f.write(
+            "# Placeholder tokens are expanded by the Toolbox from its environment (.env.mcp).\n"
+        )
         yaml.safe_dump(result.config, f, default_flow_style=False, sort_keys=False)
     return result

@@ -31,7 +31,9 @@ def query(
 @app.command()
 def search(
     term: str = typer.Argument(..., help="Search term."),
-    domain: Optional[str] = typer.Option(None, help="Restrict to a domain (students, courses…)."),
+    domain: Optional[str] = typer.Option(
+        None, help="Restrict to a domain (students, courses…)."
+    ),
     limit: int = typer.Option(10, help="Max results."),
 ) -> None:
     """Semantic search across text memories."""
@@ -72,4 +74,6 @@ def stats() -> None:
     s = check_storage()
     d = check_db()
     typer.echo(f"Text memories: {s.total_files:,} files, {s.total_size_mb:.1f} MB")
-    typer.echo(f"Cache DB: {d.table_count} tables, {d.total_rows:,} rows, {d.size_mb:.1f} MB")
+    typer.echo(
+        f"Cache DB: {d.table_count} tables, {d.total_rows:,} rows, {d.size_mb:.1f} MB"
+    )

@@ -113,8 +113,15 @@ def validate_tools_yaml(path: str | Path) -> ComplianceReport:
 
     # Cross-references: tool.source must exist; toolset tools must exist.
     for doc in docs:
-        if doc.get("kind") == "tool" and doc.get("source") and doc["source"] not in source_names:
-            _err(report, f"tool '{doc.get('name')}' references undefined source '{doc['source']}'")
+        if (
+            doc.get("kind") == "tool"
+            and doc.get("source")
+            and doc["source"] not in source_names
+        ):
+            _err(
+                report,
+                f"tool '{doc.get('name')}' references undefined source '{doc['source']}'",
+            )
     for name, tools in toolset_refs:
         for t in tools:
             if t not in tool_names:

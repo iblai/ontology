@@ -51,7 +51,13 @@ class SyncRunner:
         return rows if isinstance(rows, list) else [rows]
 
     # -- schedule execution ---------------------------------------------
-    def run_service(self, service: str, *, schedule_name: str | None = None, force_full: bool = False):
+    def run_service(
+        self,
+        service: str,
+        *,
+        schedule_name: str | None = None,
+        force_full: bool = False,
+    ):
         from iblai_ontology.config.reader import ConfigReader
 
         schedules = [
@@ -97,7 +103,9 @@ class SyncRunner:
         except NotImplementedError:
             # Generic transform seam — surfaced, not a hard failure.
             run.status = SyncRun.Status.SUCCESS
-            run.error_message = "generic transform seam (per-service sync not configured)"
+            run.error_message = (
+                "generic transform seam (per-service sync not configured)"
+            )
         except Exception as exc:  # pragma: no cover - integration path
             run.status = SyncRun.Status.FAILED
             run.error_message = str(exc)[:1000]
@@ -123,7 +131,10 @@ class SyncRunner:
         """
         from django.db import connection
 
-        from iblai_ontology.backend.sync.writer import detect_primary_key, write_entities
+        from iblai_ontology.backend.sync.writer import (
+            detect_primary_key,
+            write_entities,
+        )
 
         if not rows:
             return {"created": 0, "updated": 0}
@@ -143,7 +154,11 @@ class SyncRunner:
                 entity_group=entity_group,
                 indexer=indexer,
             )
-        return {"created": result.created, "updated": result.updated, "files": len(result.files)}
+        return {
+            "created": result.created,
+            "updated": result.updated,
+            "files": len(result.files),
+        }
 
     @staticmethod
     def _entity_group(sched: dict, output: dict) -> str:

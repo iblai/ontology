@@ -11,7 +11,9 @@ app = typer.Typer(no_args_is_help=True, help="Sync operations.")
 
 @app.command()
 def run(
-    service: Optional[str] = typer.Argument(None, help="Service name (all due if omitted)."),
+    service: Optional[str] = typer.Argument(
+        None, help="Service name (all due if omitted)."
+    ),
     schedule: Optional[str] = typer.Option(None, help="Specific schedule name."),
     full: bool = typer.Option(False, help="Force full refresh (ignore delta)."),
 ) -> None:
@@ -46,8 +48,14 @@ def status() -> None:
         title="Sync Status",
         columns=["Schedule", "Service", "Status", "Last Run", "Duration", "Records"],
         rows=[
-            [r.schedule_name, r.source_system, r.status, r.started_at,
-             f"{r.duration_seconds}s", r.records_processed]
+            [
+                r.schedule_name,
+                r.source_system,
+                r.status,
+                r.started_at,
+                f"{r.duration_seconds}s",
+                r.records_processed,
+            ]
             for r in latest
         ],
     )
@@ -71,11 +79,27 @@ def history(
     runs = qs.order_by("-started_at")[:limit]
     print_table(
         title="Sync History",
-        columns=["ID", "Schedule", "Status", "Started", "Duration", "Created", "Updated", "Error"],
+        columns=[
+            "ID",
+            "Schedule",
+            "Status",
+            "Started",
+            "Duration",
+            "Created",
+            "Updated",
+            "Error",
+        ],
         rows=[
-            [str(r.id)[:8], r.schedule_name, r.status, r.started_at,
-             f"{r.duration_seconds}s", r.records_created, r.records_updated,
-             (r.error_message or "")[:50]]
+            [
+                str(r.id)[:8],
+                r.schedule_name,
+                r.status,
+                r.started_at,
+                f"{r.duration_seconds}s",
+                r.records_created,
+                r.records_updated,
+                (r.error_message or "")[:50],
+            ]
             for r in runs
         ],
     )

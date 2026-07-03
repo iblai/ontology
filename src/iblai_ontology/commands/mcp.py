@@ -34,7 +34,12 @@ def tools() -> None:
         title="MCP Tools",
         columns=["Name", "Type", "Source", "Description"],
         rows=[
-            [t["name"], t.get("type", ""), t.get("source", ""), t.get("description", "")[:60]]
+            [
+                t["name"],
+                t.get("type", ""),
+                t.get("source", ""),
+                t.get("description", "")[:60],
+            ]
             for t in ConfigReader().get_tools()
         ],
     )
@@ -56,7 +61,9 @@ def validate() -> None:
     from iblai_ontology.config import config_dir
 
     report = validate_tools_yaml(config_dir() / "tools.yaml")
-    typer.echo(f"sources: {report.sources}  tools: {report.tools}  toolsets: {report.toolsets}")
+    typer.echo(
+        f"sources: {report.sources}  tools: {report.tools}  toolsets: {report.toolsets}"
+    )
     for issue in report.issues:
         marker = "ERR" if issue.severity == "error" else "WARN"
         typer.echo(f"  [{marker}] {issue.message}")
@@ -68,7 +75,9 @@ def validate() -> None:
 
 @app.command()
 def build(
-    out: Optional[str] = typer.Option(None, help="Output path (default config/generated/toolbox.yaml)."),
+    out: Optional[str] = typer.Option(
+        None, help="Output path (default config/generated/toolbox.yaml)."
+    ),
 ) -> None:
     """Generate the Google MCP Toolbox native config from tools.yaml.
 

@@ -18,7 +18,13 @@ class ToolTester:
     def __init__(self) -> None:
         # Operator context: wildcard toolsets so any configured tool is callable.
         self._ctx = MCPContext(
-            permissions=Permissions(role="IblaiOntologyAdmin", display_name="Operator", mcp_toolsets=["*"], cache_tables=["*"], admin_dashboard=True)
+            permissions=Permissions(
+                role="IblaiOntologyAdmin",
+                display_name="Operator",
+                mcp_toolsets=["*"],
+                cache_tables=["*"],
+                admin_dashboard=True,
+            )
         )
 
     def call(self, tool: str, params: dict[str, Any]) -> Any:

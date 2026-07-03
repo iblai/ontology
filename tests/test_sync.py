@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from iblai_ontology.backend.sync import scheduler
 from iblai_ontology.backend.sync.engine import SyncRunner
 

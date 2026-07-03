@@ -23,7 +23,9 @@ def up(
     src = config_dir() / "tools.yaml"
     if src.exists():
         try:
-            result = write_toolbox_config(src, config_dir() / "generated" / "toolbox.yaml")
+            result = write_toolbox_config(
+                src, config_dir() / "generated" / "toolbox.yaml"
+            )
         except Exception as exc:  # surface a clean message, not a traceback
             typer.echo(f"Failed to generate toolbox config from {src}: {exc}", err=True)
             raise typer.Exit(code=1)
@@ -55,7 +57,9 @@ def logs(
 
 
 @app.command()
-def restart(service: Optional[str] = typer.Argument(None, help="Service name.")) -> None:
+def restart(
+    service: Optional[str] = typer.Argument(None, help="Service name."),
+) -> None:
     """Restart services."""
     from iblai_ontology.utils.docker import compose_restart
 

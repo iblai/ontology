@@ -76,7 +76,13 @@ def _slug(text: str) -> str:
 
 def _tool_name(service: str, op: Operation) -> str:
     # e.g. GET /api/v1/courses/:id/assignments -> get-courses-assignments
-    parts = [p for p in op.path.split("/") if p and not p.startswith((":", "{")) and p not in ("api", "v1", "v2", "rest", "v3", "services", "data")]
+    parts = [
+        p
+        for p in op.path.split("/")
+        if p
+        and not p.startswith((":", "{"))
+        and p not in ("api", "v1", "v2", "rest", "v3", "services", "data")
+    ]
     tail = "-".join(parts[-2:]) if parts else "root"
     return _slug(f"{op.method}-{tail}")
 
@@ -121,11 +127,15 @@ def parse_skill(markdown: str) -> DiscoverySeed:
         line = line.strip()
         m = _OP_RE.match(line)
         if m:
-            operations.append(Operation(m.group(1), m.group(2).strip(), m.group(3).strip()))
+            operations.append(
+                Operation(m.group(1), m.group(2).strip(), m.group(3).strip())
+            )
             continue
         named = _NAMED_OP_RE.match(line)
         if named:
-            operations.append(Operation("GET", named.group(1).strip(), named.group(2).strip()))
+            operations.append(
+                Operation("GET", named.group(1).strip(), named.group(2).strip())
+            )
 
     return DiscoverySeed(
         name=name,

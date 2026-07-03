@@ -103,7 +103,9 @@ class SchemaAnalyzer:
             f"  {t.schema_name}.{t.table_name}: {t.row_count:,} rows, {t.column_count} columns"
             for t in sorted(manifest.tables, key=lambda t: t.row_count, reverse=True)
         )
-        top_tables = sorted(manifest.tables, key=lambda t: t.row_count, reverse=True)[:analysis_limit]
+        top_tables = sorted(manifest.tables, key=lambda t: t.row_count, reverse=True)[
+            :analysis_limit
+        ]
         column_details = ""
         for table in top_tables:
             column_details += f"\n{table.schema_name}.{table.table_name}:\n"

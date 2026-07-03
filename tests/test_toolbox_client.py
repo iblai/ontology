@@ -35,9 +35,11 @@ def test_call_tool_unwraps_json_rows(monkeypatch):
 
 
 def test_call_tool_parses_sse(monkeypatch):
-    body = "event: message\ndata: " + _rpc(
-        result={"content": [{"type": "text", "text": json.dumps({"a": 2})}]}
-    ) + "\n"
+    body = (
+        "event: message\ndata: "
+        + _rpc(result={"content": [{"type": "text", "text": json.dumps({"a": 2})}]})
+        + "\n"
+    )
     monkeypatch.setattr(
         toolbox_client.httpx, "post", lambda *a, **k: _Resp(body, "text/event-stream")
     )

@@ -7,13 +7,17 @@ from typing import Optional
 
 import typer
 
-app = typer.Typer(no_args_is_help=True, help="ibl.ai platform integration (MCP server registration).")
+app = typer.Typer(
+    no_args_is_help=True, help="ibl.ai platform integration (MCP server registration)."
+)
 
 
 @app.command()
 def register(
     name: str = typer.Option("iblai-ontology", help="MCP server name in the platform."),
-    url: str = typer.Option(..., help="Public MCP endpoint, e.g. https://ontology.alasu.edu/mcp"),
+    url: str = typer.Option(
+        ..., help="Public MCP endpoint, e.g. https://ontology.alasu.edu/mcp"
+    ),
     description: str = typer.Option("", help="Server description."),
     auth_scope: str = typer.Option("user", help="user | agent | platform"),
 ) -> None:

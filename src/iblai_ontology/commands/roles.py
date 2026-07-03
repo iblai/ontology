@@ -18,10 +18,13 @@ def list_roles() -> None:
         title="Defined Roles",
         columns=["Role", "Display Name", "Toolsets", "Memory Paths", "Cache Tables"],
         rows=[
-            [name, r.get("display_name", ""),
-             ", ".join(r.get("mcp_toolsets", [])),
-             len(r.get("memory_paths", [])),
-             ", ".join(r.get("cache_tables", []))[:40]]
+            [
+                name,
+                r.get("display_name", ""),
+                ", ".join(r.get("mcp_toolsets", [])),
+                len(r.get("memory_paths", [])),
+                ", ".join(r.get("cache_tables", []))[:40],
+            ]
             for name, r in roles.items()
         ],
     )
@@ -38,7 +41,9 @@ def show(role: str = typer.Argument(..., help="Role name")) -> None:
     if role not in roles:
         typer.echo(f"Role '{role}' not found.", err=True)
         raise typer.Exit(code=1)
-    typer.echo(yaml.dump({role: roles[role]}, default_flow_style=False, sort_keys=False))
+    typer.echo(
+        yaml.dump({role: roles[role]}, default_flow_style=False, sort_keys=False)
+    )
 
 
 @app.command()

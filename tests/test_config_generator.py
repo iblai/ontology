@@ -53,7 +53,9 @@ def _analysis():
                 name="get-student-enrollment",
                 description="Get enrollment by EMPLID",
                 sql="SELECT * FROM PS_STDNT_CAR_TERM WHERE EMPLID = :1",
-                parameters=[{"name": "student_id", "type": "string", "description": "EMPLID"}],
+                parameters=[
+                    {"name": "student_id", "type": "string", "description": "EMPLID"}
+                ],
                 toolset="enrollment-tools",
             )
         ],
@@ -65,8 +67,13 @@ def _analysis():
 def test_generate_all_writes_artifacts(tmp_path):
     gen = ConfigGenerator("peoplesoft", _manifest(), _analysis())
     written = gen.generate_all(str(tmp_path / "out"))
-    for key in ("tools.yaml", "sync-schedules.yaml", "entity-groups.yaml",
-                "table-descriptions.md", "cache-schema.sql"):
+    for key in (
+        "tools.yaml",
+        "sync-schedules.yaml",
+        "entity-groups.yaml",
+        "table-descriptions.md",
+        "cache-schema.sql",
+    ):
         assert key in written
 
     # tools.yaml is multi-doc and contains the tool + its toolset
@@ -85,4 +92,6 @@ def test_generate_all_writes_artifacts(tmp_path):
     assert "Student career/term" in open(written["table-descriptions.md"]).read()
 
     # cache schema falls back to the provisioning generator projection
-    assert "CREATE TABLE IF NOT EXISTS cache." in open(written["cache-schema.sql"]).read()
+    assert (
+        "CREATE TABLE IF NOT EXISTS cache." in open(written["cache-schema.sql"]).read()
+    )

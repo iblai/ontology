@@ -89,8 +89,9 @@ def test_validator_requires_tenant_and_client():
 def resolver(tmp_path, monkeypatch):
     # Merge the baseline roles.yaml with the higher-ed sample roles so these
     # tests can exercise higher-ed semantics (Student EMPLID, financial-aid-tools).
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     cfg = tmp_path / "config"
     cfg.mkdir()

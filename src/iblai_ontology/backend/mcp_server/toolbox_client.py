@@ -24,7 +24,9 @@ def _parse_message(resp: httpx.Response) -> dict[str, Any]:
     body = resp.text
     if "text/event-stream" in resp.headers.get("content-type", ""):
         # SSE: take the JSON from the last non-empty ``data:`` line.
-        data_lines = [ln[5:].strip() for ln in body.splitlines() if ln.startswith("data:")]
+        data_lines = [
+            ln[5:].strip() for ln in body.splitlines() if ln.startswith("data:")
+        ]
         body = data_lines[-1] if data_lines else "{}"
     try:
         return json.loads(body)

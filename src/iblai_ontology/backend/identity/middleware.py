@@ -33,7 +33,11 @@ def _lookup_emplid(entra_oid: str) -> Optional[str]:
     try:
         from iblai_ontology.backend.identity.models import IdentityMap
 
-        return IdentityMap.objects.filter(entra_oid=entra_oid).values_list("emplid", flat=True).first()
+        return (
+            IdentityMap.objects.filter(entra_oid=entra_oid)
+            .values_list("emplid", flat=True)
+            .first()
+        )
     except Exception:
         return None
 
@@ -93,7 +97,9 @@ class OntologyIdentityMiddleware:
         # still boot (requests will simply be unauthenticated/401).
         self.validator = None
         if settings.ENTRA_TENANT_ID and settings.ENTRA_CLIENT_ID:
-            self.validator = EntraValidator(settings.ENTRA_TENANT_ID, settings.ENTRA_CLIENT_ID)
+            self.validator = EntraValidator(
+                settings.ENTRA_TENANT_ID, settings.ENTRA_CLIENT_ID
+            )
 
     def __call__(self, request):
         from django.http import JsonResponse

@@ -3,11 +3,13 @@
 # LDAP / Active Directory custom MCP server (HR / org chart). Read-only.
 # Credential isolation: this process only ever sees LDAP bind credentials.
 
-from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent
-from ldap3 import Server as LdapServer, Connection, ALL, SUBTREE
 import json
 import os
+
+from ldap3 import ALL, SUBTREE, Connection
+from ldap3 import Server as LdapServer
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 
 LDAP_URI = os.environ["LDAP_URI"]
 LDAP_BIND_DN = os.environ["LDAP_BIND_DN"]

@@ -3,11 +3,12 @@
 # Slate CRM custom MCP server (admissions / recruitment). Read-only (GET-only).
 # Credential isolation: this process only ever sees Slate credentials.
 
-from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent
-import httpx
 import json
 import os
+
+import httpx
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 
 SLATE_BASE_URL = os.environ["SLATE_BASE_URL"]
 SLATE_API_KEY = os.environ["SLATE_API_KEY"]
@@ -22,7 +23,7 @@ async def get_application_status(applicant_id: str) -> list[TextContent]:
         resp = await client.get(
             f"{SLATE_BASE_URL}/manage/query/applications",
             headers={"Authorization": f"Bearer {SLATE_API_KEY}"},
-            params={"applicant_id": applicant_id}
+            params={"applicant_id": applicant_id},
         )
         data = resp.json()
 
@@ -43,7 +44,7 @@ async def search_applicants(term: str) -> list[TextContent]:
         resp = await client.get(
             f"{SLATE_BASE_URL}/manage/query/people",
             headers={"Authorization": f"Bearer {SLATE_API_KEY}"},
-            params={"q": term, "per_page": 50}
+            params={"q": term, "per_page": 50},
         )
         people = resp.json().get("row", [])
 

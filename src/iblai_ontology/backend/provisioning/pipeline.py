@@ -32,7 +32,10 @@ class ProvisioningEngine:
     def provision(self, name: str):
         from django.utils import timezone
 
-        from iblai_ontology.backend.provisioning.models import ProvisioningRun, ProvisioningStep
+        from iblai_ontology.backend.provisioning.models import (
+            ProvisioningRun,
+            ProvisioningStep,
+        )
         from iblai_ontology.backend.services.models import Service
 
         service = Service.objects.get(name=name)
@@ -56,8 +59,11 @@ class ProvisioningEngine:
         try:
             for order, (step_type, fn) in enumerate(steps):
                 step = ProvisioningStep.objects.create(
-                    run=run, step_type=step_type, order=order,
-                    status=ProvisioningStep.Status.RUNNING, started_at=timezone.now(),
+                    run=run,
+                    step_type=step_type,
+                    order=order,
+                    status=ProvisioningStep.Status.RUNNING,
+                    started_at=timezone.now(),
                 )
                 output = fn(service, gen)
                 step.output = output or {}
@@ -97,14 +103,16 @@ class ProvisioningEngine:
     def _step_mcp_tools(self, service, gen: Path) -> dict:
         from iblai_ontology.backend.provisioning.tools_generator import ToolsGenerator
 
-        tools_yaml = (gen / "tools.yaml")
+        tools_yaml = gen / "tools.yaml"
         if not tools_yaml.exists():
             return {"skipped": "no tools.yaml"}
         path = ToolsGenerator().apply(tools_yaml.read_text())
         return {"tools_yaml": path}
 
     def _step_sync_schedules(self, service, gen: Path) -> dict:
-        from iblai_ontology.backend.provisioning.sync_generator import SyncScheduleGenerator
+        from iblai_ontology.backend.provisioning.sync_generator import (
+            SyncScheduleGenerator,
+        )
 
         sync_yaml = gen / "sync-schedules.yaml"
         if not sync_yaml.exists():
@@ -128,7 +136,10 @@ class ProvisioningEngine:
         report = ProvisioningValidator(service).validate()
         return {
             "ok": report.ok,
-            "tables": [{"table": r.table, "records": r.records, "ok": r.ok} for r in report.results],
+            "tables": [
+                {"table": r.table, "records": r.records, "ok": r.ok}
+                for r in report.results
+            ],
         }
 
     # -- teardown --------------------------------------------------------

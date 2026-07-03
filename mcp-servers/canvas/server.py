@@ -4,12 +4,13 @@
 # student-scoped tools that the sync engine and gateway can call over MCP.
 # Credential isolation: this process only ever sees Canvas credentials.
 
-from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent
-import httpx
 import json
 import os
 from datetime import datetime, timedelta
+
+import httpx
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 
 CANVAS_BASE_URL = os.environ["CANVAS_BASE_URL"]
 CANVAS_TOKEN = os.environ["CANVAS_API_TOKEN"]
@@ -76,22 +77,23 @@ async def get_student_courses(student: str) -> list[TextContent]:
 
         results = []
         for e in enrollments:
-            results.append({
-                "course_id": e["course_id"],
-                "course_name": e.get("course_name", ""),
-                "enrollment_state": e["enrollment_state"],
-                "current_grade": e.get("grades", {}).get("current_grade"),
-                "current_score": e.get("grades", {}).get("current_score"),
-                "last_activity_at": e.get("last_activity_at")
-            })
+            results.append(
+                {
+                    "course_id": e["course_id"],
+                    "course_name": e.get("course_name", ""),
+                    "enrollment_state": e["enrollment_state"],
+                    "current_grade": e.get("grades", {}).get("current_grade"),
+                    "current_score": e.get("grades", {}).get("current_score"),
+                    "last_activity_at": e.get("last_activity_at"),
+                }
+            )
 
         return [TextContent(type="text", text=json.dumps(results, indent=2))]
 
 
 @server.tool()
 async def get_student_submissions(
-    student: str,
-    days_back: int = 7
+    student: str, days_back: int = 7
 ) -> list[TextContent]:
     """Get a student's recent assignment submissions across all courses.
 
@@ -118,23 +120,29 @@ async def get_student_submissions(
                 submissions = await _get_all(
                     client,
                     f"{CANVAS_BASE_URL}/api/v1/courses/{course_id}/students/submissions",
-                    {"student_ids[]": user_id, "submitted_since": since, "per_page": 100},
+                    {
+                        "student_ids[]": user_id,
+                        "submitted_since": since,
+                        "per_page": 100,
+                    },
                 )
             except httpx.HTTPStatusError:
                 # Skip courses this user/token can't read submissions for
                 # (e.g. concluded or access-restricted) rather than failing all.
                 continue
             for s in submissions:
-                results.append({
-                    "assignment_id": s.get("assignment_id"),
-                    "course_id": course_id,
-                    "submitted_at": s.get("submitted_at"),
-                    "score": s.get("score"),
-                    "grade": s.get("grade"),
-                    "late": s.get("late", False),
-                    "missing": s.get("missing", False),
-                    "workflow_state": s.get("workflow_state"),
-                })
+                results.append(
+                    {
+                        "assignment_id": s.get("assignment_id"),
+                        "course_id": course_id,
+                        "submitted_at": s.get("submitted_at"),
+                        "score": s.get("score"),
+                        "grade": s.get("grade"),
+                        "late": s.get("late", False),
+                        "missing": s.get("missing", False),
+                        "workflow_state": s.get("workflow_state"),
+                    }
+                )
 
         return [TextContent(type="text", text=json.dumps(results, indent=2))]
 

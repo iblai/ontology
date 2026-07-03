@@ -23,7 +23,9 @@ _ENV_TOKEN_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
 def _expand_env(value: Any) -> Any:
     if isinstance(value, str):
-        return _ENV_TOKEN_RE.sub(lambda m: os.environ.get(m.group(1), m.group(0)), value)
+        return _ENV_TOKEN_RE.sub(
+            lambda m: os.environ.get(m.group(1), m.group(0)), value
+        )
     if isinstance(value, list):
         return [_expand_env(v) for v in value]
     if isinstance(value, dict):
@@ -65,7 +67,9 @@ class ConfigReader:
 
     def get_section(self, section: str) -> str:
         data = self.main().get(section, {})
-        return yaml.dump(_redact({section: data}), default_flow_style=False, sort_keys=False)
+        return yaml.dump(
+            _redact({section: data}), default_flow_style=False, sort_keys=False
+        )
 
     def show_all(self, *, redact: bool = True) -> str:
         merged = {
@@ -101,9 +105,7 @@ class ConfigReader:
 
     def get_toolsets(self) -> dict[str, dict[str, Any]]:
         return {
-            d["name"]: d
-            for d in self._load_tools_docs()
-            if d.get("kind") == "toolset"
+            d["name"]: d for d in self._load_tools_docs() if d.get("kind") == "toolset"
         }
 
     def get_sources(self) -> list[dict[str, Any]]:

@@ -29,7 +29,9 @@ class ValidationReport:
 class ProvisioningValidator:
     """Validates a freshly provisioned service with a bounded test sync."""
 
-    def __init__(self, service, *, sample_limit: int = 100, max_tables: int = 3) -> None:
+    def __init__(
+        self, service, *, sample_limit: int = 100, max_tables: int = 3
+    ) -> None:
         self.service = service
         self.sample_limit = sample_limit
         self.max_tables = max_tables
@@ -60,8 +62,12 @@ class ProvisioningValidator:
                 report.results.append(TableValidation(name, count, ok=True))
             except NotImplementedError:
                 report.results.append(
-                    TableValidation(name, 0, ok=True, error="sync engine pending (Component 2)")
+                    TableValidation(
+                        name, 0, ok=True, error="sync engine pending (Component 2)"
+                    )
                 )
             except Exception as exc:  # pragma: no cover - integration path
-                report.results.append(TableValidation(name, 0, ok=False, error=str(exc)[:200]))
+                report.results.append(
+                    TableValidation(name, 0, ok=False, error=str(exc)[:200])
+                )
         return report
