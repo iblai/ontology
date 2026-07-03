@@ -5,11 +5,11 @@ from __future__ import annotations
 from iblai_ontology.config.reader import ConfigReader
 from iblai_ontology.config.validator import ConfigValidator
 
+# Baseline toolsets shipped in config/tools.yaml (the higher-ed toolsets live in
+# tools.higher-ed.example.yaml and are not loaded by default).
 REQUIRED_TOOLSETS = {
-    "enrollment-tools",
-    "financial-aid-tools",
-    "student-self-service-tools",
     "admin-analytics-tools",
+    "client-db-tools",
 }
 
 

@@ -74,9 +74,9 @@ def _token(rsa_key, tenant, client):
 
 
 def test_resolve_request_and_emplid(tmp_path, monkeypatch):
-    import shutil
     from pathlib import Path
 
+    import yaml
     from cryptography.hazmat.primitives.asymmetric import rsa
 
     from iblai_ontology.backend.identity.entra import EntraValidator
@@ -84,7 +84,12 @@ def test_resolve_request_and_emplid(tmp_path, monkeypatch):
 
     cfg = tmp_path / "config"
     cfg.mkdir()
-    shutil.copy(Path("config/roles.yaml"), cfg / "roles.yaml")
+    # Merge baseline + higher-ed sample roles (this test uses the Student role).
+    merged: dict = {"roles": {}}
+    for name in ("config/roles.yaml", "config/roles.higher-ed.example.yaml"):
+        data = yaml.safe_load(Path(name).read_text()) or {}
+        merged["roles"].update(data.get("roles", {}))
+    (cfg / "roles.yaml").write_text(yaml.safe_dump(merged))
     monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

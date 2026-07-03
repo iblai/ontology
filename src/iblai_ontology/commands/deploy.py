@@ -15,7 +15,17 @@ def up(
     build: bool = typer.Option(False, help="Rebuild images."),
 ) -> None:
     """Start all services (docker compose up)."""
+    from iblai_ontology.backend.mcp_server.toolbox_config import write_toolbox_config
+    from iblai_ontology.config import config_dir
     from iblai_ontology.utils.docker import compose_up
+
+    # Regenerate the Toolbox-native config the mcp-toolbox container mounts.
+    src = config_dir() / "tools.yaml"
+    if src.exists():
+        result = write_toolbox_config(src, config_dir() / "generated" / "toolbox.yaml")
+        typer.echo(
+            f"Generated toolbox config: {result.sources} sources, {result.tools} tools."
+        )
 
     raise typer.Exit(code=compose_up(detach=detach, build=build))
 

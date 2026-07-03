@@ -159,7 +159,22 @@ admin.ontology.alasu.edu {
 
 ## Environment File
 
-`.env` (and per-service env files like `.env.mcp`, `.env.canvas`). Secrets are interpolated into configs at runtime; nothing sensitive is committed.
+Credentials are **split per MCP server** for isolation — each container loads only its own file via `env_file:`. Compose will not parse unless **every** referenced file exists, and each custom MCP server does `os.environ["X"]` at import, so a missing/empty file crash-loops that one container. Templates for all of them ship as `.env.*.example` (copy each to the real name; the real files are git-ignored):
+
+| File | Vars | Container |
+|---|---|---|
+| `.env` | `ONTOLOGY_DB_PASSWORD`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | compose `${...}` + gateway/admin |
+| `.env.mcp` | `PEOPLESOFT_DB_HOST/PORT/NAME`, `PEOPLESOFT_RO_USER/PASSWORD`, `ONTOLOGY_DB_USER`, `ONTOLOGY_DB_PASSWORD` | mcp-toolbox |
+| `.env.canvas` | `CANVAS_BASE_URL`, `CANVAS_API_TOKEN` | mcp-canvas |
+| `.env.slate` | `SLATE_BASE_URL`, `SLATE_API_KEY` | mcp-slate |
+| `.env.navigate` | `NAVIGATE_BASE_URL`, `NAVIGATE_API_KEY` | mcp-navigate |
+| `.env.ldap` | `LDAP_URI`, `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD`, `LDAP_BASE_DN` | mcp-ldap |
+
+`CANVAS_BASE_URL` is the instance root only — **no trailing slash, no `/api/v1`** (the server appends it). The Canvas token must be **admin-scoped** to look up other users; the tools accept a Canvas user id, a SIS id, or a `sis_login_id:` ref.
+
+> **Cloud sources note:** `ontology-internal` is `internal: true` (no internet egress). A cloud source (e.g. `*.instructure.com`) is unreachable from a container placed only on that network — reach it from an egress-capable network, or test the MCP server standalone.
+
+Representative `.env` values:
 
 ```bash
 # PeopleSoft Oracle (read-only credentials provided by the university)
@@ -189,6 +204,35 @@ ONTOLOGY_CREDENTIAL_KEY=<generated-during-setup>
 ```
 
 ---
+
+## MCP Toolbox config generation
+
+The `mcp-toolbox` container does **not** read `config/tools.yaml` directly — that
+file is the ontology's authoring DSL (`kind: source|tool|toolset` documents). The
+Toolbox needs its own native format (top-level `sources` / `tools` / `toolsets`
+maps). `ontology mcp build` translates the DSL into
+`config/generated/toolbox.yaml` (git-ignored), which the container mounts:
+
+```bash
+ontology mcp build          # writes config/generated/toolbox.yaml
+# ontology deploy up runs this automatically before starting the stack
+```
+
+Translation rules: `type` → `kind`; Oracle's `database` → `serviceName`; `${VAR}`
+tokens are left intact so the Toolbox expands them from `.env.mcp` (secrets never
+land in the generated file). Tools whose statement is a `${...}` raw-SQL
+passthrough (e.g. `query-ontology-cache`) can't be expressed as a Toolbox
+parameterized query — they're served **directly by the gateway** and excluded
+from the generated file. The gateway calls tools via the Toolbox `/mcp` JSON-RPC
+endpoint (the legacy `/api/tool/<name>` REST path is disabled in Toolbox ≥1.5).
+
+> **Eager connection — important.** The Toolbox connects to **every** source at
+> startup and **refuses to start if any source is unreachable**. So the active
+> `tools.yaml` must contain only sources you have actually configured and can
+> reach. For this reason the higher-ed PeopleSoft sample is kept **out** of the
+> default `tools.yaml` — it lives in `config/tools.higher-ed.example.yaml` (paired
+> with `config/roles.higher-ed.example.yaml`). Merge it in only when you have a
+> real PeopleSoft to point at; otherwise the `mcp-toolbox` container crash-loops.
 
 ## Operating the Stack
 

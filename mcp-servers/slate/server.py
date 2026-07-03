@@ -3,8 +3,8 @@
 # Slate CRM custom MCP server (admissions / recruitment). Read-only (GET-only).
 # Credential isolation: this process only ever sees Slate credentials.
 
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 import httpx
 import json
 import os
@@ -12,7 +12,7 @@ import os
 SLATE_BASE_URL = os.environ["SLATE_BASE_URL"]
 SLATE_API_KEY = os.environ["SLATE_API_KEY"]
 
-server = Server("slate-mcp")
+server = FastMCP("slate-mcp")
 
 
 @server.tool()

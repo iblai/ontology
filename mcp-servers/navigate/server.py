@@ -3,8 +3,8 @@
 # EAB Navigate custom MCP server (advising / student success). Read-only.
 # Credential isolation: this process only ever sees Navigate credentials.
 
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 import httpx
 import json
 import os
@@ -12,7 +12,7 @@ import os
 NAVIGATE_BASE_URL = os.environ["NAVIGATE_BASE_URL"]
 NAVIGATE_API_KEY = os.environ["NAVIGATE_API_KEY"]
 
-server = Server("navigate-mcp")
+server = FastMCP("navigate-mcp")
 
 
 @server.tool()

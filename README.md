@@ -233,6 +233,7 @@ Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
 | [docs/components/03-identity.md](docs/components/03-identity.md) · [docs/identity.md](docs/identity.md) | Entra ID flow, `roles.yaml`, Option A vs. B |
 | [docs/components/04-mcp-outbound.md](docs/components/04-mcp-outbound.md) · [docs/platform-integration.md](docs/platform-integration.md) | Outbound MCP server + ibl.ai platform integration |
 | [docs/components/05-service-discovery.md](docs/components/05-service-discovery.md) | Safety suite, introspection, BYOK LLM, adapters |
+| [docs/read-only-db-user.md](docs/read-only-db-user.md) | Provisioning a read-only Postgres role for a DB source |
 | [docs/components/06-provisioning.md](docs/components/06-provisioning.md) | The 6-step idempotent pipeline |
 | [docs/components/07-cli.md](docs/components/07-cli.md) | Full CLI reference |
 | [docs/deployment.md](docs/deployment.md) | Docker Compose stack, networks, Caddyfile, `.env`, rollout |

@@ -7,9 +7,11 @@ dist/
 .pytest_cache/
 .venv/
 venv/
+.python-version
 .env
 .env.*
 !.env.example
+!.env.*.example
 *.local.yaml
 .claude/
 

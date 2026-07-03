@@ -3,8 +3,8 @@
 # LDAP / Active Directory custom MCP server (HR / org chart). Read-only.
 # Credential isolation: this process only ever sees LDAP bind credentials.
 
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
 from ldap3 import Server as LdapServer, Connection, ALL, SUBTREE
 import json
 import os
@@ -14,7 +14,7 @@ LDAP_BIND_DN = os.environ["LDAP_BIND_DN"]
 LDAP_BIND_PASSWORD = os.environ["LDAP_BIND_PASSWORD"]
 LDAP_BASE_DN = os.environ["LDAP_BASE_DN"]
 
-server = Server("ldap-mcp")
+server = FastMCP("ldap-mcp")
 
 
 def _connect() -> Connection:

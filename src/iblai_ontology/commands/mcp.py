@@ -67,6 +67,33 @@ def validate() -> None:
 
 
 @app.command()
+def build(
+    out: Optional[str] = typer.Option(None, help="Output path (default config/generated/toolbox.yaml)."),
+) -> None:
+    """Generate the Google MCP Toolbox native config from tools.yaml.
+
+    Translates the ontology DSL into the sources/tools/toolsets map format the
+    Toolbox container loads (mounted at /app/toolbox.yaml). Run before bringing
+    up the stack; ``ontology deploy up`` does this automatically.
+    """
+    from iblai_ontology.backend.mcp_server.toolbox_config import write_toolbox_config
+    from iblai_ontology.config import config_dir
+
+    src = config_dir() / "tools.yaml"
+    dest = out or (config_dir() / "generated" / "toolbox.yaml")
+    result = write_toolbox_config(src, dest)
+    typer.echo(f"Wrote {dest}")
+    typer.echo(
+        f"  sources: {result.sources}  tools: {result.tools}  toolsets: {result.toolsets}"
+    )
+    if result.native_tools:
+        typer.echo(
+            "  gateway-native (excluded from Toolbox — served directly, ${...} statements): "
+            + ", ".join(result.native_tools)
+        )
+
+
+@app.command()
 def test(
     tool: str = typer.Argument(..., help="Tool name."),
     params: Optional[str] = typer.Option(None, help="JSON params."),
