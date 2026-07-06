@@ -1,10 +1,5 @@
 # Enrollment Portal
 
-Registration & Enrollment Portal for **American Faith Academy** and
-**Ministry.com Network Schools** — implements
-[`../PLAN.md`](../PLAN.md), requirements in
-`../Registration_and_Enrollment_Portal_Requirements.pdf`.
-
 Next.js 15 App Router · React 19 · Tailwind v4 · shadcn/ui (shell copied from
 the OS app for visual parity) · next-intl (English catalog, locale-ready).
 
@@ -28,7 +23,7 @@ everything reads `useSession()` so the swap is contained in `lib/session.tsx`.
 
 ## Demo walkthrough
 
-1. **Apply:** open `/apply/afa` (or `/apply/grace-network` — different
+1. **Apply:** open `/apply/<school-name>` (or `/apply/<school-name2>` — different
    branding, questions, fees, interview workflow, all from
    `lib/schools/*.ts`). Multi-step wizard: family → students (repeatable,
    grades 3–12 get student questions) → agreements/signatures → review, mock
@@ -61,7 +56,7 @@ pnpm check          # API workflow self-check (status machine, fee/interview
 | -------------------------------------- | -------------------------------------------------------------------------------- |
 | `lib/types.ts`, `lib/status.ts`        | Domain model + status machine (gates enforced in the API layer)                  |
 | `lib/api/`                             | Mock API — the only data access path; REST-shaped for the backend swap (PLAN §8) |
-| `lib/schools/`                         | Per-school application config (AFA + Grace) — drives the wizard                  |
+| `lib/schools/`                         | Per-school application config — drives the wizard                  |
 | `components/shell/`                    | OS-parity sidebar + header                                                       |
 | `components/apply/`                    | Config-driven application wizard                                                 |
 | `app/(portal)/{parent,student,admin}/` | Role portals                                                                     |
