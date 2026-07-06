@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* SDK base styles — injects CSS variables and utility classes onto :root for
+   all SDK components (NavBar, CreditBalance, NotificationDropdown, etc.). */
+@import "@iblai/iblai-js/web-containers/styles";
+
+/* Scan SDK compiled JS so Tailwind v4 generates classes used inside SDK
+   components (ApplicationFormRenderer, Profile, Account, etc.). */
+@source "../node_modules/@iblai/iblai-js/dist/web-containers/source/index.esm.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -77,7 +85,6 @@
   --sidebar-ring: oklch(0.492 0.194 259.3);
 }
 
-/* ponytail: dark mode deferred — palette kept so `.dark` works if enabled later. */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -107,6 +114,22 @@
   --sidebar-ring: oklch(0.713 0.148 233.2);
 }
 
+/* Navbar CSS custom properties (iblai-vibe-navbar §10). */
+:root {
+  --navbar-bg: #ffffff;
+  --navbar-text: #374151;
+  --navbar-hover-text: #1f2937;
+  --navbar-hover-bg: #f3f4f6;
+  --navbar-active-text: #0058cc;
+  --navbar-active-border: #0058cc;
+  --border-color: #d1d5db;
+  --primary-color: #0058cc;
+  --text-primary: #1f2937;
+  --text-secondary: #374151;
+  --accent-color: #eff6ff;
+  --hover-bg: #f3f4f6;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -118,15 +141,12 @@
 
 body {
   font-family:
-    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-    "Noto Color Emoji";
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
 }
 
-/* Prevent zoom on input focus for mobile devices */
 @supports (-webkit-overflow-scrolling: touch) {
-  input,
-  textarea,
-  select {
+  input, textarea, select {
     font-size: 16px !important;
   }
 }
