@@ -29,19 +29,27 @@ class ServiceType(str, Enum):
 def add(
     name: str = typer.Option(..., prompt="Service name"),
     from_catalog: Optional[str] = typer.Option(
-        None, "--from", help="Prefill from a catalog key (e.g. peoplesoft, snowflake, canvas)."
+        None,
+        "--from",
+        help="Prefill from a catalog key (e.g. peoplesoft, snowflake, canvas).",
     ),
     skill: Optional[str] = typer.Option(
         None, "--skill", help="Seed from a SKILL.md (vendored name, path, or URL)."
     ),
-    service_type: Optional[ServiceType] = typer.Option(None, help="Service type (database adapters)."),
+    service_type: Optional[ServiceType] = typer.Option(
+        None, help="Service type (database adapters)."
+    ),
     host: Optional[str] = typer.Option(None, help="Database host."),
     port: Optional[int] = typer.Option(None, help="Database port."),
     database: Optional[str] = typer.Option(None, help="Database/SID name."),
     user: Optional[str] = typer.Option(None, help="Database user."),
     password: Optional[str] = typer.Option(None, help="Database password."),
-    llm_discover: bool = typer.Option(True, help="Use LLM to analyze schema and generate config."),
-    skip_safety: bool = typer.Option(False, help="Skip read-only safety check (NOT recommended)."),
+    llm_discover: bool = typer.Option(
+        True, help="Use LLM to analyze schema and generate config."
+    ),
+    skip_safety: bool = typer.Option(
+        False, help="Skip read-only safety check (NOT recommended)."
+    ),
 ) -> None:
     """Add a new source system integration.
 
@@ -63,7 +71,9 @@ def add(
         except KeyError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1)
-        console.print(f"Seeding from catalog: [brand]{entry.display_name}[/brand] ({entry.type})")
+        console.print(
+            f"Seeding from catalog: [brand]{entry.display_name}[/brand] ({entry.type})"
+        )
         if entry.env:
             console.print(f"  required env: {', '.join(entry.env)}")
 
@@ -73,7 +83,9 @@ def add(
         ref = skill or entry.skill.removesuffix(".md")
         from iblai_ontology.commands.skill import import_skill
 
-        console.print(f"[highlight]API source[/highlight] — discovery seed from skill '{ref}':")
+        console.print(
+            f"[highlight]API source[/highlight] — discovery seed from skill '{ref}':"
+        )
         import_skill(ref)
         console.print()
         console.print(
@@ -83,7 +95,7 @@ def add(
         return
 
     # Database source — fill defaults from the catalog, prompt for the rest.
-    default_type = (entry.adapter if entry else None)
+    default_type = entry.adapter if entry else None
     if service_type is None:
         service_type = ServiceType(
             typer.prompt("Service type", default=default_type or "generic-postgres")
@@ -127,7 +139,14 @@ def list_services() -> None:
         title="Integrated Services",
         columns=["Name", "Type", "Host", "Status", "Last Sync", "Tables"],
         rows=[
-            [s.name, s.service_type, s.host, s.status, s.last_sync_at or "Never", s.tables_synced]
+            [
+                s.name,
+                s.service_type,
+                s.host,
+                s.status,
+                s.last_sync_at or "Never",
+                s.tables_synced,
+            ]
             for s in Service.objects.all()
         ],
     )
@@ -161,10 +180,15 @@ def schema(
     try:
         service = Service.objects.get(name=name)
     except Service.DoesNotExist:
-        typer.echo(f"Service '{name}' not found. Run `ontology service discover {name}` first.", err=True)
+        typer.echo(
+            f"Service '{name}' not found. Run `ontology service discover {name}` first.",
+            err=True,
+        )
         raise typer.Exit(code=1)
     manifest = service.schema_manifest or {}
-    tables = sorted(manifest.get("tables", []), key=lambda t: t.get("row_count", 0), reverse=True)
+    tables = sorted(
+        manifest.get("tables", []), key=lambda t: t.get("row_count", 0), reverse=True
+    )
     if not tables:
         typer.echo("No schema discovered yet. Run `ontology service discover` first.")
         raise typer.Exit(code=1)
@@ -179,8 +203,12 @@ def schema(
         title=f"Top {top} tables",
         columns=["Schema", "Table", "Rows", "Columns"],
         rows=[
-            [t.get("schema_name", ""), t.get("table_name", ""),
-             f"{t.get('row_count', 0):,}", len(t.get("columns", []))]
+            [
+                t.get("schema_name", ""),
+                t.get("table_name", ""),
+                f"{t.get('row_count', 0):,}",
+                len(t.get("columns", [])),
+            ]
             for t in tables[:top]
         ],
     )
@@ -200,10 +228,20 @@ def connection(name: str = typer.Argument(..., help="Service name")) -> None:
     except Service.DoesNotExist:
         typer.echo(f"Service '{name}' not found.", err=True)
         raise typer.Exit(code=1)
-    config = decrypt_connection_config(service.connection_config_encrypted) if service.connection_config_encrypted else {}
-    console.print(f"[brand]{service.display_name}[/brand]  [dim]({service.adapter})[/dim]")
+    config = (
+        decrypt_connection_config(service.connection_config_encrypted)
+        if service.connection_config_encrypted
+        else {}
+    )
+    console.print(
+        f"[brand]{service.display_name}[/brand]  [dim]({service.adapter})[/dim]"
+    )
     for key, value in config.items():
-        shown = "********" if key.lower() in ("password", "secret", "api_key", "token") else value
+        shown = (
+            "********"
+            if key.lower() in ("password", "secret", "api_key", "token")
+            else value
+        )
         console.print(f"  {key}: {shown}")
 
 

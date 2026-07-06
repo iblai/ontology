@@ -1,0 +1,72 @@
+# ============================================================
+# roles.higher-ed.example.yaml — OPTIONAL higher-ed sample roles
+#
+# Pairs with tools.higher-ed.example.yaml. Not loaded by default. To use, merge
+# these role definitions into config/roles.yaml (they reference the higher-ed
+# toolsets financial-aid-tools / enrollment-tools / student-self-service-tools).
+# ============================================================
+roles:
+  FinancialAidCounselor:
+    display_name: "Financial Aid Counselor"
+    memory_paths:
+      - /ontology/financial-aid/**
+      - /ontology/students/**
+      - /ontology/enrollment/**
+    mcp_toolsets:
+      - financial-aid-tools
+      - enrollment-tools
+    cache_tables:
+      - students
+      - financial_aid
+      - sap_status
+      - isir_data
+      - enrollment
+      - holds
+    agents:
+      - financial-aid-agent
+
+  AcademicAdvisor:
+    display_name: "Academic Advisor"
+    memory_paths:
+      - /ontology/students/**
+      - /ontology/courses/**
+      - /ontology/enrollment/**
+    mcp_toolsets:
+      - enrollment-tools
+    cache_tables:
+      - students
+      - enrollment
+      - term_summary
+      - courses
+      - course_sections
+      - canvas_activity
+      - advising
+    agents:
+      - advising-agent
+
+  Registrar:
+    display_name: "Registrar Staff"
+    memory_paths:
+      - /ontology/**
+    mcp_toolsets:
+      - enrollment-tools
+      - admin-analytics-tools
+    cache_tables:
+      - "*"
+    agents:
+      - registrar-agent
+      - analytics-agent
+
+  Student:
+    display_name: "Student"
+    memory_paths:
+      - /ontology/students/by-id/${USER_EMPLID}.md
+      - /ontology/courses/_index.md
+      - /ontology/courses/by-dept/**
+    mcp_toolsets:
+      - student-self-service-tools
+    cache_tables: []
+    concurrency_limits:
+      max_records_per_query: 1
+    agents:
+      - student-self-service-agent

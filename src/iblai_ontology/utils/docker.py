@@ -50,7 +50,9 @@ def compose_down(*, remove_volumes: bool = False) -> int:
     return _run(args)
 
 
-def compose_logs(*, service: Optional[str] = None, follow: bool = False, tail: int = 100) -> int:
+def compose_logs(
+    *, service: Optional[str] = None, follow: bool = False, tail: int = 100
+) -> int:
     args = ["logs", f"--tail={tail}"]
     if follow:
         args.append("-f")

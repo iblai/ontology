@@ -44,7 +44,12 @@ class PlatformConfig:
 class PlatformClient:
     """Thin REST client for the ibl.ai platform's MCP admin API."""
 
-    def __init__(self, config: Optional[PlatformConfig] = None, *, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        config: Optional[PlatformConfig] = None,
+        *,
+        client: httpx.Client | None = None,
+    ) -> None:
         self.config = config or PlatformConfig.from_env()
         self._client = client or httpx.Client(timeout=30)
 
@@ -63,7 +68,9 @@ class PlatformClient:
         return resp.json()
 
     def _patch(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        resp = self._client.patch(self._url(path), json=payload, headers=self._headers())
+        resp = self._client.patch(
+            self._url(path), json=payload, headers=self._headers()
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -108,7 +115,11 @@ class PlatformClient:
         authorization_scheme: str = "Bearer",
     ) -> dict[str, Any]:
         """Create an MCP Server Connection, embedding the role via extra_headers."""
-        payload: dict[str, Any] = {"server": server, "scope": scope, "auth_type": auth_type}
+        payload: dict[str, Any] = {
+            "server": server,
+            "scope": scope,
+            "auth_type": auth_type,
+        }
         if role:
             payload["extra_headers"] = {"X-Iblai-Role": role}
         if user:

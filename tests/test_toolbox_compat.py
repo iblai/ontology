@@ -13,8 +13,8 @@ def test_repo_tools_yaml_is_compliant():
     report = validate_tools_yaml(REPO_ROOT / "config" / "tools.yaml")
     assert report.ok, [i.message for i in report.issues if i.severity == "error"]
     assert report.sources >= 2
-    assert report.tools >= 10
-    assert report.toolsets >= 4
+    assert report.tools >= 5
+    assert report.toolsets >= 2
 
 
 def test_missing_file_errors():

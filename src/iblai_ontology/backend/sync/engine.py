@@ -17,8 +17,6 @@ import logging
 import os
 from dataclasses import dataclass
 
-import httpx
-
 logger = logging.getLogger("iblai_ontology.sync")
 
 
@@ -42,18 +40,24 @@ class SyncRunner:
 
     # -- source pulls ----------------------------------------------------
     def pull(self, tool: str, arguments: dict | None = None) -> list[dict]:
-        """Pull rows from a source by invoking an inbound MCP tool."""
-        resp = httpx.post(
-            f"{self.toolbox_url}/api/tool/{tool}", json=arguments or {}, timeout=120
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict) and "result" in data:
-            return data["result"]
-        return data if isinstance(data, list) else [data]
+        """Pull rows from a source by invoking an inbound MCP tool.
+
+        Uses the shared /mcp Toolbox client (Toolbox 1.5+ disables the legacy
+        /api/tool REST endpoints).
+        """
+        from iblai_ontology.backend.mcp_server.toolbox_client import call_tool
+
+        rows = call_tool(self.toolbox_url, tool, arguments, timeout=120)
+        return rows if isinstance(rows, list) else [rows]
 
     # -- schedule execution ---------------------------------------------
-    def run_service(self, service: str, *, schedule_name: str | None = None, force_full: bool = False):
+    def run_service(
+        self,
+        service: str,
+        *,
+        schedule_name: str | None = None,
+        force_full: bool = False,
+    ):
         from iblai_ontology.config.reader import ConfigReader
 
         schedules = [
@@ -99,7 +103,9 @@ class SyncRunner:
         except NotImplementedError:
             # Generic transform seam — surfaced, not a hard failure.
             run.status = SyncRun.Status.SUCCESS
-            run.error_message = "generic transform seam (per-service sync not configured)"
+            run.error_message = (
+                "generic transform seam (per-service sync not configured)"
+            )
         except Exception as exc:  # pragma: no cover - integration path
             run.status = SyncRun.Status.FAILED
             run.error_message = str(exc)[:1000]
@@ -125,7 +131,10 @@ class SyncRunner:
         """
         from django.db import connection
 
-        from iblai_ontology.backend.sync.writer import detect_primary_key, write_entities
+        from iblai_ontology.backend.sync.writer import (
+            detect_primary_key,
+            write_entities,
+        )
 
         if not rows:
             return {"created": 0, "updated": 0}
@@ -145,7 +154,11 @@ class SyncRunner:
                 entity_group=entity_group,
                 indexer=indexer,
             )
-        return {"created": result.created, "updated": result.updated, "files": len(result.files)}
+        return {
+            "created": result.created,
+            "updated": result.updated,
+            "files": len(result.files),
+        }
 
     @staticmethod
     def _entity_group(sched: dict, output: dict) -> str:

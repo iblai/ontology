@@ -4,6 +4,9 @@
 # Role *assignment* (who has which role) is managed in the ibl.ai platform and
 # arrives on each MCP request via the `X-Iblai-Role` header. This file only
 # defines what a given role is permitted to access (Component 3, Option A).
+#
+# The higher-ed sample roles (FinancialAidCounselor, AcademicAdvisor, Registrar,
+# Student) live in roles.higher-ed.example.yaml alongside tools.higher-ed.example.yaml.
 # ============================================================
 roles:
   default:
@@ -16,70 +19,18 @@ roles:
     agents:
       - general-info-agent
 
-  FinancialAidCounselor:
-    display_name: "Financial Aid Counselor"
-    memory_paths:
-      - /ontology/financial-aid/**
-      - /ontology/students/**
-      - /ontology/enrollment/**
-    mcp_toolsets:
-      - financial-aid-tools
-      - enrollment-tools
-    cache_tables:
-      - students
-      - financial_aid
-      - sap_status
-      - isir_data
-      - enrollment
-      - holds
-    agents:
-      - financial-aid-agent
-
-  AcademicAdvisor:
-    display_name: "Academic Advisor"
-    memory_paths:
-      - /ontology/students/**
-      - /ontology/courses/**
-      - /ontology/enrollment/**
-    mcp_toolsets:
-      - enrollment-tools
-    cache_tables:
-      - students
-      - enrollment
-      - term_summary
-      - courses
-      - course_sections
-      - canvas_activity
-      - advising
-    agents:
-      - advising-agent
-
-  Registrar:
-    display_name: "Registrar Staff"
+  DataAnalyst:
+    display_name: "Data Analyst"
     memory_paths:
       - /ontology/**
     mcp_toolsets:
-      - enrollment-tools
       - admin-analytics-tools
+      - client-postgres-tools
+      - client-mysql-tools
     cache_tables:
       - "*"
     agents:
-      - registrar-agent
       - analytics-agent
-
-  Student:
-    display_name: "Student"
-    memory_paths:
-      - /ontology/students/by-id/${USER_EMPLID}.md
-      - /ontology/courses/_index.md
-      - /ontology/courses/by-dept/**
-    mcp_toolsets:
-      - student-self-service-tools
-    cache_tables: []
-    concurrency_limits:
-      max_records_per_query: 1
-    agents:
-      - student-self-service-agent
 
   Executive:
     display_name: "University Executive"
@@ -101,6 +52,8 @@ roles:
       - /ontology/_audit/**
     mcp_toolsets:
       - admin-analytics-tools
+      - client-postgres-tools
+      - client-mysql-tools
     cache_tables:
       - sync_runs
       - audit_log

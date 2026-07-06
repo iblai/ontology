@@ -1,0 +1,309 @@
+# ============================================================
+# tools.higher-ed.example.yaml — OPTIONAL higher-ed sample
+# (PeopleSoft Oracle source + student/financial-aid tools + toolsets)
+#
+# Not loaded by default. To use: merge these documents into config/tools.yaml
+# (or point `ontology mcp build` at a combined file), configure PEOPLESOFT_*
+# in .env.mcp, and add the paired higher-ed roles from
+# roles.higher-ed.example.yaml. The enrollment-tools toolset also references the
+# cache tools search-students / enrollment-summary defined in tools.yaml.
+# ============================================================
+# ============================================================
+# SOURCE: PeopleSoft Oracle Database
+# ============================================================
+kind: source
+name: peoplesoft-oracle
+type: oracle
+host: ${PEOPLESOFT_DB_HOST}
+port: ${PEOPLESOFT_DB_PORT}
+database: ${PEOPLESOFT_DB_NAME}
+user: ${PEOPLESOFT_RO_USER}
+password: ${PEOPLESOFT_RO_PASSWORD}
+---
+# ============================================================
+# TOOL: Get student enrollment from PeopleSoft
+# ============================================================
+kind: tool
+name: get-student-enrollment
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Retrieve a student's current enrollment status, academic program,
+  and term details from PeopleSoft. Returns one row per career/term.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID (e.g., "001234567")
+statement: >
+  SELECT
+    s.EMPLID,
+    s.STRM,
+    s.ACAD_CAREER,
+    s.INSTITUTION,
+    s.ACAD_PROG,
+    s.ACAD_PLAN,
+    s.STDNT_CAR_NBR,
+    s.UNT_TAKEN_PRGRSS AS credits_attempted,
+    s.UNT_EARND_PRGRSS AS credits_earned,
+    s.CUR_GPA AS term_gpa,
+    s.CUM_GPA AS cumulative_gpa,
+    e.ENRL_STATUS_REASON
+  FROM PS_STDNT_CAR_TERM s
+  LEFT JOIN PS_STDNT_ENRL e
+    ON s.EMPLID = e.EMPLID AND s.STRM = e.STRM
+  WHERE s.EMPLID = :1
+  ORDER BY s.STRM DESC
+---
+# ============================================================
+# TOOL: Get student holds from PeopleSoft
+# ============================================================
+kind: tool
+name: get-student-holds
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Retrieve all active service indicator holds for a student.
+  Returns hold type, reason, department, and effective dates.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+statement: >
+  SELECT
+    si.EMPLID,
+    si.SRVC_IND_CD AS hold_code,
+    sit.DESCR AS hold_description,
+    si.SRC_ORG_NAME AS placed_by_dept,
+    si.EFFDT AS effective_date,
+    si.SRVC_IND_REASON AS reason,
+    si.POSITIVE_SRVC_IND AS is_positive
+  FROM PS_SRVC_IND_DATA si
+  JOIN PS_SRVC_IND_TBL sit
+    ON si.SRVC_IND_CD = sit.SRVC_IND_CD
+    AND si.INSTITUTION = sit.INSTITUTION
+  WHERE si.EMPLID = :1
+    AND si.SRVC_IND_DT <= SYSDATE
+    AND (si.SRVC_IND_END_DT IS NULL OR si.SRVC_IND_END_DT > SYSDATE)
+---
+# ============================================================
+# TOOL: Get financial aid package from PeopleSoft
+# ============================================================
+kind: tool
+name: get-aid-package
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Retrieve a student's financial aid awards for a given aid year.
+  Returns each award with fund, status, offered/accepted/disbursed amounts.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+  - name: aid_year
+    type: string
+    description: Aid year code (e.g., "2026")
+statement: >
+  SELECT
+    sa.EMPLID,
+    sa.AID_YEAR,
+    sa.ITEM_TYPE,
+    it.DESCR AS fund_name,
+    sa.OFFER_AMOUNT,
+    sa.ACCEPT_AMOUNT,
+    sa.OFFER_BALANCE AS remaining_balance,
+    sa.ITEM_ACTIVE_STATUS AS status,
+    fd.FUND_SOURCE,
+    fd.FED_STATE_INST AS fund_type
+  FROM PS_STDNT_AWARDS sa
+  JOIN PS_ITEM_TYPE_TBL it
+    ON sa.ITEM_TYPE = it.ITEM_TYPE AND sa.SETID = it.SETID
+  LEFT JOIN PS_ITEM_TYPE_FA fd
+    ON sa.ITEM_TYPE = fd.ITEM_TYPE AND sa.SETID = fd.SETID
+  WHERE sa.EMPLID = :1
+    AND sa.AID_YEAR = :2
+  ORDER BY fd.FUND_SOURCE, sa.OFFER_AMOUNT DESC
+---
+# ============================================================
+# TOOL: Get Pell eligibility from PeopleSoft
+# ============================================================
+kind: tool
+name: get-pell-eligibility
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Check a student's Pell Grant eligibility based on ISIR/SAR data.
+  Returns EFC, SAI, dependency status, and eligibility flags.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+  - name: aid_year
+    type: string
+    description: Aid year code
+statement: >
+  SELECT
+    i.EMPLID,
+    i.AID_YEAR,
+    i.TRANSACTION_NBR,
+    i.PRIMARY_EFC AS expected_family_contribution,
+    i.SAI AS student_aid_index,
+    i.DEPENDENCY_STATUS,
+    i.PELL_ELIG_FLAG,
+    i.ISIR_STATUS,
+    i.VERIFICATION_STATUS,
+    i.AGI AS adjusted_gross_income
+  FROM PS_ISIR_DATA i
+  WHERE i.EMPLID = :1
+    AND i.AID_YEAR = :2
+  ORDER BY i.TRANSACTION_NBR DESC
+  FETCH FIRST 1 ROWS ONLY
+---
+# ============================================================
+# TOOL: Get SAP status from PeopleSoft
+# ============================================================
+kind: tool
+name: get-sap-status
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Get Satisfactory Academic Progress status for a student.
+  Returns GPA check, pace check, max timeframe, and overall status.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+statement: >
+  SELECT
+    sap.EMPLID,
+    sap.AID_YEAR,
+    sap.SAP_REVIEW_STAT AS overall_status,
+    sap.SAP_GPA_CHECK AS gpa_status,
+    sap.SAP_PACE_CHECK AS pace_status,
+    sap.SAP_MAX_TIME_CHK AS max_timeframe_status,
+    sap.SAP_ACTION AS action_taken,
+    sap.SAP_REVIEW_DT AS review_date
+  FROM PS_SAP_STDNT_RSL sap
+  WHERE sap.EMPLID = :1
+  ORDER BY sap.SAP_REVIEW_DT DESC
+  FETCH FIRST 1 ROWS ONLY
+---
+# ============================================================
+# TOOL: Get academic standing from PeopleSoft
+# ============================================================
+kind: tool
+name: get-academic-standing
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Get a student's academic standing history.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+statement: >
+  SELECT
+    s.EMPLID,
+    s.STRM AS term,
+    s.ACAD_CAREER,
+    s.ACAD_STNDNG_ACTN AS standing_action,
+    ast.DESCR AS standing_description,
+    s.CUM_GPA,
+    s.CUR_GPA AS term_gpa
+  FROM PS_STDNT_CAR_TERM s
+  LEFT JOIN PS_ACAD_STNDG_TBL ast
+    ON s.ACAD_STNDNG_ACTN = ast.ACAD_STNDNG_ACTN
+  WHERE s.EMPLID = :1
+  ORDER BY s.STRM DESC
+---
+# ============================================================
+# TOOL: Get degree progress from PeopleSoft
+# ============================================================
+kind: tool
+name: get-degree-progress
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Get degree audit / progress toward completion for a student.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+statement: >
+  SELECT
+    dp.EMPLID,
+    dp.ACAD_PROG,
+    dp.ACAD_PLAN,
+    plan.DESCR AS plan_description,
+    dp.REQ_TERM AS catalog_term,
+    dp.RQRMNT_GROUP,
+    rg.DESCR AS requirement_group_name,
+    dp.SAA_RQMNT_STATUS AS status
+  FROM PS_AA_RQMNT_OVRD dp
+  JOIN PS_ACAD_PLAN_TBL plan
+    ON dp.ACAD_PLAN = plan.ACAD_PLAN
+  LEFT JOIN PS_RQRMNT_GRP_TBL rg
+    ON dp.RQRMNT_GROUP = rg.RQRMNT_GROUP
+  WHERE dp.EMPLID = :1
+---
+# ============================================================
+# TOOL: Get disbursement schedule from PeopleSoft
+# ============================================================
+kind: tool
+name: get-disbursement-schedule
+type: oracle-sql
+source: peoplesoft-oracle
+description: >
+  Get disbursement schedule for a student's financial aid.
+parameters:
+  - name: student_id
+    type: string
+    description: The student's EMPLID
+  - name: aid_year
+    type: string
+    description: Aid year code
+statement: >
+  SELECT
+    d.EMPLID,
+    d.AID_YEAR,
+    d.ITEM_TYPE,
+    it.DESCR AS fund_name,
+    d.DISBURSEMENT_ID,
+    d.DISBURSEMENT_DT AS scheduled_date,
+    d.OFFER_AMOUNT,
+    d.DISB_ACCEPTED_AMT AS accepted_amount,
+    d.DISB_STATUS
+  FROM PS_STDNT_DISB_DTL d
+  JOIN PS_ITEM_TYPE_TBL it
+    ON d.ITEM_TYPE = it.ITEM_TYPE AND d.SETID = it.SETID
+  WHERE d.EMPLID = :1
+    AND d.AID_YEAR = :2
+  ORDER BY d.DISBURSEMENT_DT
+---
+# ============================================================
+# TOOLSETS: Permission-scoped groups
+# ============================================================
+kind: toolset
+name: enrollment-tools
+tools:
+  - get-student-enrollment
+  - get-student-holds
+  - get-academic-standing
+  - get-degree-progress
+  - search-students
+  - enrollment-summary
+---
+kind: toolset
+name: financial-aid-tools
+tools:
+  - get-aid-package
+  - get-pell-eligibility
+  - get-sap-status
+  - get-disbursement-schedule
+---
+kind: toolset
+name: student-self-service-tools
+tools:
+  - get-student-enrollment
+  - get-student-holds
+  - get-aid-package
+  - get-sap-status

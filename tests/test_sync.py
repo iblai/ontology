@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
+import json
 
 from iblai_ontology.backend.sync import scheduler
 from iblai_ontology.backend.sync.engine import SyncRunner
@@ -46,26 +46,42 @@ def test_build_beat_schedule(tmp_path, monkeypatch):
 
 
 def test_runner_pull_invokes_toolbox(monkeypatch):
+    """pull() calls the Toolbox /mcp JSON-RPC endpoint and unwraps row content."""
     captured = {}
 
     class FakeResp:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        text = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "content": [{"type": "text", "text": json.dumps({"EMPLID": "001"})}]
+                },
+            }
+        )
+
         def raise_for_status(self):
             pass
 
-        def json(self):
-            return [{"EMPLID": "001"}]
-
-    def fake_post(url, json=None, timeout=None):
+    def fake_post(url, json=None, headers=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
         return FakeResp()
 
-    monkeypatch.setattr("iblai_ontology.backend.sync.engine.httpx.post", fake_post)
+    monkeypatch.setattr(
+        "iblai_ontology.backend.mcp_server.toolbox_client.httpx.post", fake_post
+    )
     runner = SyncRunner(toolbox_url="http://toolbox:5000")
     rows = runner.pull("get-student-enrollment", {"student_id": "001"})
     assert rows == [{"EMPLID": "001"}]
-    assert captured["url"] == "http://toolbox:5000/api/tool/get-student-enrollment"
-    assert captured["json"] == {"student_id": "001"}
+    assert captured["url"] == "http://toolbox:5000/mcp"
+    assert captured["json"]["method"] == "tools/call"
+    assert captured["json"]["params"] == {
+        "name": "get-student-enrollment",
+        "arguments": {"student_id": "001"},
+    }
 
 
 def test_detect_primary_key():

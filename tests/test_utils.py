@@ -68,7 +68,9 @@ def test_compose_helpers_invoke_subprocess(monkeypatch, tmp_path):
     monkeypatch.setattr(docker.subprocess, "call", fake_call)
 
     assert docker.compose_up(detach=True, build=True) == 0
-    assert "up" in calls["args"] and "-d" in calls["args"] and "--build" in calls["args"]
+    assert (
+        "up" in calls["args"] and "-d" in calls["args"] and "--build" in calls["args"]
+    )
     assert docker.compose_down(remove_volumes=True) == 0
     assert docker.compose_logs(service="db", follow=True, tail=10) == 0
     assert docker.compose_restart(service="db") == 0
@@ -107,12 +109,14 @@ def test_ui_helpers(capsys):
 def test_deploy_commands(monkeypatch):
     from typer.testing import CliRunner
 
-    from iblai_ontology.cli import app
     import iblai_ontology.utils.docker as dk
+    from iblai_ontology.cli import app
 
     monkeypatch.setattr(dk, "compose_up", lambda detach=True, build=False: 0)
     monkeypatch.setattr(dk, "compose_down", lambda remove_volumes=False: 0)
-    monkeypatch.setattr(dk, "compose_logs", lambda service=None, follow=False, tail=100: 0)
+    monkeypatch.setattr(
+        dk, "compose_logs", lambda service=None, follow=False, tail=100: 0
+    )
     monkeypatch.setattr(dk, "compose_restart", lambda service=None: 0)
     monkeypatch.setattr(dk, "compose_ps", lambda: 0)
     r = CliRunner()

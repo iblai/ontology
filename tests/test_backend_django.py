@@ -46,7 +46,14 @@ def _make_service(name="peoplesoft-main"):
             "db_type": "oracle",
             "total_tables": 1,
             "total_rows": 100,
-            "tables": [{"schema_name": "SYSADM", "table_name": "PS_X", "row_count": 100, "columns": [{"name": "EMPLID"}]}],
+            "tables": [
+                {
+                    "schema_name": "SYSADM",
+                    "table_name": "PS_X",
+                    "row_count": 100,
+                    "columns": [{"name": "EMPLID"}],
+                }
+            ],
         },
     )
 
@@ -71,8 +78,11 @@ def test_sync_status_history(backend):
     from iblai_ontology.backend.sync.models import SyncRun
 
     SyncRun.objects.create(
-        schedule_name="students-full", source_system="peoplesoft",
-        started_at=timezone.now(), status="success", records_processed=42,
+        schedule_name="students-full",
+        source_system="peoplesoft",
+        started_at=timezone.now(),
+        status="success",
+        records_processed=42,
     )
     assert runner.invoke(app_(), ["sync", "status"]).exit_code == 0
     assert runner.invoke(app_(), ["sync", "history"]).exit_code == 0
@@ -88,10 +98,16 @@ def test_sync_engine_run_schedule(backend, monkeypatch):
     from iblai_ontology.backend.sync.models import SyncRun
 
     runner_obj = SyncRunner()
-    monkeypatch.setattr(runner_obj, "pull", lambda tool, args=None: [{"id": "1", "name": "A"}])
+    monkeypatch.setattr(
+        runner_obj, "pull", lambda tool, args=None: [{"id": "1", "name": "A"}]
+    )
     # cache table 'demo' doesn't exist -> _write upsert fails -> run recorded failed
-    sched = {"name": "demo-sync", "source": "peoplesoft", "tool": "get-demo",
-             "output": {"text_memories": "/ontology/demo/", "structured_cache": "demo"}}
+    sched = {
+        "name": "demo-sync",
+        "source": "peoplesoft",
+        "tool": "get-demo",
+        "output": {"text_memories": "/ontology/demo/", "structured_cache": "demo"},
+    }
     result = runner_obj._run_schedule(sched, force_full=False)
     assert result.schedule_name == "demo-sync"
     assert SyncRun.objects.filter(schedule_name="demo-sync").exists()
@@ -147,7 +163,9 @@ def test_data_search_monkeypatched(backend, monkeypatch):
 
     class FakeVS:
         def query(self, term, domain=None, limit=10):
-            return [SearchResult(path="/ontology/students/1.md", score=0.9, snippet="hi")]
+            return [
+                SearchResult(path="/ontology/students/1.md", score=0.9, snippet="hi")
+            ]
 
     monkeypatch.setattr("iblai_ontology.backend.search.vector.VectorSearch", FakeVS)
     r = runner.invoke(app_(), ["data", "search", "struggling"])
@@ -171,10 +189,37 @@ def test_platform_commands(backend, monkeypatch):
         def attach_to_agent(self, **kw):
             return {"ok": True}
 
-    monkeypatch.setattr("iblai_ontology.backend.platform.client.PlatformClient", FakeClient)
-    assert runner.invoke(app_(), ["platform", "register", "--url", "https://o/mcp"]).exit_code == 0
-    assert runner.invoke(app_(), ["platform", "connect", "--server", "14", "--scope", "user", "--role", "Student"]).exit_code == 0
-    assert runner.invoke(app_(), ["platform", "attach", "agent-uuid", "--server", "14"]).exit_code == 0
+    monkeypatch.setattr(
+        "iblai_ontology.backend.platform.client.PlatformClient", FakeClient
+    )
+    assert (
+        runner.invoke(
+            app_(), ["platform", "register", "--url", "https://o/mcp"]
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            app_(),
+            [
+                "platform",
+                "connect",
+                "--server",
+                "14",
+                "--scope",
+                "user",
+                "--role",
+                "Student",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            app_(), ["platform", "attach", "agent-uuid", "--server", "14"]
+        ).exit_code
+        == 0
+    )
 
 
 def test_services_health_monkeypatched(backend, monkeypatch):
@@ -203,7 +248,9 @@ def test_services_health_monkeypatched(backend, monkeypatch):
                 tests=[SafetyTestResult("INSERT", "x", TestResult.PASSED)],
             )
 
-    monkeypatch.setattr("iblai_ontology.backend.discovery.safety.SafetyVerifier", FakeVerifier)
+    monkeypatch.setattr(
+        "iblai_ontology.backend.discovery.safety.SafetyVerifier", FakeVerifier
+    )
     conn_result = health_mod.check_connectivity("svc-h")
     assert conn_result.connected and conn_result.read_only
     report = health_mod.full_safety_report("svc-h")
@@ -241,23 +288,40 @@ def test_service_mutating_commands(backend, monkeypatch):
     import iblai_ontology.backend.sync.engine as sync_mod
 
     class FakeEngine:
-        def run(self, **kw): pass
-        def rediscover(self, name, use_llm=True): pass
+        def run(self, **kw):
+            pass
+
+        def rediscover(self, name, use_llm=True):
+            pass
 
     class FakeProv:
-        def provision(self, name): pass
-        def teardown(self, name): pass
+        def provision(self, name):
+            pass
+
+        def teardown(self, name):
+            pass
 
     class FakeSync:
-        def run_service(self, *a, **k): return []
+        def run_service(self, *a, **k):
+            return []
 
-    from iblai_ontology.backend.services.health import ConnectivityResult, SafetyCheck, SafetyReport
+    from iblai_ontology.backend.services.health import (
+        ConnectivityResult,
+        SafetyCheck,
+        SafetyReport,
+    )
 
     monkeypatch.setattr(engine_mod, "DiscoveryEngine", FakeEngine)
     monkeypatch.setattr(pipe_mod, "ProvisioningEngine", FakeProv)
     monkeypatch.setattr(sync_mod, "SyncRunner", FakeSync)
-    monkeypatch.setattr(health_mod, "check_connectivity", lambda n: ConnectivityResult(True, True, 5))
-    monkeypatch.setattr(health_mod, "full_safety_report", lambda n: SafetyReport(checks=[SafetyCheck("INSERT blocked", True)]))
+    monkeypatch.setattr(
+        health_mod, "check_connectivity", lambda n: ConnectivityResult(True, True, 5)
+    )
+    monkeypatch.setattr(
+        health_mod,
+        "full_safety_report",
+        lambda n: SafetyReport(checks=[SafetyCheck("INSERT blocked", True)]),
+    )
 
     assert runner.invoke(app_(), ["service", "status", "svc-m"]).exit_code == 0
     assert runner.invoke(app_(), ["service", "test", "svc-m"]).exit_code == 0
@@ -268,15 +332,19 @@ def test_service_mutating_commands(backend, monkeypatch):
 
 
 def test_sync_run_and_mcp_test(backend, monkeypatch):
-    import iblai_ontology.backend.sync.engine as sync_mod
     import iblai_ontology.backend.mcp_server.tester as tester_mod
+    import iblai_ontology.backend.sync.engine as sync_mod
 
     class FakeSync:
-        def run_service(self, *a, **k): return []
-        def run_all_due(self, *a, **k): return []
+        def run_service(self, *a, **k):
+            return []
+
+        def run_all_due(self, *a, **k):
+            return []
 
     class FakeTester:
-        def call(self, tool, params): return {"tool": tool, "ok": True}
+        def call(self, tool, params):
+            return {"tool": tool, "ok": True}
 
     monkeypatch.setattr(sync_mod, "SyncRunner", FakeSync)
     monkeypatch.setattr(tester_mod, "ToolTester", FakeTester)
@@ -297,9 +365,15 @@ def test_mcp_view_success(backend):
     from iblai_ontology.backend.mcp_server import server as server_mod
 
     class Resolved:
-        permissions = Permissions(role="Executive", display_name="x", mcp_toolsets=["*"])
+        permissions = Permissions(
+            role="Executive", display_name="x", mcp_toolsets=["*"]
+        )
 
-    req = RequestFactory().post("/mcp", data='{"jsonrpc":"2.0","method":"tools/list","id":1}', content_type="application/json")
+    req = RequestFactory().post(
+        "/mcp",
+        data='{"jsonrpc":"2.0","method":"tools/list","id":1}',
+        content_type="application/json",
+    )
     req.ontology = Resolved()
     resp = server_mod.mcp_view(req)
     assert resp.status_code == 200

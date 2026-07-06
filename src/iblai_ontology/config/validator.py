@@ -53,7 +53,11 @@ class ConfigValidator:
         # ontology.yaml
         main = self.reader.main()
         result.items.append(
-            ValidationItem("ontology.yaml", bool(main) or True, "loaded" if main else "empty/default")
+            ValidationItem(
+                "ontology.yaml",
+                bool(main) or True,
+                "loaded" if main else "empty/default",
+            )
         )
 
         # tools.yaml

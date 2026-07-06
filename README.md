@@ -78,6 +78,19 @@ pip install -e ".[vector]"   # ChromaDB vector index
 
 Names: distribution **`iblai-ontology`** · import package **`iblai_ontology`** · command **`ontology`**.
 
+### Local checks
+
+`./dev.sh` mirrors the CI gates so you can confirm everything passes before committing:
+
+```bash
+./dev.sh setup            # install into the active venv (dev + django extras)
+./dev.sh test -k canvas   # pytest (args passed through)
+./dev.sh fmt              # auto-fix ruff format + import sort
+./dev.sh check            # ruff format/lint/import-sort + full pytest (== CI)
+```
+
+CI runs the same on every PR to `main`: `.github/workflows/ruff-format.yml` (ruff) and `.github/workflows/tests.yml` (pytest).
+
 ## End to end
 
 ### 1 · Discover a service — two ways
@@ -233,6 +246,7 @@ Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
 | [docs/components/03-identity.md](docs/components/03-identity.md) · [docs/identity.md](docs/identity.md) | Entra ID flow, `roles.yaml`, Option A vs. B |
 | [docs/components/04-mcp-outbound.md](docs/components/04-mcp-outbound.md) · [docs/platform-integration.md](docs/platform-integration.md) | Outbound MCP server + ibl.ai platform integration |
 | [docs/components/05-service-discovery.md](docs/components/05-service-discovery.md) | Safety suite, introspection, BYOK LLM, adapters |
+| [docs/read-only-db-user.md](docs/read-only-db-user.md) | Provisioning a read-only Postgres role for a DB source |
 | [docs/components/06-provisioning.md](docs/components/06-provisioning.md) | The 6-step idempotent pipeline |
 | [docs/components/07-cli.md](docs/components/07-cli.md) | Full CLI reference |
 | [docs/deployment.md](docs/deployment.md) | Docker Compose stack, networks, Caddyfile, `.env`, rollout |

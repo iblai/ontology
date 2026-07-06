@@ -34,7 +34,12 @@ def tools() -> None:
         title="MCP Tools",
         columns=["Name", "Type", "Source", "Description"],
         rows=[
-            [t["name"], t.get("type", ""), t.get("source", ""), t.get("description", "")[:60]]
+            [
+                t["name"],
+                t.get("type", ""),
+                t.get("source", ""),
+                t.get("description", "")[:60],
+            ]
             for t in ConfigReader().get_tools()
         ],
     )
@@ -56,7 +61,9 @@ def validate() -> None:
     from iblai_ontology.config import config_dir
 
     report = validate_tools_yaml(config_dir() / "tools.yaml")
-    typer.echo(f"sources: {report.sources}  tools: {report.tools}  toolsets: {report.toolsets}")
+    typer.echo(
+        f"sources: {report.sources}  tools: {report.tools}  toolsets: {report.toolsets}"
+    )
     for issue in report.issues:
         marker = "ERR" if issue.severity == "error" else "WARN"
         typer.echo(f"  [{marker}] {issue.message}")
@@ -64,6 +71,35 @@ def validate() -> None:
         typer.echo("tools.yaml is MCP Toolbox compliant.")
     else:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def build(
+    out: Optional[str] = typer.Option(
+        None, help="Output path (default config/generated/toolbox.yaml)."
+    ),
+) -> None:
+    """Generate the Google MCP Toolbox native config from tools.yaml.
+
+    Translates the ontology DSL into the sources/tools/toolsets map format the
+    Toolbox container loads (mounted at /app/toolbox.yaml). Run before bringing
+    up the stack; ``ontology deploy up`` does this automatically.
+    """
+    from iblai_ontology.backend.mcp_server.toolbox_config import write_toolbox_config
+    from iblai_ontology.config import config_dir
+
+    src = config_dir() / "tools.yaml"
+    dest = out or (config_dir() / "generated" / "toolbox.yaml")
+    result = write_toolbox_config(src, dest)
+    typer.echo(f"Wrote {dest}")
+    typer.echo(
+        f"  sources: {result.sources}  tools: {result.tools}  toolsets: {result.toolsets}"
+    )
+    if result.native_tools:
+        typer.echo(
+            "  gateway-native (excluded from Toolbox — served directly, ${...} statements): "
+            + ", ".join(result.native_tools)
+        )
 
 
 @app.command()

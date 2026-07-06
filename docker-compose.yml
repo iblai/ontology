@@ -17,12 +17,19 @@ services:
   # …) via the kind:source/tool/toolset definitions in config/tools.yaml.
   mcp-toolbox:
     image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.5.0
-    command: ["toolbox", "--tools-file", "/app/tools.yaml", "--address", "0.0.0.0", "--port", "5000"]
+    # /app/toolbox.yaml is generated from config/tools.yaml by `ontology mcp build`
+    # (run automatically by `ontology deploy up`). It is the Toolbox-native
+    # sources/tools/toolsets format, not the ontology DSL.
+    command: ["--config", "/app/toolbox.yaml", "--address", "0.0.0.0", "--port", "5000"]
     volumes:
-      - ./config/tools.yaml:/app/tools.yaml
+      - ./config/generated/toolbox.yaml:/app/toolbox.yaml
     env_file: .env.mcp
     networks:
       - ontology-internal
+      # To reach source databases, add mcp-toolbox to the right network in a
+      # docker-compose.override.yml (see docker-compose.override.example.yml):
+      #   * a LOCAL source container's docker network (connect by hostname), or
+      #   * an egress-capable network for a REMOTE source (connect by host/IP).
     restart: unless-stopped
 
   mcp-canvas:

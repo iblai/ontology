@@ -25,9 +25,13 @@ class SearchResult:
 class VectorSearch:
     """Query and (re)build the ChromaDB vector index over text memories."""
 
-    def __init__(self, collection: str = "ontology", files_root: str | None = None) -> None:
+    def __init__(
+        self, collection: str = "ontology", files_root: str | None = None
+    ) -> None:
         self.collection_name = collection
-        self.files_root = files_root or os.environ.get("ONTOLOGY_FILES_ROOT", "/ontology")
+        self.files_root = files_root or os.environ.get(
+            "ONTOLOGY_FILES_ROOT", "/ontology"
+        )
         self.chroma_url = os.environ.get("CHROMA_URL", "http://vector-store:8000")
 
     def _collection(self):
@@ -41,14 +45,20 @@ class VectorSearch:
         from urllib.parse import urlparse
 
         parsed = urlparse(self.chroma_url)
-        client = chromadb.HttpClient(host=parsed.hostname or "localhost", port=parsed.port or 8000)
+        client = chromadb.HttpClient(
+            host=parsed.hostname or "localhost", port=parsed.port or 8000
+        )
         return client.get_or_create_collection(self.collection_name)
 
     def index_file(self, path: str, text: str) -> None:
         """Add or update a single text-memory file in the index."""
-        self._collection().upsert(ids=[path], documents=[text], metadatas=[{"path": path}])
+        self._collection().upsert(
+            ids=[path], documents=[text], metadatas=[{"path": path}]
+        )
 
-    def query(self, term: str, *, domain: Optional[str] = None, limit: int = 10) -> list[SearchResult]:
+    def query(
+        self, term: str, *, domain: Optional[str] = None, limit: int = 10
+    ) -> list[SearchResult]:
         """Semantic search; optionally restrict to a domain (students, courses…)."""
         where = {"path": {"$contains": f"/{domain}/"}} if domain else None
         res = self._collection().query(query_texts=[term], n_results=limit, where=where)

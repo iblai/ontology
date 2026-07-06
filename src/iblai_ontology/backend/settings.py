@@ -64,7 +64,9 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.environ.get("ONTOLOGY_SQLITE_PATH", str(BASE_DIR / "ontology.sqlite3")),
+            "NAME": os.environ.get(
+                "ONTOLOGY_SQLITE_PATH", str(BASE_DIR / "ontology.sqlite3")
+            ),
         }
     }
 
@@ -79,7 +81,9 @@ else:
 _llm = ONTOLOGY_CONFIG.get("llm", {}) or {}
 LLM_PROVIDER = _llm.get("provider")
 LLM_API_KEY = _llm.get("api_key")
-LLM_MODEL = _llm.get("model") or (LLM_DEFAULT_MODELS.get(LLM_PROVIDER) if LLM_PROVIDER else None)
+LLM_MODEL = _llm.get("model") or (
+    LLM_DEFAULT_MODELS.get(LLM_PROVIDER) if LLM_PROVIDER else None
+)
 LLM_MAX_TOKENS = _llm.get("max_tokens", 4096)
 LLM_TEMPERATURE = _llm.get("temperature", 0.2)
 

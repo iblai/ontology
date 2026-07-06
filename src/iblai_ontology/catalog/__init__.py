@@ -78,7 +78,9 @@ def get_entry(key: str) -> CatalogEntry:
     """Return one catalog entry or raise KeyError."""
     entries = _load()
     if key not in entries:
-        raise KeyError(f"unknown catalog entry: {key}. Known: {', '.join(sorted(entries))}")
+        raise KeyError(
+            f"unknown catalog entry: {key}. Known: {', '.join(sorted(entries))}"
+        )
     return entries[key]
 
 

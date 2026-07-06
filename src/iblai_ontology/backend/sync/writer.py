@@ -31,13 +31,17 @@ def _normalise(row: dict[str, Any]) -> dict[str, Any]:
     return {k.lower(): v for k, v in row.items()}
 
 
-def upsert_rows(cursor, table: str, rows: list[dict], primary_key: str) -> tuple[int, int]:
+def upsert_rows(
+    cursor, table: str, rows: list[dict], primary_key: str
+) -> tuple[int, int]:
     """Insert/update rows by primary key. Returns (created, updated)."""
     created = updated = 0
     for raw in rows:
         row = _normalise(raw)
         if primary_key not in row:
-            raise KeyError(f"primary key '{primary_key}' not in row columns {list(row)}")
+            raise KeyError(
+                f"primary key '{primary_key}' not in row columns {list(row)}"
+            )
         cols = list(row.keys())
         cursor.execute(
             f"SELECT 1 FROM {table} WHERE {primary_key} = %s", [row[primary_key]]
@@ -85,7 +89,14 @@ def write_memories(
             text = gen.render(entity_group, context)
         except Exception:
             # Unknown template / missing field -> fall back to the generic one.
-            text = gen.render("generic", {"id": pk_value, "last_synced_at": context.get("last_synced_at", ""), "fields": context["fields"]})
+            text = gen.render(
+                "generic",
+                {
+                    "id": pk_value,
+                    "last_synced_at": context.get("last_synced_at", ""),
+                    "fields": context["fields"],
+                },
+            )
         path = out_dir / f"{pk_value}.md"
         path.write_text(text)
         written.append(str(path))
@@ -111,7 +122,9 @@ def write_entities(
     rows = list(rows)
     result = WriteResult(processed=len(rows))
     if cache_table:
-        result.created, result.updated = upsert_rows(cursor, cache_table, rows, primary_key)
+        result.created, result.updated = upsert_rows(
+            cursor, cache_table, rows, primary_key
+        )
     root = files_root or os.environ.get("ONTOLOGY_FILES_ROOT", "/ontology")
     result.files = write_memories(
         rows,

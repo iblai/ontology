@@ -6,7 +6,9 @@ import typer
 
 from iblai_ontology.ui import console
 
-app = typer.Typer(no_args_is_help=True, help="Inspect SKILL.md files and seed discovery from them.")
+app = typer.Typer(
+    no_args_is_help=True, help="Inspect SKILL.md files and seed discovery from them."
+)
 
 
 @app.command(name="list")
@@ -30,7 +32,9 @@ def list_skills() -> None:
 
 
 @app.command("import")
-def import_skill(ref: str = typer.Argument(..., help="Vendored name, local path, or URL.")) -> None:
+def import_skill(
+    ref: str = typer.Argument(..., help="Vendored name, local path, or URL."),
+) -> None:
     """Parse a SKILL.md and print the discovery seed (connection + tools)."""
     from iblai_ontology.catalog.skill_parser import load_skill
 
@@ -42,11 +46,15 @@ def import_skill(ref: str = typer.Argument(..., help="Vendored name, local path,
         marker = " (primary)" if var == seed.primary_env else ""
         console.print(f"  - {var}{marker}")
     console.print()
-    console.print(f"[highlight]Suggested read-only tools[/highlight] ({len(seed.read_operations)}):")
+    console.print(
+        f"[highlight]Suggested read-only tools[/highlight] ({len(seed.read_operations)}):"
+    )
     for tool in seed.suggested_tools(read_only=True):
         console.print(f"  - {tool['name']}: {tool['method']} {tool['path']}")
         console.print(f"      {tool['description']}")
     write_ops = [o for o in seed.operations if not o.read_only]
     if write_ops:
         console.print()
-        console.print(f"[dim]({len(write_ops)} write operations omitted — read-only posture)[/dim]")
+        console.print(
+            f"[dim]({len(write_ops)} write operations omitted — read-only posture)[/dim]"
+        )

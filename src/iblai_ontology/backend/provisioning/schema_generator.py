@@ -51,7 +51,9 @@ TYPE_MAPPING = {
 class CacheSchemaGenerator:
     """Generates PostgreSQL CREATE TABLE statements for the local cache."""
 
-    def __init__(self, manifest: SchemaManifest, entity_groups: Optional[dict] = None) -> None:
+    def __init__(
+        self, manifest: SchemaManifest, entity_groups: Optional[dict] = None
+    ) -> None:
         self.manifest = manifest
         self.entity_groups = entity_groups or {}
 
@@ -136,9 +138,11 @@ class CacheSchemaGenerator:
         name = table_name.lower()
         for prefix in ("ps_", "spriden_", "sgbstdn_"):
             if name.startswith(prefix):
-                return name[len(prefix):]
+                return name[len(prefix) :]
         return name
 
-    def write_to_file(self, output_path: str, tables_to_cache: Optional[list[str]] = None) -> None:
+    def write_to_file(
+        self, output_path: str, tables_to_cache: Optional[list[str]] = None
+    ) -> None:
         with open(output_path, "w") as f:
             f.write(self.generate(tables_to_cache))

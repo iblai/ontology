@@ -46,7 +46,9 @@ class MCPContext:
 class MCPHandlers:
     """Role-scoped handlers for the MCP methods."""
 
-    def __init__(self, ctx: MCPContext, resolver: Optional[ToolsetResolver] = None) -> None:
+    def __init__(
+        self, ctx: MCPContext, resolver: Optional[ToolsetResolver] = None
+    ) -> None:
         self.ctx = ctx
         self.resolver = resolver or ToolsetResolver()
 
@@ -66,7 +68,9 @@ class MCPHandlers:
     def read_memory(self, path: str) -> str:
         # Permission check is against the logical "/ontology/..." namespace.
         if not self.ctx.permissions.allows_memory_path(path):
-            raise PermissionDenied(f"role '{self.ctx.permissions.role}' cannot read {path}")
+            raise PermissionDenied(
+                f"role '{self.ctx.permissions.role}' cannot read {path}"
+            )
         candidate = self._physical_path(path)
         if not os.path.exists(candidate):
             raise MCPError(f"file not found: {path}")
@@ -83,7 +87,7 @@ class MCPHandlers:
         rel = path.lstrip("/")
         logical_prefix = "ontology/"
         if rel.startswith(logical_prefix):
-            rel = rel[len(logical_prefix):]
+            rel = rel[len(logical_prefix) :]
         candidate = os.path.normpath(os.path.join(safe_root, rel))
         if candidate != safe_root and not candidate.startswith(safe_root + os.sep):
             raise PermissionDenied("path escapes the memory root")
@@ -129,7 +133,9 @@ class MCPHandlers:
         if name == "read-memory":
             return self.read_memory(arguments["path"])
         if name in ("query-ontology-cache", "query-cache"):
-            return self.query_cache(arguments["sql"], limit=int(arguments.get("limit", 100)))
+            return self.query_cache(
+                arguments["sql"], limit=int(arguments.get("limit", 100))
+            )
         if name == "get-sync-status":
             return self.get_sync_status()
 
@@ -137,18 +143,23 @@ class MCPHandlers:
         # the inbound MCP Toolbox.
         allowed = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
         if name not in allowed:
-            raise PermissionDenied(f"role '{self.ctx.permissions.role}' cannot call {name}")
+            raise PermissionDenied(
+                f"role '{self.ctx.permissions.role}' cannot call {name}"
+            )
         return self._proxy_to_toolbox(name, arguments)
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:
-        toolbox_url = os.environ.get("MCP_TOOLBOX_URL", "http://mcp-toolbox:5000")
-        import httpx
-
-        resp = httpx.post(
-            f"{toolbox_url}/api/tool/{name}", json=arguments, timeout=30
+        """Call a tool on the inbound MCP Toolbox via the shared /mcp client."""
+        from iblai_ontology.backend.mcp_server.toolbox_client import (
+            ToolboxError,
+            call_tool,
         )
-        resp.raise_for_status()
-        return resp.json()
+
+        toolbox_url = os.environ.get("MCP_TOOLBOX_URL", "http://mcp-toolbox:5000")
+        try:
+            return call_tool(toolbox_url, name, arguments)
+        except ToolboxError as exc:
+            raise MCPError(str(exc)) from exc
 
 
 def dispatch(handlers: MCPHandlers, request: dict) -> dict:
@@ -161,9 +172,15 @@ def dispatch(handlers: MCPHandlers, request: dict) -> dict:
             result: Any = {"tools": handlers.list_tools()}
         elif method == "tools/call":
             value = handlers.call_tool(params["name"], params.get("arguments", {}))
-            result = {"content": [{"type": "text", "text": json.dumps(value, default=str)}]}
+            result = {
+                "content": [{"type": "text", "text": json.dumps(value, default=str)}]
+            }
         else:
             raise MCPError(f"unknown method: {method}", code=-32601)
         return {"jsonrpc": "2.0", "result": result, "id": req_id}
     except MCPError as exc:
-        return {"jsonrpc": "2.0", "error": {"code": exc.code, "message": str(exc)}, "id": req_id}
+        return {
+            "jsonrpc": "2.0",
+            "error": {"code": exc.code, "message": str(exc)},
+            "id": req_id,
+        }
