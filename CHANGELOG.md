@@ -4,6 +4,24 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-07-08
+
+### Security
+- Enforced self-scoping for self-service roles on subject tools (#2140). A role
+  marked `self_service: true` (e.g. `Student`) was bound to its own record on the
+  memory layer (`${USER_EMPLID}`) but not on the data tools, so a student could
+  read another student's record by passing a different `student_id`. The gateway
+  now requires any subject-identifier argument to equal the caller's own id for
+  self-service roles (fail-closed if the caller has no resolved id); staff /
+  analytics roles keep cross-subject access, which is by design.
+
+### Added
+- `docs/authorization-model.md` documenting the role-based authorization model:
+  shared per-source service credentials and cross-subject staff access are
+  intentional; `self_service` is the only self-scoped role class. Clarifies that
+  Shannon AUTHZ-05/06/07 were false positives for this design and that #2138 is
+  the real control against unauthorized cross-subject access.
+
 ## [0.2.3] - 2026-07-08
 
 ### Security
@@ -94,6 +112,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.4]: https://github.com/iblai/ontology/releases/tag/v0.2.4
 [0.2.3]: https://github.com/iblai/ontology/releases/tag/v0.2.3
 [0.2.2]: https://github.com/iblai/ontology/releases/tag/v0.2.2
 [0.2.1]: https://github.com/iblai/ontology/releases/tag/v0.2.1
