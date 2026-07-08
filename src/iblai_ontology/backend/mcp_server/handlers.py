@@ -94,17 +94,47 @@ class MCPHandlers:
         return candidate
 
     # -- query-cache -----------------------------------------------------
+    @staticmethod
+    def _validate_read_only_sql(sql: str) -> str:
+        """Return the single statement to execute, or raise :class:`MCPError`.
+
+        Accepts one ``SELECT``/``WITH`` statement (a single optional trailing
+        ``;`` is allowed); rejects non-strings, empty input, stacked statements,
+        and any lead other than ``SELECT``/``WITH``. Writes hidden in a CTE are
+        not caught here — :meth:`query_cache` runs the statement in a PostgreSQL
+        ``READ ONLY`` transaction that rejects them at execution time.
+        """
+        if not isinstance(sql, str):
+            raise MCPError("sql must be a string")
+        statement = sql.strip()
+        # Allow a single optional trailing ';' but reject stacked statements.
+        body = statement.rstrip(";").rstrip()
+        if not body:
+            raise MCPError("empty query")
+        if ";" in body:
+            raise MCPError("only a single SQL statement is allowed")
+        # Ignore leading '(' so parenthesised selects still validate.
+        head = body.lstrip("(").lstrip().upper()
+        if not head.startswith(("SELECT", "WITH")):
+            raise MCPError("only SELECT/WITH read-only queries are allowed")
+        return body
+
     def query_cache(self, sql: str, limit: int = 100) -> list[dict]:
-        stripped = sql.strip().rstrip(";").lstrip().upper()
-        if not stripped.startswith(("SELECT", "WITH")):
-            raise MCPError("only SELECT/WITH queries are allowed")
+        statement = self._validate_read_only_sql(sql)
+        limit = max(1, int(limit))
         from django.db import connection
 
         with connection.cursor() as cur:
-            cur.execute(sql)
-            cols = [c[0] for c in cur.description] if cur.description else []
-            rows = cur.fetchmany(limit)
-        # Cache-table scoping is enforced at tool-definition time; this is a guard.
+            # READ ONLY transaction: any write, including DML hidden in a CTE,
+            # fails at the engine. Always rolled back; this path never commits.
+            cur.execute("BEGIN TRANSACTION READ ONLY")
+            try:
+                cur.execute(statement)
+                cols = [c[0] for c in cur.description] if cur.description else []
+                rows = cur.fetchmany(limit)
+            finally:
+                cur.execute("ROLLBACK")
+        # Does not enforce per-table cache-table ACLs.
         return [dict(zip(cols, r)) for r in rows]
 
     # -- get-sync-status (admin) ----------------------------------------
@@ -128,11 +158,24 @@ class MCPHandlers:
         ]
 
     # -- tools/call ------------------------------------------------------
+    def _require_scoped(self, tool_name: str) -> None:
+        """Deny unless ``tool_name`` is in the caller's role-scoped tool set."""
+        allowed = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
+        if tool_name not in allowed:
+            raise PermissionDenied(
+                f"role '{self.ctx.permissions.role}' cannot call {tool_name}"
+            )
+
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
-        # Built-in tools the gateway serves directly.
+        # Built-in tools are served directly here but remain subject to
+        # authorization: read-memory and get-sync-status carry their own checks;
+        # the cache-query aliases pass the same toolset-scope test as any tool.
         if name == "read-memory":
             return self.read_memory(arguments["path"])
         if name in ("query-ontology-cache", "query-cache"):
+            # `query-cache` is an alias for the scoped `query-ontology-cache`
+            # tool; both are gated on that tool being in the caller's scope.
+            self._require_scoped("query-ontology-cache")
             return self.query_cache(
                 arguments["sql"], limit=int(arguments.get("limit", 100))
             )
@@ -141,11 +184,7 @@ class MCPHandlers:
 
         # Otherwise the tool must be in the caller's scoped set and is proxied to
         # the inbound MCP Toolbox.
-        allowed = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
-        if name not in allowed:
-            raise PermissionDenied(
-                f"role '{self.ctx.permissions.role}' cannot call {name}"
-            )
+        self._require_scoped(name)
         return self._proxy_to_toolbox(name, arguments)
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:

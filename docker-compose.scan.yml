@@ -1,0 +1,14 @@
+# Scan-only override: publish the gateway on the host so a Shannon worker
+# container can reach it via host.docker.internal:8080. Bypasses Caddy (needs a
+# real domain/cert) and the missing admin-dashboard build. Temporary; tear down
+# after the scan. Compose file used explicitly via -f, not auto-loaded.
+services:
+  ontology-gateway:
+    # Committed compose sets `build: ./gateway`, but the Dockerfile does
+    # `COPY . /src` + pip-installs the repo package, so it needs the repo ROOT
+    # as context (see gateway/Dockerfile:8). Override context accordingly.
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "0.0.0.0:8080:8080"
