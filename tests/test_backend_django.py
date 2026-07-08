@@ -397,6 +397,7 @@ def test_mcp_view_success(backend):
         permissions = Permissions(
             role="Executive", display_name="x", mcp_toolsets=["*"]
         )
+        emplid = None
 
     req = RequestFactory().post(
         "/mcp",

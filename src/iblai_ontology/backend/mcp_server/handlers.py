@@ -23,6 +23,10 @@ from typing import Any, Optional
 from iblai_ontology.backend.identity.roles import Permissions
 from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
 
+# Argument names that carry a subject (person) identifier. For a self-service
+# role these must equal the caller's own subject id (see _require_subject_ownership).
+SUBJECT_ARG_KEYS = ("student_id", "student", "student_sis_id", "emplid")
+
 
 class MCPError(Exception):
     """An MCP-level error with a JSON-RPC-style code."""
@@ -41,6 +45,9 @@ class PermissionDenied(MCPError):
 class MCPContext:
     permissions: Permissions
     files_root: str = "/ontology"
+    # The caller's own subject id (emplid), resolved from their token via the
+    # IdentityMap. Used to self-scope subject tools for self-service roles.
+    subject_id: Optional[str] = None
 
 
 class MCPHandlers:
@@ -166,6 +173,26 @@ class MCPHandlers:
                 f"role '{self.ctx.permissions.role}' cannot call {tool_name}"
             )
 
+    def _require_subject_ownership(self, arguments: dict[str, Any]) -> None:
+        """Restrict subject-scoped tools to the caller for self-service roles.
+
+        A self-service role may only query its own record: any subject-identifier
+        argument (see :data:`SUBJECT_ARG_KEYS`) must equal the caller's own
+        subject id, and the caller must have a known subject id. Non-self-service
+        roles are unrestricted here — cross-subject access is granted by role per
+        the authorization model (docs/authorization-model.md).
+        """
+        if not self.ctx.permissions.self_service:
+            return
+        for key in SUBJECT_ARG_KEYS:
+            if key not in arguments:
+                continue
+            requested = str(arguments[key])
+            if not self.ctx.subject_id or requested != self.ctx.subject_id:
+                raise PermissionDenied(
+                    f"role '{self.ctx.permissions.role}' may only access its own record"
+                )
+
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         # Built-in tools are served directly here but remain subject to
         # authorization: read-memory and get-sync-status carry their own checks;
@@ -183,8 +210,10 @@ class MCPHandlers:
             return self.get_sync_status()
 
         # Otherwise the tool must be in the caller's scoped set and is proxied to
-        # the inbound MCP Toolbox.
+        # the inbound MCP Toolbox. Self-service roles are additionally restricted
+        # to their own subject record.
         self._require_scoped(name)
+        self._require_subject_ownership(arguments)
         return self._proxy_to_toolbox(name, arguments)
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:

@@ -37,6 +37,10 @@ class Permissions:
     concurrency_limits: dict = field(default_factory=dict)
     agents: list[str] = field(default_factory=list)
     admin_dashboard: bool = False
+    # Self-service roles may only access their own subject record; a subject
+    # identifier argument must equal the caller's own id. Non-self-service roles
+    # have cross-subject access by role grant (see docs/authorization-model.md).
+    self_service: bool = False
 
     def allows_toolset(self, toolset: str) -> bool:
         return "*" in self.mcp_toolsets or toolset in self.mcp_toolsets
@@ -85,6 +89,7 @@ class RoleResolver:
             concurrency_limits=dict(spec.get("concurrency_limits", {})),
             agents=list(spec.get("agents", [])),
             admin_dashboard=bool(spec.get("admin_dashboard", False)),
+            self_service=bool(spec.get("self_service", False)),
         )
 
 

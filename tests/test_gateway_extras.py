@@ -115,6 +115,53 @@ def test_call_tool_unknown_denied():
         h.call_tool("not-in-scope", {})
 
 
+def _subject_handlers(perms, subject_id):
+    """Handler whose resolver scopes get-student-enrollment, with a stubbed proxy."""
+    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
+    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+
+    class R(ToolsetResolver):
+        def __init__(self):
+            pass
+
+        def scope_for(self, p):
+            return ScopedTools(toolsets=["t"], tool_names=["get-student-enrollment"])
+
+    h = MCPHandlers(MCPContext(permissions=perms, subject_id=subject_id), resolver=R())
+    h._proxy_to_toolbox = lambda name, arguments: {"ok": name, "args": arguments}
+    return h
+
+
+def test_self_service_role_may_query_own_record():
+    perms = Permissions(role="Student", display_name="x", self_service=True)
+    h = _subject_handlers(perms, subject_id="001234567")
+    out = h.call_tool("get-student-enrollment", {"student_id": "001234567"})
+    assert out["ok"] == "get-student-enrollment"
+
+
+def test_self_service_role_cannot_query_another_subject():
+    perms = Permissions(role="Student", display_name="x", self_service=True)
+    h = _subject_handlers(perms, subject_id="001234567")
+    with pytest.raises(PermissionDenied):
+        h.call_tool("get-student-enrollment", {"student_id": "999999999"})
+
+
+def test_self_service_role_without_known_subject_denied():
+    # Fail closed: no resolved emplid -> cannot prove ownership.
+    perms = Permissions(role="Student", display_name="x", self_service=True)
+    h = _subject_handlers(perms, subject_id=None)
+    with pytest.raises(PermissionDenied):
+        h.call_tool("get-student-enrollment", {"student_id": "001234567"})
+
+
+def test_staff_role_may_query_any_subject():
+    # Non-self-service role: cross-subject access is granted by role.
+    perms = Permissions(role="AcademicAdvisor", display_name="x")
+    h = _subject_handlers(perms, subject_id="000000001")
+    out = h.call_tool("get-student-enrollment", {"student_id": "999999999"})
+    assert out["args"]["student_id"] == "999999999"
+
+
 def test_dispatch_tool_call_read_memory(tmp_path):
     root = tmp_path / "ontology"
     (root / "courses").mkdir(parents=True)
