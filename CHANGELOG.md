@@ -4,6 +4,18 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-07-08
+
+### Security
+- Fixed LDAP injection in the LDAP MCP server's `get-employee` /
+  `get-org-structure` tools (#2139). Caller-supplied `email` / `department`
+  values were interpolated into LDAP search filters unescaped, so a payload like
+  `*)(objectClass=*` turned the filter into a wildcard that enumerated the whole
+  directory. Both values are now escaped per RFC 4515
+  (`ldap3.utils.conv.escape_filter_chars`) via dedicated filter builders. The
+  server module also now reads its `LDAP_*` env vars lazily (at connect time)
+  instead of at import.
+
 ## [0.2.2] - 2026-07-08
 
 ### Security
@@ -82,6 +94,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.3]: https://github.com/iblai/ontology/releases/tag/v0.2.3
 [0.2.2]: https://github.com/iblai/ontology/releases/tag/v0.2.2
 [0.2.1]: https://github.com/iblai/ontology/releases/tag/v0.2.1
 [0.2.0]: https://github.com/iblai/ontology/releases/tag/v0.2.0
