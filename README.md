@@ -236,6 +236,47 @@ Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
 - **Identity through Entra ID.** Every MCP request carries the user's Entra ID JWT; the gateway validates it and resolves the caller's role against `roles.yaml`. See [docs/identity.md](docs/identity.md).
 - **Credential isolation & containment.** Each inbound MCP server has its own credential scope; connection secrets are encrypted at rest.
 
+### Gateway hardening (environment variables)
+
+The gateway middleware is tuned entirely through environment variables on the
+`ontology-gateway` container — no code change or rebuild, just set and restart.
+
+**Rate limiting** (fixed-window throttle, keyed on the authenticated subject and
+falling back to client IP):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_RATELIMIT_ENABLED` | `true` | Master on/off switch |
+| `ONTOLOGY_RATELIMIT_WINDOW` | `60` | Window length in seconds (also the `Retry-After` value) |
+| `ONTOLOGY_RATELIMIT_MAX` | `120` | Max requests per window (general bucket) |
+| `ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX` | `30` | Stricter max per window for `tools/call` |
+
+To loosen limits for higher traffic, raise `ONTOLOGY_RATELIMIT_MAX` /
+`ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX`. Two caveats:
+- The window is **fixed**, not sliding — a client can burst up to `2×MAX` across a
+  window boundary. Size the limit accordingly.
+- Counting is **per worker process** on the default in-memory cache, so with *N*
+  workers the effective limit is ≈ `N × MAX`. Set `ONTOLOGY_CACHE_URL` to a
+  `redis://…` URL so all workers share one counter and the configured number is
+  the true global limit.
+
+**Transport security & response headers:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_SECURITY_HEADERS_ENABLED` | `true` | Emit security response headers |
+| `ONTOLOGY_REQUIRE_HTTPS` | `true` | Reject Bearer tokens received over a plaintext (non-HTTPS) connection |
+| `ONTOLOGY_HSTS_MAX_AGE` | `31536000` | `Strict-Transport-Security` max-age (seconds; `0` disables HSTS) |
+| `ONTOLOGY_HSTS_INCLUDE_SUBDOMAINS` | `true` | Add `includeSubDomains` to HSTS |
+| `ONTOLOGY_CSP` | `default-src 'none'; frame-ancestors 'none'` | `Content-Security-Policy` value |
+| `ONTOLOGY_REFERRER_POLICY` | `no-referrer` | `Referrer-Policy` value |
+| `ONTOLOGY_FRAME_OPTIONS` | `DENY` | `X-Frame-Options` value |
+
+HSTS is only emitted over HTTPS. TLS terminates at the Caddy edge, so the gateway
+trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
+whether a connection is secure — keep the gateway reachable only via the proxy,
+never directly on `:8080`.
+
 ## Documentation
 
 | Document | Covers |
