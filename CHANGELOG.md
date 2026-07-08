@@ -4,6 +4,19 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-08
+
+### Security
+- Fixed a critical SQL injection / broken-access-control flaw in the MCP gateway
+  `query-cache` / `query-ontology-cache` tool (#2137). The cache-query aliases
+  were dispatched before the toolset-scope check, so any authenticated caller —
+  including the zero-tool `default` role — could reach the handler, which then
+  executed the caller's raw `sql` (a `SELECT`/`WITH` prefix check on a copy let
+  CTE-wrapped DML through). The aliases now pass the same toolset-scope check as
+  every other tool, and `query_cache` validates a single read-only statement and
+  runs it inside a PostgreSQL `READ ONLY` transaction that rejects any hidden
+  write at the engine.
+
 ## [0.2.0] - 2026-07-03
 
 ### Added
@@ -58,4 +71,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.1]: https://github.com/iblai/ontology/releases/tag/v0.2.1
 [0.2.0]: https://github.com/iblai/ontology/releases/tag/v0.2.0
