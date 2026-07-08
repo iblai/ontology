@@ -126,6 +126,52 @@ class MCPHandlers:
             raise MCPError("only SELECT/WITH read-only queries are allowed")
         return body
 
+    @staticmethod
+    def _relation_names(explain_json: Any) -> set[str]:
+        """Collect every base ``Relation Name`` in an ``EXPLAIN (FORMAT JSON)`` plan.
+
+        Walks the whole plan tree so tables reached through joins, subqueries,
+        CTEs, and views are all included (the planner resolves them to their
+        underlying relations). ``explain_json`` may be a parsed object or a JSON
+        string, depending on the driver.
+        """
+        if isinstance(explain_json, str):
+            explain_json = json.loads(explain_json)
+        names: set[str] = set()
+        stack = [explain_json]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                rel = node.get("Relation Name")
+                if rel:
+                    names.add(rel)
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+        return names
+
+    def _enforce_cache_acl(self, cur, statement: str) -> None:
+        """Deny the query if it touches a cache table the role may not read.
+
+        The referenced relations are taken from the query plan
+        (``EXPLAIN (FORMAT JSON)``), which is the database's own resolution of
+        what the query reads, and each is checked against the role's
+        ``cache_tables`` ACL. Runs in the caller's READ ONLY transaction;
+        ``EXPLAIN`` plans but does not execute the query.
+        """
+        perms = self.ctx.permissions
+        if "*" in perms.cache_tables:
+            return
+        cur.execute("EXPLAIN (FORMAT JSON) " + statement)
+        row = cur.fetchone()
+        tables = self._relation_names(row[0] if row else [])
+        forbidden = sorted(t for t in tables if not perms.allows_cache_table(t))
+        if forbidden:
+            raise PermissionDenied(
+                f"role '{perms.role}' cannot access cache table(s): "
+                + ", ".join(forbidden)
+            )
+
     def query_cache(self, sql: str, limit: int = 100) -> list[dict]:
         statement = self._validate_read_only_sql(sql)
         limit = max(1, int(limit))
@@ -136,12 +182,12 @@ class MCPHandlers:
             # fails at the engine. Always rolled back; this path never commits.
             cur.execute("BEGIN TRANSACTION READ ONLY")
             try:
+                self._enforce_cache_acl(cur, statement)
                 cur.execute(statement)
                 cols = [c[0] for c in cur.description] if cur.description else []
                 rows = cur.fetchmany(limit)
             finally:
                 cur.execute("ROLLBACK")
-        # Does not enforce per-table cache-table ACLs.
         return [dict(zip(cols, r)) for r in rows]
 
     # -- get-sync-status (admin) ----------------------------------------

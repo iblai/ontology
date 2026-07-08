@@ -1,6 +1,6 @@
 [project]
 name = "iblai-ontology"
-version = "0.2.4"
+version = "0.2.5"
 description = "On-premise knowledge layer that makes a university's systems queryable by AI agents over MCP — no data extraction."
 readme = "README.md"
 requires-python = ">=3.11"

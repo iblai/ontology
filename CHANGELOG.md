@@ -4,6 +4,18 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-07-08
+
+### Security
+- Enforced the per-role `cache_tables` ACL on cache queries (#2141). Roles carry
+  a `cache_tables` allow-list (e.g. `IblaiOntologyAdmin` is limited to
+  `sync_runs` / `audit_log`) and `Permissions.allows_cache_table()` existed, but
+  it was never called — a restricted role could `SELECT` any table, including
+  `auth_user`. `query_cache` now resolves the query's referenced relations from
+  its plan (`EXPLAIN (FORMAT JSON)`, which the database expands through joins /
+  CTEs / views) and denies (403) if any is not permitted by the role's ACL.
+  Roles with `cache_tables: ["*"]` are unaffected (the check is skipped).
+
 ## [0.2.4] - 2026-07-08
 
 ### Security
@@ -112,6 +124,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.5]: https://github.com/iblai/ontology/releases/tag/v0.2.5
 [0.2.4]: https://github.com/iblai/ontology/releases/tag/v0.2.4
 [0.2.3]: https://github.com/iblai/ontology/releases/tag/v0.2.3
 [0.2.2]: https://github.com/iblai/ontology/releases/tag/v0.2.2
