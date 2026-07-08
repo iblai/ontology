@@ -87,7 +87,10 @@ class MCPHandlers:
     def _physical_path(self, path: str) -> str:
         """Map a logical /ontology/... path to a physical path under files_root.
 
-        Blocks traversal outside the configured memory root.
+        Blocks traversal outside the configured memory root both lexically and
+        after resolving symlinks: a symlink under the root that points outside it
+        cannot escape, because the fully resolved real path is re-checked against
+        the resolved root. Returns the resolved (canonical) path.
         """
         safe_root = os.path.normpath(self.ctx.files_root)
         # Strip a leading logical "/ontology" prefix, then anchor under the root.
@@ -98,7 +101,15 @@ class MCPHandlers:
         candidate = os.path.normpath(os.path.join(safe_root, rel))
         if candidate != safe_root and not candidate.startswith(safe_root + os.sep):
             raise PermissionDenied("path escapes the memory root")
-        return candidate
+        # Re-check containment after resolving symlinks (realpath resolves every
+        # component), so a symlink inside the root pointing elsewhere is rejected.
+        real_root = os.path.realpath(safe_root)
+        real_candidate = os.path.realpath(candidate)
+        if real_candidate != real_root and not real_candidate.startswith(
+            real_root + os.sep
+        ):
+            raise PermissionDenied("path escapes the memory root")
+        return real_candidate
 
     # -- query-cache -----------------------------------------------------
     @staticmethod

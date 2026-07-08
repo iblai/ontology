@@ -4,6 +4,18 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-07-08
+
+### Security
+- Fixed symlink path traversal in the `read-memory` tool (#2143). Containment was
+  checked lexically (`os.path.normpath`) before symlinks were resolved, so a
+  symlink under the memory root pointing outside it let `read-memory` return
+  files outside the root (the `ontology-files` volume is shared with the sync
+  engine, so symlink provenance is not fully controlled). `_physical_path` now
+  re-checks the fully resolved real path (`os.path.realpath`) against the
+  resolved root after symlink resolution and returns the canonical path;
+  symlinks that stay within the root still work.
+
 ## [0.2.6] - 2026-07-08
 
 ### Security
@@ -137,6 +149,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.7]: https://github.com/iblai/ontology/releases/tag/v0.2.7
 [0.2.6]: https://github.com/iblai/ontology/releases/tag/v0.2.6
 [0.2.5]: https://github.com/iblai/ontology/releases/tag/v0.2.5
 [0.2.4]: https://github.com/iblai/ontology/releases/tag/v0.2.4
