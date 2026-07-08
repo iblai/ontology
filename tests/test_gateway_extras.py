@@ -41,6 +41,74 @@ def test_query_cache_rejects_non_select():
         h.query_cache("DELETE FROM students")
 
 
+class _FakeCursor:
+    """Minimal cursor stub: returns a canned EXPLAIN plan, records executed SQL."""
+
+    def __init__(self, plan):
+        self._plan = plan
+        self.executed = []
+
+    def execute(self, sql):
+        self.executed.append(sql)
+
+    def fetchone(self):
+        return (self._plan,)
+
+
+# A plan referencing sync_runs (allowed) and auth_user (forbidden) via a join.
+_PLAN_SYNC_AND_AUTH = [
+    {
+        "Plan": {
+            "Node Type": "Hash Join",
+            "Plans": [
+                {"Node Type": "Seq Scan", "Relation Name": "sync_runs"},
+                {"Node Type": "Seq Scan", "Relation Name": "auth_user"},
+            ],
+        }
+    }
+]
+_PLAN_SYNC_ONLY = [{"Plan": {"Node Type": "Seq Scan", "Relation Name": "sync_runs"}}]
+
+
+def test_relation_names_walks_plan_tree():
+    names = MCPHandlers._relation_names(_PLAN_SYNC_AND_AUTH)
+    assert names == {"sync_runs", "auth_user"}
+    # Also accepts a JSON string form.
+    assert MCPHandlers._relation_names(json.dumps(_PLAN_SYNC_ONLY)) == {"sync_runs"}
+
+
+def test_cache_acl_denies_forbidden_table():
+    # IblaiOntologyAdmin is limited to sync_runs + audit_log; auth_user must 403.
+    perms = Permissions(
+        role="IblaiOntologyAdmin",
+        display_name="x",
+        cache_tables=["sync_runs", "audit_log"],
+    )
+    h = _handlers(perms)
+    cur = _FakeCursor(_PLAN_SYNC_AND_AUTH)
+    with pytest.raises(PermissionDenied):
+        h._enforce_cache_acl(cur, "SELECT * FROM sync_runs JOIN auth_user USING (id)")
+
+
+def test_cache_acl_allows_permitted_tables():
+    perms = Permissions(
+        role="IblaiOntologyAdmin",
+        display_name="x",
+        cache_tables=["sync_runs", "audit_log"],
+    )
+    h = _handlers(perms)
+    cur = _FakeCursor(_PLAN_SYNC_ONLY)
+    h._enforce_cache_acl(cur, "SELECT * FROM sync_runs")  # no raise
+
+
+def test_cache_acl_wildcard_role_skips_explain():
+    perms = Permissions(role="Executive", display_name="x", cache_tables=["*"])
+    h = _handlers(perms)
+    cur = _FakeCursor(_PLAN_SYNC_AND_AUTH)
+    h._enforce_cache_acl(cur, "SELECT * FROM auth_user")
+    assert cur.executed == []  # wildcard: no EXPLAIN needed, all tables allowed
+
+
 def test_query_cache_rejects_cte_dml():
     # A CTE that hides a DELETE must not pass the SELECT/WITH validation.
     h = _handlers(Permissions(role="Executive", display_name="x", mcp_toolsets=["*"]))
