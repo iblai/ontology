@@ -17,7 +17,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 from iblai_ontology.backend.identity.entra import EntraIdentity, EntraValidator
-from iblai_ontology.backend.identity.roles import Permissions, RoleResolver
+from iblai_ontology.backend.identity.roles import (
+    Permissions,
+    RoleNotPermitted,
+    RoleResolver,
+    select_active_role,
+)
 
 ROLE_HEADER = "X-Iblai-Role"
 
@@ -50,10 +55,18 @@ def resolve_request(
     resolver: Optional[RoleResolver] = None,
     emplid_lookup=_lookup_emplid,
 ) -> ResolvedRequest:
-    """Validate identity + resolve permissions for one request."""
+    """Validate identity + resolve permissions for one request.
+
+    The active role is derived from the validated token's granted roles; the
+    ``X-Iblai-Role`` header only selects among them. Raises
+    :class:`~iblai_ontology.backend.identity.roles.RoleNotPermitted` when the
+    header requests a role the token does not grant.
+    """
+    resolver = resolver or RoleResolver()
     identity = validator.validate(token)
     emplid = emplid_lookup(identity.user_id) if emplid_lookup else None
-    permissions = (resolver or RoleResolver()).resolve(role_header, user_emplid=emplid)
+    role = select_active_role(identity.roles, role_header, resolver)
+    permissions = resolver.resolve(role, user_emplid=emplid)
     return ResolvedRequest(identity=identity, permissions=permissions, emplid=emplid)
 
 
@@ -118,6 +131,8 @@ class OntologyIdentityMiddleware:
                 )
             except EntraTokenError as exc:
                 return JsonResponse({"error": str(exc)}, status=401)
+            except RoleNotPermitted as exc:
+                return JsonResponse({"error": str(exc)}, status=403)
         else:
             request.ontology = None
         return self.get_response(request)

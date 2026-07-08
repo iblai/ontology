@@ -4,6 +4,17 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-07-08
+
+### Security
+- Fixed a critical privilege escalation via the trusted `X-Iblai-Role` header
+  (#2138). The gateway resolved permissions from the client-supplied header
+  without checking it against the validated Entra JWT, so any authenticated user
+  could assign themselves any role (e.g. `Executive`, `IblaiOntologyAdmin`). The
+  active role is now derived from the token's `roles` claim; `X-Iblai-Role` acts
+  only as a selector among the roles the token grants, and a request for any
+  other role is rejected with HTTP 403.
+
 ## [0.2.1] - 2026-07-08
 
 ### Security
@@ -71,5 +82,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.2]: https://github.com/iblai/ontology/releases/tag/v0.2.2
 [0.2.1]: https://github.com/iblai/ontology/releases/tag/v0.2.1
 [0.2.0]: https://github.com/iblai/ontology/releases/tag/v0.2.0
