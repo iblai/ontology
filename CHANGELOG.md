@@ -4,6 +4,25 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] - 2026-07-08
+
+### Security
+- Hardened gateway transport security (#2145). Bearer tokens could traverse
+  cleartext HTTP and the proxy set no protective response headers, so an on-path
+  observer could capture a token (chaining with the no-replay and role-forgery
+  findings for full compromise) and defence-in-depth headers were absent. A new
+  `OntologySecurityMiddleware` (a) rejects requests that carry an
+  `Authorization: Bearer` header over a non-HTTPS connection with HTTP 403,
+  before the token is validated, and (b) emits `Strict-Transport-Security` (over
+  HTTPS only), `Content-Security-Policy`, `X-Content-Type-Options`,
+  `Referrer-Policy`, and `X-Frame-Options` on every response. TLS is trusted via
+  `SECURE_PROXY_SSL_HEADER` (Caddy's `X-Forwarded-Proto`). All behaviour is
+  configurable via `ONTOLOGY_SECURITY_HEADERS_ENABLED`, `ONTOLOGY_REQUIRE_HTTPS`,
+  `ONTOLOGY_HSTS_*`, `ONTOLOGY_CSP`, `ONTOLOGY_REFERRER_POLICY`, and
+  `ONTOLOGY_FRAME_OPTIONS`. Matching edge headers and the automatic HTTP->HTTPS
+  redirect were added to `config/Caddyfile`, and the `ONTOLOGY_RATELIMIT_*` /
+  security env vars are now documented in the README.
+
 ## [0.2.8] - 2026-07-08
 
 ### Security
