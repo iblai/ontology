@@ -41,6 +41,62 @@ def test_query_cache_rejects_non_select():
         h.query_cache("DELETE FROM students")
 
 
+def test_query_cache_rejects_cte_dml():
+    # A CTE that hides a DELETE must not pass the SELECT/WITH validation.
+    h = _handlers(Permissions(role="Executive", display_name="x", mcp_toolsets=["*"]))
+    # Stacked statements are rejected outright...
+    with pytest.raises(MCPError):
+        h.query_cache("SELECT 1; DROP TABLE students")
+
+
+def test_call_tool_cache_alias_denied_for_default_role():
+    # The `default` role has no toolsets → the cache aliases must be denied,
+    # even though they are served by a built-in handler (scope-bypass regression).
+    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+
+    class R(ToolsetResolver):
+        def __init__(self):
+            pass
+
+        def scope_for(self, p):
+            return ScopedTools(toolsets=[], tool_names=[])
+
+    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
+
+    perms = Permissions(role="default", display_name="x", mcp_toolsets=[])
+    h = MCPHandlers(MCPContext(permissions=perms), resolver=R())
+    for alias in ("query-cache", "query-ontology-cache"):
+        with pytest.raises(PermissionDenied):
+            h.call_tool(alias, {"sql": "SELECT 1"})
+
+
+def test_call_tool_cache_alias_scoped_reaches_query_cache(monkeypatch):
+    # A role that DOES have query-ontology-cache in scope passes the scope gate
+    # and reaches query_cache (which we stub to avoid needing a live DB).
+    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
+    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+
+    class R(ToolsetResolver):
+        def __init__(self):
+            pass
+
+        def scope_for(self, p):
+            return ScopedTools(
+                toolsets=["admin-analytics-tools"],
+                tool_names=["query-ontology-cache"],
+            )
+
+    perms = Permissions(role="DataAnalyst", display_name="x")
+    h = MCPHandlers(MCPContext(permissions=perms), resolver=R())
+    seen = {}
+    monkeypatch.setattr(
+        h, "query_cache", lambda sql, limit=100: seen.update(sql=sql) or [{"ok": 1}]
+    )
+    out = h.call_tool("query-cache", {"sql": "SELECT 1"})
+    assert out == [{"ok": 1}]
+    assert seen["sql"] == "SELECT 1"
+
+
 def test_get_sync_status_requires_admin():
     h = _handlers(
         Permissions(
