@@ -7,35 +7,63 @@
 import json
 import os
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
 
-CANVAS_BASE_URL = os.environ["CANVAS_BASE_URL"]
-CANVAS_TOKEN = os.environ["CANVAS_API_TOKEN"]
-
 server = FastMCP("canvas-mcp")
 
-_AUTH = {"Authorization": f"Bearer {CANVAS_TOKEN}"}
+_SIS_PREFIXES = ("sis_user_id:", "sis_login_id:")
+
+
+def _base_url() -> str:
+    return os.environ["CANVAS_BASE_URL"]
+
+
+def _auth() -> dict:
+    return {"Authorization": f"Bearer {os.environ['CANVAS_API_TOKEN']}"}
+
+
+def _safe_segment(value: str) -> str:
+    """URL-encode one path segment, rejecting path/route metacharacters.
+
+    ``quote`` leaves ``.`` unescaped, so ``..`` is rejected explicitly rather
+    than relied upon being encoded.
+    """
+    if any(bad in value for bad in ("/", "..", "?", "#")) or any(
+        c.isspace() for c in value
+    ):
+        raise ValueError(f"invalid identifier: {value!r}")
+    return quote(value, safe="")
 
 
 def _user_ref_path(user: str) -> str:
-    """Map a user reference to a Canvas ``users/:id`` path segment.
+    """Map a user reference to a safe Canvas ``users/:id`` path segment.
 
-    A bare value is looked up as a **Canvas user id**. SIS references must be
-    explicitly qualified — e.g. ``"sis_user_id:001234567"`` or
-    ``"sis_login_id:jane@x.edu"`` — because SIS ids are frequently numeric and
-    cannot be reliably distinguished from a Canvas id. A qualified reference is
-    already valid Canvas path syntax, so it is passed through unchanged.
+    Accepts a **numeric Canvas user id** (e.g. "116") or an explicitly qualified
+    SIS reference — ``"sis_user_id:001234567"`` / ``"sis_login_id:jane@x.edu"``.
+    The identifier portion is URL-encoded and rejected if it contains path or
+    query metacharacters; any other form is rejected. This prevents a crafted
+    value from injecting extra path segments or query parameters into the
+    upstream request.
     """
-    return str(user).strip()
+    v = str(user).strip()
+    if v.isdigit():
+        return v
+    for prefix in _SIS_PREFIXES:
+        if v.startswith(prefix):
+            return prefix + _safe_segment(v[len(prefix) :])
+    raise ValueError(
+        "student must be a numeric Canvas id or a sis_user_id:/sis_login_id: reference"
+    )
 
 
 async def _resolve_user_id(client: httpx.AsyncClient, user: str) -> int:
     """Resolve a user reference to the numeric Canvas user id."""
     resp = await client.get(
-        f"{CANVAS_BASE_URL}/api/v1/users/{_user_ref_path(user)}", headers=_AUTH
+        f"{_base_url()}/api/v1/users/{_user_ref_path(user)}", headers=_auth()
     )
     resp.raise_for_status()
     return resp.json()["id"]
@@ -49,7 +77,7 @@ async def _get_all(client: httpx.AsyncClient, url: str, params: dict) -> list:
     rows: list = []
     next_url: str | None = url
     while next_url:
-        resp = await client.get(next_url, headers=_AUTH, params=params)
+        resp = await client.get(next_url, headers=_auth(), params=params)
         resp.raise_for_status()
         rows.extend(resp.json())
         # The next-page URL already carries the query string.
@@ -71,7 +99,7 @@ async def get_student_courses(student: str) -> list[TextContent]:
 
         enrollments = await _get_all(
             client,
-            f"{CANVAS_BASE_URL}/api/v1/users/{user_id}/enrollments",
+            f"{_base_url()}/api/v1/users/{user_id}/enrollments",
             {"state[]": "active", "type[]": "StudentEnrollment", "per_page": 100},
         )
 
@@ -109,7 +137,7 @@ async def get_student_submissions(
         # students/submissions endpoint is queried for each active enrollment.
         enrollments = await _get_all(
             client,
-            f"{CANVAS_BASE_URL}/api/v1/users/{user_id}/enrollments",
+            f"{_base_url()}/api/v1/users/{user_id}/enrollments",
             {"state[]": "active", "type[]": "StudentEnrollment", "per_page": 100},
         )
         course_ids = [e["course_id"] for e in enrollments]
@@ -119,7 +147,7 @@ async def get_student_submissions(
             try:
                 submissions = await _get_all(
                     client,
-                    f"{CANVAS_BASE_URL}/api/v1/courses/{course_id}/students/submissions",
+                    f"{_base_url()}/api/v1/courses/{course_id}/students/submissions",
                     {
                         "student_ids[]": user_id,
                         "submitted_since": since,

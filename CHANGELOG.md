@@ -4,6 +4,19 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-07-08
+
+### Security
+- Fixed URL-path injection in the Canvas and Navigate MCP servers (#2142). Both
+  interpolated caller-supplied identifiers (`student`, `student_sis_id`) directly
+  into upstream API URL paths, so a value with `../`, extra `/segments`, or
+  `?query` could reach unintended endpoints under the shared service token.
+  Identifiers are now validated and URL-encoded per path segment: Navigate via
+  `_safe_segment`, Canvas via a format-aware `_user_ref_path` (numeric Canvas id
+  or an explicit `sis_user_id:` / `sis_login_id:` reference; anything else, or a
+  value containing `/ .. ? #` or whitespace, is rejected). Both server modules
+  also read their env vars lazily (at request time) instead of at import.
+
 ## [0.2.5] - 2026-07-08
 
 ### Security
@@ -124,6 +137,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.6]: https://github.com/iblai/ontology/releases/tag/v0.2.6
 [0.2.5]: https://github.com/iblai/ontology/releases/tag/v0.2.5
 [0.2.4]: https://github.com/iblai/ontology/releases/tag/v0.2.4
 [0.2.3]: https://github.com/iblai/ontology/releases/tag/v0.2.3
