@@ -8,6 +8,16 @@
 # ============================================================
 
 ontology.{$ONTOLOGY_DOMAIN} {
+    # Coarse per-IP rate limit (defence in depth; the gateway also throttles
+    # per-identity). Requires a Caddy build with the caddy-ratelimit plugin
+    # (github.com/mholt/caddy-ratelimit); uncomment once that build is deployed.
+    #   rate_limit {
+    #       zone ontology_ip {
+    #           key    {remote_host}
+    #           events 300
+    #           window 1m
+    #       }
+    #   }
     reverse_proxy ontology-gateway:8080
     log {
         output file /var/log/caddy/access.log

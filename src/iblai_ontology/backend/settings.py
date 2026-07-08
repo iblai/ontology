@@ -34,6 +34,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE: list[str] = [
     "iblai_ontology.backend.identity.middleware.OntologyIdentityMiddleware",
+    # After identity so it can key on the resolved subject; falls back to IP.
+    "iblai_ontology.backend.ratelimit.OntologyRateLimitMiddleware",
 ]
 
 ROOT_URLCONF = "iblai_ontology.backend.urls"
@@ -99,3 +101,28 @@ ENTRA_CLIENT_ID = os.environ.get("ENTRA_CLIENT_ID")
 CELERY_BROKER_URL = os.environ.get("ONTOLOGY_CELERY_BROKER", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("ONTOLOGY_CELERY_BACKEND", CELERY_BROKER_URL)
 CELERY_TIMEZONE = TIME_ZONE
+
+# --- Cache (backs gateway rate limiting) ---------------------------------
+# Set ONTOLOGY_CACHE_URL to a redis:// URL to enforce rate limits across worker
+# processes (requires the redis client). Without it, a per-process in-memory
+# cache is used — still throttles, but each worker counts independently.
+_cache_url = os.environ.get("ONTOLOGY_CACHE_URL")
+if _cache_url and _cache_url.startswith("redis"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": _cache_url,
+        }
+    }
+else:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+# --- Gateway rate limiting -----------------------------------------------
+RATELIMIT_ENABLED = (
+    os.environ.get("ONTOLOGY_RATELIMIT_ENABLED", "true").lower() == "true"
+)
+RATELIMIT_WINDOW_SECONDS = int(os.environ.get("ONTOLOGY_RATELIMIT_WINDOW", "60"))
+RATELIMIT_MAX_REQUESTS = int(os.environ.get("ONTOLOGY_RATELIMIT_MAX", "120"))
+RATELIMIT_TOOLS_CALL_MAX = int(
+    os.environ.get("ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX", "30")
+)

@@ -4,6 +4,20 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-07-08
+
+### Security
+- Added rate limiting to the gateway (#2144). Requests to `POST /mcp` were
+  unbounded, allowing unthrottled brute force, enumeration, and data
+  exfiltration. A new `OntologyRateLimitMiddleware` applies a fixed-window limit
+  keyed on the authenticated subject (falling back to client IP), with a
+  stricter bucket for `tools/call`, returning HTTP 429 with `Retry-After` when
+  exceeded. Limits are configurable via `ONTOLOGY_RATELIMIT_*` env vars and
+  backed by the Django cache (set `ONTOLOGY_CACHE_URL` to a redis:// URL to
+  enforce across workers). A commented coarse per-IP `rate_limit` block was added
+  to `config/Caddyfile` as edge defence-in-depth (needs the caddy-ratelimit
+  plugin).
+
 ## [0.2.7] - 2026-07-08
 
 ### Security
@@ -149,6 +163,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.8]: https://github.com/iblai/ontology/releases/tag/v0.2.8
 [0.2.7]: https://github.com/iblai/ontology/releases/tag/v0.2.7
 [0.2.6]: https://github.com/iblai/ontology/releases/tag/v0.2.6
 [0.2.5]: https://github.com/iblai/ontology/releases/tag/v0.2.5
