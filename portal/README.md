@@ -56,7 +56,7 @@ pnpm check          # API workflow self-check (status machine, fee/interview
 | -------------------------------------- | -------------------------------------------------------------------------------- |
 | `lib/types.ts`, `lib/status.ts`        | Domain model + status machine (gates enforced in the API layer)                  |
 | `lib/api/`                             | Mock API — the only data access path; REST-shaped for the backend swap (PLAN §8) |
-| `lib/schools/`                         | Per-school application config — drives the wizard                  |
+| `lib/schools/`                         | Per-school application config — drives the wizard                                |
 | `components/shell/`                    | OS-parity sidebar + header                                                       |
 | `components/apply/`                    | Config-driven application wizard                                                 |
 | `app/(portal)/{parent,student,admin}/` | Role portals                                                                     |

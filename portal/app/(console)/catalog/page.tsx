@@ -8,7 +8,13 @@ import type { CatalogEntry } from "@/lib/ontology/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortableHeader } from "@/components/shared/data-table";
 import { SectionHeader } from "@/components/console/section-header";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function CatalogPage() {
   const t = useTranslations("catalog");
@@ -24,7 +30,9 @@ export default function CatalogPage() {
     {
       accessorKey: "key",
       header: sortableHeader(t("colKey")),
-      cell: ({ row }) => <span className="font-mono font-medium text-foreground">{row.original.key}</span>,
+      cell: ({ row }) => (
+        <span className="font-mono font-medium text-foreground">{row.original.key}</span>
+      ),
     },
     {
       accessorKey: "display_name",
@@ -49,7 +57,9 @@ export default function CatalogPage() {
       accessorKey: "default_toolset",
       header: sortableHeader(t("colDefaultToolset")),
       cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">{row.original.default_toolset}</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.original.default_toolset}
+        </span>
       ),
     },
     {

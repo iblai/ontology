@@ -160,17 +160,47 @@ export function ServiceDetailClient({ service }: { service: Service }) {
 
             <Card>
               <CardContent className="grid gap-x-6 gap-y-2 py-4 sm:grid-cols-2">
-                <DetailRow label={t("overview.status")} value={<StatusBadge kind="status" value={service.status} />} />
+                <DetailRow
+                  label={t("overview.status")}
+                  value={<StatusBadge kind="status" value={service.status} />}
+                />
                 <DetailRow label={t("overview.displayName")} value={service.display_name} />
-                <DetailRow label={t("overview.adapter")} value={<span className="font-mono text-xs">{service.adapter}</span>} />
-                <DetailRow label={t("overview.host")} value={<span className="font-mono text-xs">{service.host}</span>} />
-                <DetailRow label={t("overview.lastDiscovery")} value={fmtDateTime(service.last_discovery_at)} />
-                <DetailRow label={t("overview.safetyStatus")} value={<StatusBadge kind="safety" value={service.safety_status} />} />
-                <DetailRow label={t("overview.lastSafetyCheck")} value={fmtDateTime(service.last_safety_check_at)} />
-                <DetailRow label={t("overview.lastSync")} value={service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")} />
-                <DetailRow label={t("overview.syncStatus")} value={<StatusBadge kind="sync" value={service.sync_status} />} />
-                <DetailRow label={t("overview.tablesSynced")} value={<span className="font-mono">{fmtRows(service.tables_synced)}</span>} />
-                <DetailRow label={t("overview.rowsSynced")} value={<span className="font-mono">{fmtRows(service.rows_synced)}</span>} />
+                <DetailRow
+                  label={t("overview.adapter")}
+                  value={<span className="font-mono text-xs">{service.adapter}</span>}
+                />
+                <DetailRow
+                  label={t("overview.host")}
+                  value={<span className="font-mono text-xs">{service.host}</span>}
+                />
+                <DetailRow
+                  label={t("overview.lastDiscovery")}
+                  value={fmtDateTime(service.last_discovery_at)}
+                />
+                <DetailRow
+                  label={t("overview.safetyStatus")}
+                  value={<StatusBadge kind="safety" value={service.safety_status} />}
+                />
+                <DetailRow
+                  label={t("overview.lastSafetyCheck")}
+                  value={fmtDateTime(service.last_safety_check_at)}
+                />
+                <DetailRow
+                  label={t("overview.lastSync")}
+                  value={service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")}
+                />
+                <DetailRow
+                  label={t("overview.syncStatus")}
+                  value={<StatusBadge kind="sync" value={service.sync_status} />}
+                />
+                <DetailRow
+                  label={t("overview.tablesSynced")}
+                  value={<span className="font-mono">{fmtRows(service.tables_synced)}</span>}
+                />
+                <DetailRow
+                  label={t("overview.rowsSynced")}
+                  value={<span className="font-mono">{fmtRows(service.rows_synced)}</span>}
+                />
               </CardContent>
             </Card>
 
@@ -184,7 +214,9 @@ export function ServiceDetailClient({ service }: { service: Service }) {
                     label={t("overview.probeConnected")}
                     value={
                       <span className={probe.connected ? "text-emerald-600" : "text-red-600"}>
-                        {probe.connected ? t("overview.probeConnected") : t("overview.probeNotConnected")}
+                        {probe.connected
+                          ? t("overview.probeConnected")
+                          : t("overview.probeNotConnected")}
                       </span>
                     }
                   />
@@ -192,11 +224,16 @@ export function ServiceDetailClient({ service }: { service: Service }) {
                     label={t("overview.probeReadOnly")}
                     value={
                       <span className={probe.read_only ? "text-emerald-600" : "text-red-600"}>
-                        {probe.read_only ? t("overview.probeReadOnly") : t("overview.probeReadWrite")}
+                        {probe.read_only
+                          ? t("overview.probeReadOnly")
+                          : t("overview.probeReadWrite")}
                       </span>
                     }
                   />
-                  <DetailRow label={t("overview.probeLatency")} value={<span className="font-mono">{probe.latency_ms} ms</span>} />
+                  <DetailRow
+                    label={t("overview.probeLatency")}
+                    value={<span className="font-mono">{probe.latency_ms} ms</span>}
+                  />
                 </CardContent>
               </Card>
             )}
@@ -215,7 +252,9 @@ export function ServiceDetailClient({ service }: { service: Service }) {
                   <tbody>
                     {connectionRows.map(([k, v]) => (
                       <tr key={k} className="border-b last:border-b-0">
-                        <td className="bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">{k}</td>
+                        <td className="bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
+                          {k}
+                        </td>
                         <td className="px-3 py-2 font-mono text-xs text-foreground">{v}</td>
                       </tr>
                     ))}
@@ -231,9 +270,20 @@ export function ServiceDetailClient({ service }: { service: Service }) {
           {service.schema_manifest ? (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-3 gap-3">
-                <Stat label={t("schema.dbType")} value={<span className="font-mono">{service.schema_manifest.db_type}</span>} />
-                <Stat label={t("schema.totalTables")} value={<span className="font-mono">{service.schema_manifest.total_tables}</span>} />
-                <Stat label={t("schema.totalRows")} value={<span className="font-mono">{fmtRows(service.schema_manifest.total_rows)}</span>} />
+                <Stat
+                  label={t("schema.dbType")}
+                  value={<span className="font-mono">{service.schema_manifest.db_type}</span>}
+                />
+                <Stat
+                  label={t("schema.totalTables")}
+                  value={<span className="font-mono">{service.schema_manifest.total_tables}</span>}
+                />
+                <Stat
+                  label={t("schema.totalRows")}
+                  value={
+                    <span className="font-mono">{fmtRows(service.schema_manifest.total_rows)}</span>
+                  }
+                />
               </div>
               <Card>
                 <CardHeader className="pb-3">
@@ -244,19 +294,38 @@ export function ServiceDetailClient({ service }: { service: Service }) {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b text-xs text-muted-foreground">
-                          <th className="px-3 py-2 text-left font-medium">{t("schema.colSchema")}</th>
-                          <th className="px-3 py-2 text-left font-medium">{t("schema.colTable")}</th>
-                          <th className="px-3 py-2 text-right font-medium">{t("schema.colRows")}</th>
-                          <th className="px-3 py-2 text-right font-medium">{t("schema.colColumns")}</th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            {t("schema.colSchema")}
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            {t("schema.colTable")}
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            {t("schema.colRows")}
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            {t("schema.colColumns")}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {service.schema_manifest.tables.map((tbl) => (
-                          <tr key={`${tbl.schema_name}.${tbl.table_name}`} className="border-b last:border-b-0">
-                            <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{tbl.schema_name}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-foreground">{tbl.table_name}</td>
-                            <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">{fmtRows(tbl.row_count)}</td>
-                            <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">{tbl.column_count}</td>
+                          <tr
+                            key={`${tbl.schema_name}.${tbl.table_name}`}
+                            className="border-b last:border-b-0"
+                          >
+                            <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                              {tbl.schema_name}
+                            </td>
+                            <td className="px-3 py-2 font-mono text-xs text-foreground">
+                              {tbl.table_name}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
+                              {fmtRows(tbl.row_count)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
+                              {tbl.column_count}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -337,10 +406,24 @@ export function ServiceDetailClient({ service }: { service: Service }) {
                   <CardTitle className="text-sm font-medium">{t("sync.latestRun")}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                  <DetailRow label={t("sync.duration")} value={<span className="font-mono">{latestSync.duration_seconds}s</span>} />
-                  <DetailRow label={tc("actions")} value={<StatusBadge kind="syncRun" value={latestSync.status} />} />
-                  <DetailRow label={t("sync.records")} value={<span className="font-mono">{fmtRows(latestSync.records_processed)}</span>} />
-                  <DetailRow label={t("overview.lastSync")} value={fmtDateTime(latestSync.started_at)} />
+                  <DetailRow
+                    label={t("sync.duration")}
+                    value={<span className="font-mono">{latestSync.duration_seconds}s</span>}
+                  />
+                  <DetailRow
+                    label={tc("actions")}
+                    value={<StatusBadge kind="syncRun" value={latestSync.status} />}
+                  />
+                  <DetailRow
+                    label={t("sync.records")}
+                    value={
+                      <span className="font-mono">{fmtRows(latestSync.records_processed)}</span>
+                    }
+                  />
+                  <DetailRow
+                    label={t("overview.lastSync")}
+                    value={fmtDateTime(latestSync.started_at)}
+                  />
                 </CardContent>
               </Card>
             ) : (
@@ -360,12 +443,17 @@ export function ServiceDetailClient({ service }: { service: Service }) {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{ts("removeConfirmTitle", { name: service.name })}</AlertDialogTitle>
+              <AlertDialogTitle>
+                {ts("removeConfirmTitle", { name: service.name })}
+              </AlertDialogTitle>
               <AlertDialogDescription>{ts("removeConfirmBody")}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>{tc("cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={remove} className="bg-destructive text-white hover:bg-destructive/90">
+              <AlertDialogAction
+                onClick={remove}
+                className="bg-destructive text-white hover:bg-destructive/90"
+              >
                 {ts("removeConfirmAction")}
               </AlertDialogAction>
             </AlertDialogFooter>

@@ -19,7 +19,7 @@
   "dependencies": {
     "@hookform/resolvers": "3.10.0",
     "@iblai/iblai-api": "4.166.0-ai",
-    "@iblai/iblai-js": "1.22.4-onboarding-v2.2",
+    "@iblai/iblai-js": "1.23.1",
     "@radix-ui/react-accordion": "1.2.12",
     "@radix-ui/react-alert-dialog": "1.1.13",
     "@radix-ui/react-avatar": "1.1.4",
@@ -53,6 +53,7 @@
     "react-redux": "9.2.0",
     "sonner": "2.0.7",
     "tailwind-merge": "3.2.0",
+    "yaml": "2.8.0",
     "zod": "3.24.2"
   },
   "devDependencies": {

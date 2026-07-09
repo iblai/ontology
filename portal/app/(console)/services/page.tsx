@@ -34,7 +34,10 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[] | null>(null);
 
   useEffect(() => {
-    apiClient.services.list().then(setServices).catch((e) => console.error("services load failed", e));
+    apiClient.services
+      .list()
+      .then(setServices)
+      .catch((e) => console.error("services load failed", e));
   }, []);
 
   async function remove(name: string) {
@@ -111,7 +114,9 @@ export default function ServicesPage() {
           </AlertDialogTrigger>
           <AlertDialogContent onClick={(e) => e.stopPropagation()}>
             <AlertDialogHeader>
-              <AlertDialogTitle>{t("removeConfirmTitle", { name: row.original.name })}</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t("removeConfirmTitle", { name: row.original.name })}
+              </AlertDialogTitle>
               <AlertDialogDescription>{t("removeConfirmBody")}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -147,7 +152,12 @@ export default function ServicesPage() {
         <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
           <p className="text-sm font-medium text-foreground">{t("empty")}</p>
           <p className="text-xs text-muted-foreground">{t("emptyHint")}</p>
-          <Button size="sm" variant="outline" className="mt-2" onClick={() => router.push("/catalog")}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => router.push("/catalog")}
+          >
             {t("addService")}
           </Button>
         </div>

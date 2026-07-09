@@ -1,6 +1,10 @@
 {
-  "uiDialog": { "close": "Close" },
-  "uiSheet": { "close": "Close" },
+  "uiDialog": {
+    "close": "Close"
+  },
+  "uiSheet": {
+    "close": "Close"
+  },
   "uiSidebar": {
     "sidebarTitle": "Sidebar",
     "mobileDescription": "Displays the mobile sidebar.",
@@ -71,7 +75,8 @@
     "mcpPlayground": "Playground",
     "platform": "ibl.ai platform",
     "account": "Account",
-    "profile": "Profile"
+    "profile": "Profile",
+    "config": "Configuration"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -388,5 +393,24 @@
     "syncSuccess": "Success",
     "syncFailed": "Failed",
     "syncRunning": "Running"
+  },
+  "backendConfig": {
+    "title": "Backend configuration",
+    "subtitle": "Read-only view of every configuration file the ontology backend runs on.",
+    "refresh": "Refresh",
+    "maskedNotice": "Credential-looking values are masked on the server before they reach the browser; environment-variable references (like $VAR) are shown as-is.",
+    "missing": "File not found: {path}",
+    "optionalMissing": "Not present in this deployment: {path}",
+    "updated": "updated",
+    "parseError": "Could not parse for summary",
+    "file_ontology": "Ontology",
+    "file_services": "Services",
+    "file_schedules": "Sync schedules",
+    "file_roles": "Roles",
+    "file_tools": "MCP tools",
+    "file_catalog": "Catalog",
+    "file_compose": "Docker Compose",
+    "file_caddyfile": "Proxy (Caddyfile)",
+    "file_env": "Environment (.env)"
   }
 }

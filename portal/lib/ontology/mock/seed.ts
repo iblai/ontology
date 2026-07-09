@@ -17,7 +17,12 @@ import { isoHoursAgo, isoDaysAgo, isoMinutesAgo, uid } from "./store";
 
 function peopleSoftManifest() {
   const tables = [
-    { schema_name: "SYSADM", table_name: "PS_STDNT_CAR_TERM", row_count: 2_345_678, column_count: 24 },
+    {
+      schema_name: "SYSADM",
+      table_name: "PS_STDNT_CAR_TERM",
+      row_count: 2_345_678,
+      column_count: 24,
+    },
     { schema_name: "SYSADM", table_name: "PS_STDNT_ENRL", row_count: 1_876_543, column_count: 31 },
     { schema_name: "SYSADM", table_name: "PS_FIN_AID_AWD", row_count: 987_654, column_count: 18 },
     { schema_name: "SYSADM", table_name: "PS_CLASS_TBL", row_count: 543_210, column_count: 42 },
@@ -78,15 +83,9 @@ function snowflakeManifest() {
 }
 
 function buildSafetyReport(serviceName: string, dbType: string, passed: boolean): SafetyReport {
-  const tests = ([
-    "CREATE TABLE",
-    "INSERT",
-    "UPDATE",
-    "DELETE",
-    "DROP TABLE",
-    "ALTER TABLE",
-    "TRUNCATE",
-  ] as const).map((name) => ({
+  const tests = (
+    ["CREATE TABLE", "INSERT", "UPDATE", "DELETE", "DROP TABLE", "ALTER TABLE", "TRUNCATE"] as const
+  ).map((name) => ({
     test_name: name,
     sql_attempted: `-- ${name} attempt on ${serviceName}`,
     result: (passed ? "passed" : name === "DROP TABLE" ? "failed" : "passed") as
@@ -134,7 +133,8 @@ function buildProvisioningRun(
   const steps: ProvisioningStep[] = stepTypes.map((step_type, i) => {
     let stepStatus: ProvisioningStep["status"];
     if (status === "completed") {
-      stepStatus = step_type === "docker_compose" && serviceName === "peoplesoft" ? "skipped" : "completed";
+      stepStatus =
+        step_type === "docker_compose" && serviceName === "peoplesoft" ? "skipped" : "completed";
     } else if (status === "running") {
       stepStatus = i < 2 ? "completed" : i === 2 ? "running" : "pending";
     } else {
@@ -160,7 +160,10 @@ function buildProvisioningRun(
           : stepStatus === "skipped"
             ? ({ skipped: "database service uses shared MCP Toolbox" } as Record<string, unknown>)
             : stepStatus === "failed"
-              ? ({ error: `Failed during ${step_type}: permission denied` } as Record<string, unknown>)
+              ? ({ error: `Failed during ${step_type}: permission denied` } as Record<
+                  string,
+                  unknown
+                >)
               : undefined,
       error_message: stepStatus === "failed" ? "Permission denied during operation." : undefined,
     };
@@ -172,7 +175,8 @@ function buildProvisioningRun(
     started_at: startedAt,
     completed_at:
       status === "completed" ? isoHoursAgo(43) : status === "failed" ? isoHoursAgo(43) : undefined,
-    error_message: status === "failed" ? `Pipeline failed at step ${stepTypes[failAtStep ?? 0]}.` : undefined,
+    error_message:
+      status === "failed" ? `Pipeline failed at step ${stepTypes[failAtStep ?? 0]}.` : undefined,
     steps,
   };
 }
@@ -447,8 +451,18 @@ function buildMcpTools(): McpTool[] {
       source: "peoplesoft-db",
       description: "Get enrollment records for a student by EMPLID",
       parameters: [
-        { name: "student_id", type: "string", description: "The EMPLID of the student", required: true },
-        { name: "term", type: "string", description: "Optional term code (e.g. 2026 FALL)", required: false },
+        {
+          name: "student_id",
+          type: "string",
+          description: "The EMPLID of the student",
+          required: true,
+        },
+        {
+          name: "term",
+          type: "string",
+          description: "Optional term code (e.g. 2026 FALL)",
+          required: false,
+        },
       ],
       statement:
         "SELECT * FROM SYSADM.PS_STDNT_ENRL WHERE EMPLID = :student_id AND (:term IS NULL OR STRM = :term)",
@@ -460,8 +474,18 @@ function buildMcpTools(): McpTool[] {
       source: "peoplesoft-db",
       description: "Get financial aid awards for a student by EMPLID",
       parameters: [
-        { name: "student_id", type: "string", description: "The EMPLID of the student", required: true },
-        { name: "aid_year", type: "string", description: "Optional aid year (e.g. 2026)", required: false },
+        {
+          name: "student_id",
+          type: "string",
+          description: "The EMPLID of the student",
+          required: true,
+        },
+        {
+          name: "aid_year",
+          type: "string",
+          description: "Optional aid year (e.g. 2026)",
+          required: false,
+        },
       ],
       statement: "SELECT * FROM SYSADM.PS_FIN_AID_AWD WHERE EMPLID = :student_id",
     },
@@ -503,7 +527,12 @@ function buildMcpTools(): McpTool[] {
       source: "peoplesoft-db",
       description: "List Slate applications with optional status filter",
       parameters: [
-        { name: "status", type: "string", description: "Application status (e.g. admitted)", required: false },
+        {
+          name: "status",
+          type: "string",
+          description: "Application status (e.g. admitted)",
+          required: false,
+        },
         { name: "limit", type: "integer", description: "Max results", required: false },
       ],
     },
@@ -517,7 +546,8 @@ function buildMcpTools(): McpTool[] {
         { name: "customer_id", type: "string", description: "Customer ID", required: false },
         { name: "limit", type: "integer", description: "Max results", required: false },
       ],
-      statement: "SELECT * FROM SALES.ORDERS WHERE (:customer_id IS NULL OR CUSTOMER_ID = :customer_id) LIMIT :limit",
+      statement:
+        "SELECT * FROM SALES.ORDERS WHERE (:customer_id IS NULL OR CUSTOMER_ID = :customer_id) LIMIT :limit",
     },
     {
       kind: "tool",
@@ -655,7 +685,11 @@ function buildHealth(): HealthSnapshot {
 export function buildSeed(): Db {
   const services = buildServices();
   const safetyReports: SafetyReport[] = services.map((s) =>
-    buildSafetyReport(s.name, s.schema_manifest?.db_type ?? "postgres", s.safety_status === "passed"),
+    buildSafetyReport(
+      s.name,
+      s.schema_manifest?.db_type ?? "postgres",
+      s.safety_status === "passed",
+    ),
   );
   const serviceHealth: ServiceHealth[] = services.map((s) => ({
     id: uid("sh_"),
@@ -664,7 +698,10 @@ export function buildSeed(): Db {
     read_only: s.safety_status === "passed",
     latency_ms: s.status === "error" ? 0 : 42,
     checked_at: isoMinutesAgo(5),
-    detail: (s.status === "error" ? { error: "Connection refused" } : { ok: true }) as Record<string, unknown>,
+    detail: (s.status === "error" ? { error: "Connection refused" } : { ok: true }) as Record<
+      string,
+      unknown
+    >,
   }));
   const provisioningRuns: ProvisioningRun[] = [
     buildProvisioningRun("peoplesoft", "completed"),

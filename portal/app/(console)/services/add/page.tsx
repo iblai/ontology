@@ -10,7 +10,13 @@ import { SectionHeader } from "@/components/console/section-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,13 +99,19 @@ export default function AddServicePage() {
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <StepDot active={step === "path"} done={step !== "path"} label="1" />
-        <span className={step === "path" ? "font-medium text-foreground" : ""}>{t("pathTitle")}</span>
+        <span className={step === "path" ? "font-medium text-foreground" : ""}>
+          {t("pathTitle")}
+        </span>
         <span className="h-px w-8 bg-border" />
         <StepDot active={step === "config"} done={step === "review"} label="2" />
-        <span className={step === "config" ? "font-medium text-foreground" : ""}>{t("configTitle")}</span>
+        <span className={step === "config" ? "font-medium text-foreground" : ""}>
+          {t("configTitle")}
+        </span>
         <span className="h-px w-8 bg-border" />
         <StepDot active={step === "review"} done={false} label="3" />
-        <span className={step === "review" ? "font-medium text-foreground" : ""}>{t("reviewTitle")}</span>
+        <span className={step === "review" ? "font-medium text-foreground" : ""}>
+          {t("reviewTitle")}
+        </span>
       </div>
 
       {step === "path" && (
@@ -159,7 +171,11 @@ export default function AddServicePage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t("name")} hint={t("nameHint")}>
-                <Input value={form.name} onChange={(e) => update("name", e.target.value)} className="font-mono" />
+                <Input
+                  value={form.name}
+                  onChange={(e) => update("name", e.target.value)}
+                  className="font-mono"
+                />
               </Field>
               <Field label={t("serviceType")}>
                 <Select
@@ -176,16 +192,32 @@ export default function AddServicePage() {
                 </Select>
               </Field>
               <Field label={t("host")}>
-                <Input value={form.host} onChange={(e) => update("host", e.target.value)} className="font-mono" />
+                <Input
+                  value={form.host}
+                  onChange={(e) => update("host", e.target.value)}
+                  className="font-mono"
+                />
               </Field>
               <Field label={t("port")}>
-                <Input value={form.port} onChange={(e) => update("port", e.target.value)} className="font-mono" />
+                <Input
+                  value={form.port}
+                  onChange={(e) => update("port", e.target.value)}
+                  className="font-mono"
+                />
               </Field>
               <Field label={t("database")}>
-                <Input value={form.database} onChange={(e) => update("database", e.target.value)} className="font-mono" />
+                <Input
+                  value={form.database}
+                  onChange={(e) => update("database", e.target.value)}
+                  className="font-mono"
+                />
               </Field>
               <Field label={t("user")}>
-                <Input value={form.user} onChange={(e) => update("user", e.target.value)} className="font-mono" />
+                <Input
+                  value={form.user}
+                  onChange={(e) => update("user", e.target.value)}
+                  className="font-mono"
+                />
               </Field>
               <Field label={t("password")} hint={t("passwordHint")}>
                 <Input
@@ -228,11 +260,26 @@ export default function AddServicePage() {
           <Card>
             <CardContent className="grid gap-x-6 gap-y-2 py-4 sm:grid-cols-2">
               <ReviewRow label={t("name")} value={<span className="font-mono">{form.name}</span>} />
-              <ReviewRow label={t("serviceType")} value={<span className="font-mono">{form.service_type}</span>} />
-              <ReviewRow label={t("host")} value={<span className="font-mono">{form.host || "—"}</span>} />
-              <ReviewRow label={t("port")} value={<span className="font-mono">{form.port || "—"}</span>} />
-              <ReviewRow label={t("database")} value={<span className="font-mono">{form.database || "—"}</span>} />
-              <ReviewRow label={t("user")} value={<span className="font-mono">{form.user || "—"}</span>} />
+              <ReviewRow
+                label={t("serviceType")}
+                value={<span className="font-mono">{form.service_type}</span>}
+              />
+              <ReviewRow
+                label={t("host")}
+                value={<span className="font-mono">{form.host || "—"}</span>}
+              />
+              <ReviewRow
+                label={t("port")}
+                value={<span className="font-mono">{form.port || "—"}</span>}
+              />
+              <ReviewRow
+                label={t("database")}
+                value={<span className="font-mono">{form.database || "—"}</span>}
+              />
+              <ReviewRow
+                label={t("user")}
+                value={<span className="font-mono">{form.user || "—"}</span>}
+              />
             </CardContent>
           </Card>
           {form.skipSafety && (
@@ -300,7 +347,15 @@ function PathCard({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <Label className="text-xs">{label}</Label>

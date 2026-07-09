@@ -1,5 +1,13 @@
 import { cn } from "@/lib/utils";
-import { statusTone, safetyTone, syncTone, runTone, stepTone, syncRunTone, safetyTestTone } from "@/lib/ontology/format";
+import {
+  statusTone,
+  safetyTone,
+  syncTone,
+  runTone,
+  stepTone,
+  syncRunTone,
+  safetyTestTone,
+} from "@/lib/ontology/format";
 import type {
   ServiceStatus,
   SafetyStatus,

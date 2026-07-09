@@ -140,7 +140,9 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">{t("quickCounts")}</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {t("quickCounts")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading || !counts ? (

@@ -316,3 +316,29 @@ export interface Db {
   roles: Role[];
   health: HealthSnapshot;
 }
+// ---- Backend configuration visibility (read-only; secrets masked server-side) ----
+
+export interface BackendConfigFile {
+  /** Stable id: ontology | services | schedules | roles | tools | catalog | compose | caddyfile | env */
+  id: string;
+  /** Repo-relative path under the ontology root. */
+  path: string;
+  format: "yaml" | "caddyfile" | "env";
+  exists: boolean;
+  /** Optional files (e.g. .env) render as "not present" rather than an error. */
+  optional: boolean;
+  sizeBytes: number | null;
+  modifiedAt: string | null;
+  /** Raw file content with credential-looking values masked. */
+  content: string | null;
+  /** Parse error, if the summary could not be derived. */
+  error?: string;
+  /** Parsed highlights (counts, names) — never raw secret values. */
+  summary: { label: string; value: string }[];
+}
+
+export interface BackendConfigSnapshot {
+  root: string;
+  generatedAt: string;
+  files: BackendConfigFile[];
+}

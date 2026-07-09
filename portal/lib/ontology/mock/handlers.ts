@@ -40,7 +40,9 @@ export const mockApi = {
     },
     runs(name: string): ProvisioningRun[] {
       return query((db) =>
-        db.provisioning_runs.filter((r) => r.service_name === name).sort((a, b) => b.started_at.localeCompare(a.started_at)),
+        db.provisioning_runs
+          .filter((r) => r.service_name === name)
+          .sort((a, b) => b.started_at.localeCompare(a.started_at)),
       );
     },
     safetyReport(name: string): SafetyReport | undefined {
@@ -56,12 +58,12 @@ export const mockApi = {
           read_only: true,
           latency_ms: name === "snowflake" ? 0 : 35 + Math.floor(Math.random() * 30),
           checked_at: now(),
-          detail: (name === "snowflake" ? { error: "Connection refused" } : { ok: true }) as Record<string, unknown>,
+          detail: (name === "snowflake" ? { error: "Connection refused" } : { ok: true }) as Record<
+            string,
+            unknown
+          >,
         };
-        db.service_health = [
-          ...db.service_health.filter((h) => h.service_name !== name),
-          probe,
-        ];
+        db.service_health = [...db.service_health.filter((h) => h.service_name !== name), probe];
         return probe;
       });
     },
@@ -70,15 +72,17 @@ export const mockApi = {
         const svc = db.services.find((s) => s.name === name);
         const passed = svc?.safety_status === "passed";
         const dbType = svc?.schema_manifest?.db_type ?? "postgres";
-        const tests = ([
-          "CREATE TABLE",
-          "INSERT",
-          "UPDATE",
-          "DELETE",
-          "DROP TABLE",
-          "ALTER TABLE",
-          "TRUNCATE",
-        ] as const).map((test_name) => ({
+        const tests = (
+          [
+            "CREATE TABLE",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "DROP TABLE",
+            "ALTER TABLE",
+            "TRUNCATE",
+          ] as const
+        ).map((test_name) => ({
           test_name,
           sql_attempted: `-- ${test_name} attempt on ${name}`,
           result: (passed ? "passed" : "failed") as "passed" | "failed",
@@ -103,10 +107,7 @@ export const mockApi = {
             : `-- Revoke write privileges for ${name}_readonly:\nREVOKE CREATE, INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE ON SCHEMA public FROM ${name}_readonly;`,
           created_at: now(),
         };
-        db.safety_reports = [
-          ...db.safety_reports.filter((r) => r.service_name !== name),
-          report,
-        ];
+        db.safety_reports = [...db.safety_reports.filter((r) => r.service_name !== name), report];
         if (svc) {
           svc.safety_status = passed ? "passed" : "failed";
           svc.last_safety_check_at = now();
@@ -139,10 +140,9 @@ export const mockApi = {
           order: i,
           started_at: isoMinutesAgo(i * 2 + 1),
           completed_at: isoMinutesAgo(i * 2),
-          output:
-            (step_type === "docker_compose" && svc.service_type === "database"
-              ? { skipped: "database service uses shared MCP Toolbox" }
-              : { ok: true }) as Record<string, unknown>,
+          output: (step_type === "docker_compose" && svc.service_type === "database"
+            ? { skipped: "database service uses shared MCP Toolbox" }
+            : { ok: true }) as Record<string, unknown>,
         }));
         const run: ProvisioningRun = {
           id: runId,
@@ -265,7 +265,9 @@ export const mockApi = {
             latestBySchedule.set(r.schedule_name, r);
           }
         }
-        return [...latestBySchedule.values()].sort((a, b) => a.schedule_name.localeCompare(b.schedule_name));
+        return [...latestBySchedule.values()].sort((a, b) =>
+          a.schedule_name.localeCompare(b.schedule_name),
+        );
       });
     },
     history(service?: string, limit = 20): SyncRun[] {
@@ -300,7 +302,8 @@ export const mockApi = {
         issues: [
           {
             severity: "warning" as const,
-            message: "Tool 'get-canvas-activity' references source 'peoplesoft-db' (database) but is type 'http'. Consider a dedicated API source.",
+            message:
+              "Tool 'get-canvas-activity' references source 'peoplesoft-db' (database) but is type 'http'. Consider a dedicated API source.",
           },
         ],
       }));
@@ -315,8 +318,20 @@ export const mockApi = {
           tool,
           params,
           rows: [
-            { EMPLID: "001234567", NAME: "Doe, Jane", TERM: "2026 FALL", UNITS: 15, STATUS: "ENROLLED" },
-            { EMPLID: "001234567", NAME: "Doe, Jane", TERM: "2026 SPR", UNITS: 12, STATUS: "COMPLETED" },
+            {
+              EMPLID: "001234567",
+              NAME: "Doe, Jane",
+              TERM: "2026 FALL",
+              UNITS: 15,
+              STATUS: "ENROLLED",
+            },
+            {
+              EMPLID: "001234567",
+              NAME: "Doe, Jane",
+              TERM: "2026 SPR",
+              UNITS: 12,
+              STATUS: "COMPLETED",
+            },
           ],
           executed_at: now(),
         },

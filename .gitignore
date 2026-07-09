@@ -27,3 +27,6 @@ caddy-data/
 htmlcov/
 cache/
 .agents
+
+# local memory
+CLAUDE.local.md

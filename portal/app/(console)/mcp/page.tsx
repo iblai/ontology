@@ -11,7 +11,13 @@ import { SectionHeader } from "@/components/console/section-header";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -44,13 +50,38 @@ export default function McpPage() {
   }
 
   const toolTypes = Array.from(new Set((tools ?? []).map((t) => t.type)));
-  const filteredTools = typeFilter === "all" ? (tools ?? []) : (tools ?? []).filter((t) => t.type === typeFilter);
+  const filteredTools =
+    typeFilter === "all" ? (tools ?? []) : (tools ?? []).filter((t) => t.type === typeFilter);
 
   const toolCols: ColumnDef<McpTool, unknown>[] = [
-    { accessorKey: "name", header: sortableHeader(t("tools.colName")), cell: ({ row }) => <span className="font-mono text-xs font-medium text-foreground">{row.original.name}</span> },
-    { accessorKey: "type", header: sortableHeader(t("tools.colType")), cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.type}</span> },
-    { accessorKey: "source", header: sortableHeader(t("tools.colSource")), cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.source}</span> },
-    { accessorKey: "description", header: t("tools.colDescription"), cell: ({ row }) => <span className="text-xs text-foreground">{row.original.description.slice(0, 60)}</span> },
+    {
+      accessorKey: "name",
+      header: sortableHeader(t("tools.colName")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs font-medium text-foreground">{row.original.name}</span>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: sortableHeader(t("tools.colType")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">{row.original.type}</span>
+      ),
+    },
+    {
+      accessorKey: "source",
+      header: sortableHeader(t("tools.colSource")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">{row.original.source}</span>
+      ),
+    },
+    {
+      accessorKey: "description",
+      header: t("tools.colDescription"),
+      cell: ({ row }) => (
+        <span className="text-xs text-foreground">{row.original.description.slice(0, 60)}</span>
+      ),
+    },
   ];
 
   return (
@@ -72,17 +103,38 @@ export default function McpPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium">{t("gateway.title")}</CardTitle>
-                  <span className={cn("flex items-center gap-1.5 text-xs font-medium", gateway.running ? "text-emerald-600" : "text-red-600")}>
-                    {gateway.running ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />}
+                  <span
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-medium",
+                      gateway.running ? "text-emerald-600" : "text-red-600",
+                    )}
+                  >
+                    {gateway.running ? (
+                      <CheckCircle2 className="size-3.5" />
+                    ) : (
+                      <XCircle className="size-3.5" />
+                    )}
                     {gateway.running ? t("gateway.running") : t("gateway.stopped")}
                   </span>
                 </div>
               </CardHeader>
               <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                <Row label={t("gateway.url")} value={<span className="font-mono text-xs">{gateway.url}</span>} />
-                <Row label={t("gateway.toolCount")} value={<span className="font-mono">{gateway.tool_count}</span>} />
-                <Row label={t("gateway.toolsetCount")} value={<span className="font-mono">{gateway.toolset_count}</span>} />
-                <Row label={t("gateway.activeSessions")} value={<span className="font-mono">{gateway.active_sessions}</span>} />
+                <Row
+                  label={t("gateway.url")}
+                  value={<span className="font-mono text-xs">{gateway.url}</span>}
+                />
+                <Row
+                  label={t("gateway.toolCount")}
+                  value={<span className="font-mono">{gateway.tool_count}</span>}
+                />
+                <Row
+                  label={t("gateway.toolsetCount")}
+                  value={<span className="font-mono">{gateway.toolset_count}</span>}
+                />
+                <Row
+                  label={t("gateway.activeSessions")}
+                  value={<span className="font-mono">{gateway.active_sessions}</span>}
+                />
               </CardContent>
             </Card>
           )}
@@ -110,8 +162,7 @@ export default function McpPage() {
                 columns={toolCols}
                 data={filteredTools}
                 onRowClick={(tool) => {
-                  const params = tool.parameters
-                    .map((p) => `${p.name}: ${p.type}`).join(", ");
+                  const params = tool.parameters.map((p) => `${p.name}: ${p.type}`).join(", ");
                   const stmt = tool.statement ? `\n  ${tool.statement}` : "";
                   const detail = `${tool.description}\n\nparams: ${params || "none"}${stmt}`;
                   toast(detail, { duration: 6000 });
@@ -135,7 +186,9 @@ export default function McpPage() {
                   <CardContent>
                     <ul className="flex flex-col gap-1">
                       {ts.tools.map((tool) => (
-                        <li key={tool} className="font-mono text-xs text-foreground">{tool}</li>
+                        <li key={tool} className="font-mono text-xs text-foreground">
+                          {tool}
+                        </li>
                       ))}
                     </ul>
                   </CardContent>
@@ -165,16 +218,25 @@ export default function McpPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
                   <p className="font-mono text-xs text-muted-foreground">
-                    {t("validate.counts", { sources: report.sources, tools: report.tools, toolsets: report.toolsets })}
+                    {t("validate.counts", {
+                      sources: report.sources,
+                      tools: report.tools,
+                      toolsets: report.toolsets,
+                    })}
                   </p>
                   <div>
-                    <p className="mb-1.5 text-xs font-medium text-foreground">{t("validate.issues")}</p>
+                    <p className="mb-1.5 text-xs font-medium text-foreground">
+                      {t("validate.issues")}
+                    </p>
                     {report.issues.length === 0 ? (
                       <p className="text-xs text-emerald-600">{t("validate.noIssues")}</p>
                     ) : (
                       <ul className="flex flex-col gap-1.5">
                         {report.issues.map((issue, i) => (
-                          <li key={i} className="flex items-start gap-2 rounded-md border px-3 py-2">
+                          <li
+                            key={i}
+                            className="flex items-start gap-2 rounded-md border px-3 py-2"
+                          >
                             <span
                               className={cn(
                                 "mt-0.5 inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium",
@@ -183,7 +245,9 @@ export default function McpPage() {
                                   : "border-amber-200 bg-amber-100 text-amber-800",
                               )}
                             >
-                              {issue.severity === "error" ? t("validate.severityError") : t("validate.severityWarning")}
+                              {issue.severity === "error"
+                                ? t("validate.severityError")
+                                : t("validate.severityWarning")}
                             </span>
                             <span className="text-xs text-foreground">{issue.message}</span>
                           </li>

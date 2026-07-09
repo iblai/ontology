@@ -10,7 +10,13 @@ import { CodeBlock } from "@/components/console/code-block";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -24,7 +30,10 @@ export default function PlaygroundPage() {
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    apiClient.mcp.tools().then(setTools).catch((e) => console.error("playground load failed", e));
+    apiClient.mcp
+      .tools()
+      .then(setTools)
+      .catch((e) => console.error("playground load failed", e));
   }, []);
 
   const tool = tools?.find((t) => t.name === toolName);
@@ -107,7 +116,9 @@ export default function PlaygroundPage() {
                         </Label>
                         <Input
                           value={params[p.name] ?? ""}
-                          onChange={(e) => setParams((prev) => ({ ...prev, [p.name]: e.target.value }))}
+                          onChange={(e) =>
+                            setParams((prev) => ({ ...prev, [p.name]: e.target.value }))
+                          }
                           className="font-mono text-xs"
                           placeholder={p.description}
                         />

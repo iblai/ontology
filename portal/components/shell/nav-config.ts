@@ -4,6 +4,7 @@ import {
   BookOpen,
   RefreshCw,
   Network,
+  FileCog,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,25 +21,29 @@ export interface NavSection {
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    labelKey: "nav.dashboard",
-    items: [{ href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard }],
+    labelKey: "dashboard",
+    items: [{ href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard }],
   },
   {
-    labelKey: "nav.services",
-    items: [{ href: "/services", labelKey: "nav.servicesList", icon: Database }],
+    labelKey: "services",
+    items: [{ href: "/services", labelKey: "servicesList", icon: Database }],
   },
   {
-    labelKey: "nav.catalog",
-    items: [{ href: "/catalog", labelKey: "nav.catalog", icon: BookOpen }],
+    labelKey: "catalog",
+    items: [{ href: "/catalog", labelKey: "catalog", icon: BookOpen }],
   },
   {
-    labelKey: "nav.sync",
-    items: [{ href: "/sync", labelKey: "nav.sync", icon: RefreshCw }],
+    labelKey: "sync",
+    items: [{ href: "/sync", labelKey: "sync", icon: RefreshCw }],
   },
   {
-    labelKey: "nav.mcp",
-    items: [{ href: "/mcp", labelKey: "nav.mcpGateway", icon: Network }],
+    labelKey: "mcp",
+    items: [{ href: "/mcp", labelKey: "mcpGateway", icon: Network }],
+  },
+  {
+    labelKey: "config",
+    items: [{ href: "/config", labelKey: "config", icon: FileCog }],
   },
 ];
 
-export const ALL_NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);;
+export const ALL_NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);

@@ -34,7 +34,8 @@ export function HealthPanel({
       : status === "down"
         ? "text-red-600"
         : "text-amber-600";
-  const statusLabel = status === "healthy" ? healthyLabel : status === "down" ? downLabel : degradedLabel;
+  const statusLabel =
+    status === "healthy" ? healthyLabel : status === "down" ? downLabel : degradedLabel;
 
   return (
     <Card>
@@ -51,12 +52,7 @@ export function HealthPanel({
         {rows.map((r, i) => (
           <div key={i} className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">{r.label}</span>
-            <span
-              className={cn(
-                "font-mono",
-                r.value ? "text-foreground" : "text-red-600",
-              )}
-            >
+            <span className={cn("font-mono", r.value ? "text-foreground" : "text-red-600")}>
               {r.value ? "ok" : "fail"}
             </span>
           </div>

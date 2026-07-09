@@ -11,7 +11,13 @@ import { SectionHeader } from "@/components/console/section-header";
 import { StatusBadge } from "@/components/console/status-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
@@ -33,37 +39,158 @@ export default function SyncPage() {
   async function runAll() {
     const r = await apiClient.sync.runAll();
     toast.success(r.message);
-    apiClient.sync.status().then(setStatus).catch((e) => console.error(e));
-    apiClient.sync.history().then(setHistory).catch((e) => console.error(e));
+    apiClient.sync
+      .status()
+      .then(setStatus)
+      .catch((e) => console.error(e));
+    apiClient.sync
+      .history()
+      .then(setHistory)
+      .catch((e) => console.error(e));
   }
 
   const scheduleCols: ColumnDef<SyncSchedule, unknown>[] = [
-    { accessorKey: "name", header: sortableHeader(t("schedulesColName")), cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.name}</span> },
-    { accessorKey: "cron", header: sortableHeader(t("schedulesColCron")), cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.cron}</span> },
-    { accessorKey: "source", header: sortableHeader(t("schedulesColSource")), cell: ({ row }) => <span className="font-mono text-xs">{row.original.source}</span> },
-    { accessorKey: "tool", header: sortableHeader(t("schedulesColTool")), cell: ({ row }) => <span className="font-mono text-xs">{row.original.tool}</span> },
-    { accessorKey: "mode", header: sortableHeader(t("schedulesColMode")), cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.mode}</span> },
-    { accessorKey: "description", header: t("schedulesColDescription"), cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.description}</span> },
+    {
+      accessorKey: "name",
+      header: sortableHeader(t("schedulesColName")),
+      cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.name}</span>,
+    },
+    {
+      accessorKey: "cron",
+      header: sortableHeader(t("schedulesColCron")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">{row.original.cron}</span>
+      ),
+    },
+    {
+      accessorKey: "source",
+      header: sortableHeader(t("schedulesColSource")),
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.source}</span>,
+    },
+    {
+      accessorKey: "tool",
+      header: sortableHeader(t("schedulesColTool")),
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.tool}</span>,
+    },
+    {
+      accessorKey: "mode",
+      header: sortableHeader(t("schedulesColMode")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">{row.original.mode}</span>
+      ),
+    },
+    {
+      accessorKey: "description",
+      header: t("schedulesColDescription"),
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">{row.original.description}</span>
+      ),
+    },
   ];
 
   const statusCols: ColumnDef<SyncRun, unknown>[] = [
-    { accessorKey: "schedule_name", header: sortableHeader(t("statusColSchedule")), cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.schedule_name}</span> },
-    { accessorKey: "source_system", header: sortableHeader(t("statusColSource")), cell: ({ row }) => <span className="font-mono text-xs">{row.original.source_system}</span> },
-    { accessorKey: "status", header: sortableHeader(t("statusColStatus")), cell: ({ row }) => <StatusBadge kind="syncRun" value={row.original.status} /> },
-    { accessorKey: "started_at", header: sortableHeader(t("statusColStarted")), cell: ({ row }) => <span className="text-xs text-muted-foreground">{fmtDateTime(row.original.started_at)}</span> },
-    { accessorKey: "duration_seconds", header: sortableHeader(t("statusColDuration")), cell: ({ row }) => <span className="font-mono text-xs">{row.original.duration_seconds}s</span> },
-    { accessorKey: "records_processed", header: sortableHeader(t("statusColRecords")), cell: ({ row }) => <span className="font-mono text-xs tabular-nums">{row.original.records_processed}</span> },
+    {
+      accessorKey: "schedule_name",
+      header: sortableHeader(t("statusColSchedule")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs font-medium">{row.original.schedule_name}</span>
+      ),
+    },
+    {
+      accessorKey: "source_system",
+      header: sortableHeader(t("statusColSource")),
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.source_system}</span>,
+    },
+    {
+      accessorKey: "status",
+      header: sortableHeader(t("statusColStatus")),
+      cell: ({ row }) => <StatusBadge kind="syncRun" value={row.original.status} />,
+    },
+    {
+      accessorKey: "started_at",
+      header: sortableHeader(t("statusColStarted")),
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {fmtDateTime(row.original.started_at)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "duration_seconds",
+      header: sortableHeader(t("statusColDuration")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.duration_seconds}s</span>
+      ),
+    },
+    {
+      accessorKey: "records_processed",
+      header: sortableHeader(t("statusColRecords")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs tabular-nums">{row.original.records_processed}</span>
+      ),
+    },
   ];
 
   const historyCols: ColumnDef<SyncRun, unknown>[] = [
-    { accessorKey: "id", header: sortableHeader(t("historyColId")), cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.id.slice(0, 8)}</span> },
-    { accessorKey: "schedule_name", header: sortableHeader(t("historyColSchedule")), cell: ({ row }) => <span className="font-mono text-xs">{row.original.schedule_name}</span> },
-    { accessorKey: "status", header: sortableHeader(t("historyColStatus")), cell: ({ row }) => <StatusBadge kind="syncRun" value={row.original.status} /> },
-    { accessorKey: "started_at", header: sortableHeader(t("historyColStarted")), cell: ({ row }) => <span className="text-xs text-muted-foreground">{fmtDateTime(row.original.started_at)}</span> },
-    { accessorKey: "duration_seconds", header: sortableHeader(t("historyColDuration")), cell: ({ row }) => <span className="font-mono text-xs">{row.original.duration_seconds}s</span> },
-    { accessorKey: "records_created", header: sortableHeader(t("historyColCreated")), cell: ({ row }) => <span className="font-mono text-xs tabular-nums">{row.original.records_created}</span> },
-    { accessorKey: "records_updated", header: sortableHeader(t("historyColUpdated")), cell: ({ row }) => <span className="font-mono text-xs tabular-nums">{row.original.records_updated}</span> },
-    { accessorKey: "error_message", header: t("historyColError"), cell: ({ row }) => row.original.error_message ? <span className="text-xs text-red-600">{row.original.error_message.slice(0, 50)}</span> : <span className="text-xs text-muted-foreground">—</span> },
+    {
+      accessorKey: "id",
+      header: sortableHeader(t("historyColId")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.original.id.slice(0, 8)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "schedule_name",
+      header: sortableHeader(t("historyColSchedule")),
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.schedule_name}</span>,
+    },
+    {
+      accessorKey: "status",
+      header: sortableHeader(t("historyColStatus")),
+      cell: ({ row }) => <StatusBadge kind="syncRun" value={row.original.status} />,
+    },
+    {
+      accessorKey: "started_at",
+      header: sortableHeader(t("historyColStarted")),
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {fmtDateTime(row.original.started_at)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "duration_seconds",
+      header: sortableHeader(t("historyColDuration")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.duration_seconds}s</span>
+      ),
+    },
+    {
+      accessorKey: "records_created",
+      header: sortableHeader(t("historyColCreated")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs tabular-nums">{row.original.records_created}</span>
+      ),
+    },
+    {
+      accessorKey: "records_updated",
+      header: sortableHeader(t("historyColUpdated")),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs tabular-nums">{row.original.records_updated}</span>
+      ),
+    },
+    {
+      accessorKey: "error_message",
+      header: t("historyColError"),
+      cell: ({ row }) =>
+        row.original.error_message ? (
+          <span className="text-xs text-red-600">{row.original.error_message.slice(0, 50)}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
   ];
 
   return (
@@ -125,7 +252,11 @@ export default function SyncPage() {
             ) : (
               <DataTable
                 columns={historyCols}
-                data={serviceFilter === "all" ? history : history.filter((r) => r.source_system === serviceFilter)}
+                data={
+                  serviceFilter === "all"
+                    ? history
+                    : history.filter((r) => r.source_system === serviceFilter)
+                }
                 pageSize={15}
               />
             )}

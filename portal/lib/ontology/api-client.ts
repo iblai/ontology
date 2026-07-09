@@ -14,15 +14,32 @@ import type {
   HealthSnapshot,
   Role,
   QuickCounts,
+  BackendConfigSnapshot,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_ONTOLOGY_API_URL ?? "";
 const USE_MOCK = !BASE;
 
+/**
+ * The ibl.ai SSO flow stores both tokens in localStorage; the backend's DM
+ * auth scheme wants `Authorization: Token <dm_token>` paired with the edX JWT
+ * in `X-Edx-Jwt`. Browser-only (SSR has no localStorage); absent tokens send
+ * nothing, so dev-anon and Entra-Bearer setups are unaffected.
+ */
+function authHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const headers: Record<string, string> = {};
+  const dmToken = window.localStorage.getItem("dm_token");
+  const edxJwt = window.localStorage.getItem("edx_jwt_token");
+  if (dmToken) headers["Authorization"] = `Token ${dmToken}`;
+  if (edxJwt) headers["X-Edx-Jwt"] = edxJwt;
+  return headers;
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -33,7 +50,9 @@ export const apiClient = {
     all: (): Promise<HealthSnapshot> =>
       USE_MOCK ? Promise.resolve(mockApi.health.all()) : http("/health"),
     recheck: (): Promise<HealthSnapshot> =>
-      USE_MOCK ? Promise.resolve(mockApi.health.recheck()) : http("/health/recheck", { method: "POST" }),
+      USE_MOCK
+        ? Promise.resolve(mockApi.health.recheck())
+        : http("/health/recheck", { method: "POST" }),
   },
   services: {
     list: (): Promise<Service[]> =>
@@ -43,9 +62,7 @@ export const apiClient = {
         ? Promise.resolve(mockApi.services.get(name))
         : http(`/services/${name}`).then((s) => s as Service | null),
     runs: (name: string): Promise<ProvisioningRun[]> =>
-      USE_MOCK
-        ? Promise.resolve(mockApi.services.runs(name))
-        : http(`/services/${name}/runs`),
+      USE_MOCK ? Promise.resolve(mockApi.services.runs(name)) : http(`/services/${name}/runs`),
     safetyReport: (name: string): Promise<SafetyReport | undefined> =>
       USE_MOCK
         ? Promise.resolve(mockApi.services.safetyReport(name))
@@ -111,10 +128,15 @@ export const apiClient = {
     sources: (): Promise<McpSource[]> =>
       USE_MOCK ? Promise.resolve(mockApi.mcp.sources()) : http("/mcp/sources"),
     validate: (): Promise<ComplianceReport> =>
-      USE_MOCK ? Promise.resolve(mockApi.mcp.validate()) : http("/mcp/validate", { method: "POST" }),
+      USE_MOCK
+        ? Promise.resolve(mockApi.mcp.validate())
+        : http("/mcp/validate", { method: "POST" }),
     build: (): Promise<{ ok: boolean; nativeTools: number; path: string }> =>
       USE_MOCK ? Promise.resolve(mockApi.mcp.build()) : http("/mcp/build", { method: "POST" }),
-    test: (tool: string, params: Record<string, unknown>): Promise<{ ok: boolean; result: unknown }> =>
+    test: (
+      tool: string,
+      params: Record<string, unknown>,
+    ): Promise<{ ok: boolean; result: unknown }> =>
       USE_MOCK
         ? Promise.resolve(mockApi.mcp.test(tool, params))
         : http(`/mcp/test/${tool}`, { method: "POST", body: JSON.stringify(params) }),
@@ -122,6 +144,16 @@ export const apiClient = {
   roles: {
     list: (): Promise<Role[]> =>
       USE_MOCK ? Promise.resolve(mockApi.roles.list()) : http("/roles"),
+  },
+  config: {
+    // Served by this console's own Next route, which reads the real backend
+    // config files from disk (secrets masked server-side) — real data even in
+    // mock mode. When the backend grows a /config endpoint, the route can proxy.
+    snapshot: async (): Promise<BackendConfigSnapshot> => {
+      const res = await fetch("/api/ontology/config", { cache: "no-store" });
+      if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+      return res.json() as Promise<BackendConfigSnapshot>;
+    },
   },
   counts: (): Promise<QuickCounts> =>
     USE_MOCK ? Promise.resolve(mockApi.counts()) : http("/counts"),

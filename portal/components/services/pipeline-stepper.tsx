@@ -62,7 +62,13 @@ export function PipelineStepper({ steps }: { steps: ProvisioningStep[] }) {
                       : "border-border",
               )}
             >
-              <Icon className={cn("size-3.5", STATUS_TONES[step.status], step.status === "running" && "animate-spin")} />
+              <Icon
+                className={cn(
+                  "size-3.5",
+                  STATUS_TONES[step.status],
+                  step.status === "running" && "animate-spin",
+                )}
+              />
             </span>
             <div className="flex flex-1 flex-col gap-1 pb-1">
               <div className="flex items-center justify-between gap-2">
@@ -77,20 +83,26 @@ export function PipelineStepper({ steps }: { steps: ProvisioningStep[] }) {
                   </span>
                 )}
               </div>
-              {step.status === "skipped" && step.output && typeof step.output.skipped === "string" && (
-                <p className="text-xs text-muted-foreground">{step.output.skipped}</p>
-              )}
+              {step.status === "skipped" &&
+                step.output &&
+                typeof step.output.skipped === "string" && (
+                  <p className="text-xs text-muted-foreground">{step.output.skipped}</p>
+                )}
               {step.status === "failed" && step.error_message && (
                 <p className="text-xs text-red-600">{step.error_message}</p>
               )}
-              {step.status === "failed" && step.output && typeof step.output.error === "string" && !step.error_message && (
-                <p className="text-xs text-red-600">{step.output.error}</p>
-              )}
-              {step.status === "completed" && step.output && "tables" in step.output && Array.isArray(step.output.tables) && (
-                <p className="text-xs text-muted-foreground">
-                  {String((step.output.tables as unknown[]).length)} tables validated
-                </p>
-              )}
+              {step.status === "failed" &&
+                step.output &&
+                typeof step.output.error === "string" &&
+                !step.error_message && <p className="text-xs text-red-600">{step.output.error}</p>}
+              {step.status === "completed" &&
+                step.output &&
+                "tables" in step.output &&
+                Array.isArray(step.output.tables) && (
+                  <p className="text-xs text-muted-foreground">
+                    {String((step.output.tables as unknown[]).length)} tables validated
+                  </p>
+                )}
             </div>
           </li>
         );

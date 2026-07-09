@@ -20,7 +20,10 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
             <ArrowLeft className="size-4" />
           </Link>
         </Button>
-        <SectionHeader title={entry.display_name} subtitle={<span className="font-mono text-xs">{entry.key}</span>} />
+        <SectionHeader
+          title={entry.display_name}
+          subtitle={<span className="font-mono text-xs">{entry.key}</span>}
+        />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -32,7 +35,11 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
         </Button>
         {entry.skill && (
           <Button size="sm" variant="outline" asChild>
-            <Link href={`https://github.com/iblai/${entry.domain === "enterprise" ? "enterprise-agents" : "higher-education-agents"}/blob/main/skills/${entry.skill.replace(".md", "")}/SKILL.md`} target="_blank" rel="noreferrer">
+            <Link
+              href={`https://github.com/iblai/${entry.domain === "enterprise" ? "enterprise-agents" : "higher-education-agents"}/blob/main/skills/${entry.skill.replace(".md", "")}/SKILL.md`}
+              target="_blank"
+              rel="noreferrer"
+            >
               View upstream skill
             </Link>
           </Button>
@@ -45,9 +52,7 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
             <CardTitle className="text-sm font-medium">Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-foreground">
-              {entry.summary || "No summary available."}
-            </p>
+            <p className="text-sm text-foreground">{entry.summary || "No summary available."}</p>
           </CardContent>
         </Card>
         <Card>
@@ -57,8 +62,14 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
           <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
             <Row label="Type" value={<span className="font-mono text-xs">{entry.type}</span>} />
             <Row label="Domain" value={<span className="font-mono text-xs">{entry.domain}</span>} />
-            <Row label="Adapter" value={<span className="font-mono text-xs">{entry.adapter}</span>} />
-            <Row label="Default toolset" value={<span className="font-mono text-xs">{entry.default_toolset}</span>} />
+            <Row
+              label="Adapter"
+              value={<span className="font-mono text-xs">{entry.adapter}</span>}
+            />
+            <Row
+              label="Default toolset"
+              value={<span className="font-mono text-xs">{entry.default_toolset}</span>}
+            />
           </CardContent>
         </Card>
       </div>
@@ -79,7 +90,9 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
           <CardContent>
             <ul className="flex flex-col gap-1">
               {entry.env.map((e) => (
-                <li key={e} className="font-mono text-xs text-foreground">{e}</li>
+                <li key={e} className="font-mono text-xs text-foreground">
+                  {e}
+                </li>
               ))}
             </ul>
           </CardContent>

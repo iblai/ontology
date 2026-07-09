@@ -48,17 +48,41 @@ class GatewayHealth:
 
 
 def check_db() -> DbHealth:
-    """Inspect the local ontology cache for table/row counts and size."""
+    """Inspect the local ontology cache for table/row counts and size.
+
+    On PostgreSQL the size/row/connection stats are filled from the catalog
+    (``pg_database_size``, ``pg_stat_user_tables.n_live_tup``,
+    ``pg_stat_activity``); on SQLite those stay zero (no equivalent view).
+    """
     from django.db import connection
 
     try:
         with connection.cursor() as cur:
-            cur.execute(
-                "SELECT count(*) FROM information_schema.tables "
-                "WHERE table_schema NOT IN ('pg_catalog','information_schema')"
-                if connection.vendor == "postgresql"
-                else "SELECT count(*) FROM sqlite_master WHERE type='table'"
-            )
+            if connection.vendor == "postgresql":
+                cur.execute(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema NOT IN ('pg_catalog','information_schema')"
+                )
+                table_count = cur.fetchone()[0]
+                cur.execute(
+                    "SELECT coalesce(sum(n_live_tup),0) FROM pg_stat_user_tables"
+                )
+                total_rows = int(cur.fetchone()[0] or 0)
+                cur.execute("SELECT pg_database_size(current_database())")
+                size_mb = round((cur.fetchone()[0] or 0) / 1_048_576, 2)
+                cur.execute(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database()"
+                )
+                active_connections = int(cur.fetchone()[0] or 0)
+                return DbHealth(
+                    healthy=True,
+                    table_count=table_count,
+                    total_rows=total_rows,
+                    size_mb=size_mb,
+                    active_connections=active_connections,
+                )
+            cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table'")
             table_count = cur.fetchone()[0]
         return DbHealth(healthy=True, table_count=table_count)
     except Exception:

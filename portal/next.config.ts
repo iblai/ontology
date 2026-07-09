@@ -8,7 +8,12 @@ const tauriStub = path.resolve("./lib/tauri-stub.js");
 const TAURI_MODULES = ["@tauri-apps/api/core", "@tauri-apps/api/event", "@tauri-apps/plugin-os"];
 // The SDK's next bundle (SsoLogin, Account) references optional packages
 // not needed for our use case. Alias them to the no-op stub.
-const OPTIONAL_STUBS = [...TAURI_MODULES, "@iblai/agent-ai", "livekit-client", "@livekit/components-react"];
+const OPTIONAL_STUBS = [
+  ...TAURI_MODULES,
+  "@iblai/agent-ai",
+  "livekit-client",
+  "@livekit/components-react",
+];
 
 const MSW_BROWSER = path.resolve("./node_modules/msw/lib/browser/index.mjs");
 // webpack resolve.alias, SDK components bind a different ReactReduxContext
