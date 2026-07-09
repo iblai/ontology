@@ -4,6 +4,31 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] - 2026-07-09
+
+### Security
+- Added JWT replay protection to the gateway (#2147). The token `jti` was
+  extracted and audit-logged but never checked, so an intercepted token could be
+  replayed for its full (~1 hour) validity window with no way to detect or block
+  it — critical when chained with the (now-fixed) cleartext-transport and role-
+  forgery findings. `jti` is now a **required, validated claim** (a token without
+  one is rejected), and `OntologyIdentityMiddleware` runs a cache-backed replay
+  guard (`identity/replay.py`) keyed on the `jti` with an entry TTL of the
+  token's remaining lifetime (`exp - now`), so the store self-expires and never
+  grows unbounded. Two modes via `ONTOLOGY_JWT_REPLAY_MODE`: `bind` (default)
+  binds a `jti` to its first-seen client IP and rejects the same `jti` presented
+  from a different IP — this catches a stolen-and-replayed token while preserving
+  the platform's legitimate reuse of an access token across requests; `strict`
+  enforces single-use; `off` disables. Backed by the Django cache, so a shared
+  `ONTOLOGY_CACHE_URL` (Redis) enforces the check across worker processes (the
+  per-process `LocMemCache` catches a replay only on the worker that first saw
+  the token — same caveat as the rate limiter). A dedicated cache store is used
+  rather than a DB uniqueness constraint on `AuditLog.entra_token_id` because the
+  audit log must record every access. Short token lifetimes and sender-
+  constrained tokens (DPoP / mTLS) remain the strongest defences and are
+  recommended in the README. Configurable via `ONTOLOGY_JWT_REPLAY_MODE` and
+  `ONTOLOGY_JWT_REPLAY_TTL_FALLBACK`.
+
 ## [0.2.10] - 2026-07-09
 
 ### Security

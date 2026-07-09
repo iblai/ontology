@@ -153,3 +153,14 @@ SECURITY_CSP = os.environ.get(
 )
 SECURITY_REFERRER_POLICY = os.environ.get("ONTOLOGY_REFERRER_POLICY", "no-referrer")
 SECURITY_FRAME_OPTIONS = os.environ.get("ONTOLOGY_FRAME_OPTIONS", "DENY")
+
+# --- JWT replay protection -----------------------------------------------
+# Backs the replay guard in OntologyIdentityMiddleware. Entra access tokens are
+# reuse-designed, so the default `bind` mode allows a jti to be reused from its
+# first-seen client IP while rejecting the same jti from a different IP; `strict`
+# enforces single-use; `off` disables. Backed by the Django cache (share it via
+# ONTOLOGY_CACHE_URL for cross-worker coverage). See the README.
+JWT_REPLAY_MODE = os.environ.get("ONTOLOGY_JWT_REPLAY_MODE", "bind").lower()
+JWT_REPLAY_TTL_FALLBACK = int(
+    os.environ.get("ONTOLOGY_JWT_REPLAY_TTL_FALLBACK", "3600")
+)
