@@ -1,13 +1,5 @@
 import { format, parseISO } from "date-fns";
 
-export function money(cents: number): string {
-  const sign = cents < 0 ? "-" : "";
-  return `${sign}$${(Math.abs(cents) / 100).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 export function fmtDate(iso: string | undefined): string {
   if (!iso) return "—";
   try {

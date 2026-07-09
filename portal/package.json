@@ -1,5 +1,5 @@
 {
-  "name": "enrollment-portal",
+  "name": "ontology-console",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,7 +14,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "typecheck": "tsgo --noEmit",
-    "check": "tsgo lib/api/__demo__.ts --ignoreConfig --types node --outDir .selfcheck --module commonjs --target es2022 --esModuleInterop --skipLibCheck && node .selfcheck/api/__demo__.js && node scripts/check-i18n.mjs"
+    "check": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "3.10.0",
@@ -69,10 +69,5 @@
     "tw-animate-css": "1.2.5",
     "typescript": "5.9.3"
   },
-  "packageManager": "pnpm@11.8.0",
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
-  }
+  "packageManager": "pnpm@11.8.0"
 }

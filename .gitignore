@@ -26,3 +26,4 @@ caddy-data/
 .coverage
 htmlcov/
 cache/
+.agents

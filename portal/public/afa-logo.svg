@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="220" height="48" viewBox="0 0 220 48">
-  <g fill="none" fill-rule="evenodd">
-    <path d="M24 4l16 6v12c0 9.5-6.8 18-16 20C14.8 40 8 31.5 8 22V10l16-6z" fill="#1e3a8a"/>
-    <path d="M24 12v16M17 19h14" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-    <text x="50" y="21" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700" fill="#1e3a8a">American Faith</text>
-    <text x="50" y="38" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700" fill="#1e3a8a">Academy</text>
-  </g>
-</svg>
