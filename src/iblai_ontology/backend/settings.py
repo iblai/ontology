@@ -33,10 +33,18 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE: list[str] = [
+    # First: reject cleartext-borne tokens and wrap every response (including
+    # 401/403/429 errors below) with security headers.
+    "iblai_ontology.backend.security_headers.OntologySecurityMiddleware",
     "iblai_ontology.backend.identity.middleware.OntologyIdentityMiddleware",
     # After identity so it can key on the resolved subject; falls back to IP.
     "iblai_ontology.backend.ratelimit.OntologyRateLimitMiddleware",
 ]
+
+# Caddy terminates TLS and forwards the client-facing scheme; trust it so
+# request.is_secure() reflects HTTPS behind the proxy. Safe only because the
+# gateway is reachable exclusively via the proxy in production, never on :8080.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 ROOT_URLCONF = "iblai_ontology.backend.urls"
 
@@ -126,3 +134,22 @@ RATELIMIT_MAX_REQUESTS = int(os.environ.get("ONTOLOGY_RATELIMIT_MAX", "120"))
 RATELIMIT_TOOLS_CALL_MAX = int(
     os.environ.get("ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX", "30")
 )
+
+# --- Transport security / security headers -------------------------------
+# Backs OntologySecurityMiddleware: rejects Bearer tokens over cleartext and
+# emits protective response headers. All env-configurable (see the README).
+SECURITY_HEADERS_ENABLED = (
+    os.environ.get("ONTOLOGY_SECURITY_HEADERS_ENABLED", "true").lower() == "true"
+)
+SECURITY_REQUIRE_HTTPS = (
+    os.environ.get("ONTOLOGY_REQUIRE_HTTPS", "true").lower() == "true"
+)
+SECURITY_HSTS_MAX_AGE = int(os.environ.get("ONTOLOGY_HSTS_MAX_AGE", "31536000"))
+SECURITY_HSTS_INCLUDE_SUBDOMAINS = (
+    os.environ.get("ONTOLOGY_HSTS_INCLUDE_SUBDOMAINS", "true").lower() == "true"
+)
+SECURITY_CSP = os.environ.get(
+    "ONTOLOGY_CSP", "default-src 'none'; frame-ancestors 'none'"
+)
+SECURITY_REFERRER_POLICY = os.environ.get("ONTOLOGY_REFERRER_POLICY", "no-referrer")
+SECURITY_FRAME_OPTIONS = os.environ.get("ONTOLOGY_FRAME_OPTIONS", "DENY")
