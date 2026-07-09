@@ -277,6 +277,36 @@ trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
 whether a connection is secure — keep the gateway reachable only via the proxy,
 never directly on `:8080`.
 
+**JWT replay protection:**
+
+The token `jti` (a required, validated claim) is checked against a cache-backed
+replay store keyed on the `jti`, with each entry expiring exactly when the token
+does (`exp - now`).
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_JWT_REPLAY_MODE` | `bind` | `bind` \| `strict` \| `off` (see below) |
+| `ONTOLOGY_JWT_REPLAY_TTL_FALLBACK` | `3600` | Store TTL (seconds) for a token whose `exp` is missing |
+
+Entra ID **access tokens are bearer tokens designed for reuse** within their
+lifetime — the ibl.ai platform forwards the same token across many MCP requests —
+so blind single-use would break the integration. The modes:
+- `bind` (default): on first sight, bind the `jti` to the request's client IP;
+  the same `jti` presented from a **different** IP is rejected as replay.
+  Legitimate reuse from the platform's stable egress passes; a token stolen and
+  replayed from elsewhere is caught. (IP is read from `X-Forwarded-For` set by
+  Caddy; deployments with multiple platform egress IPs may need `off` or
+  `strict`.)
+- `strict`: single-use — any second presentation of a `jti` is rejected. Only for
+  deployments that mint one-time tokens.
+- `off`: no replay checking.
+
+As with rate limiting, the store is the Django cache: set `ONTOLOGY_CACHE_URL` to
+a `redis://…` URL so the check holds across all worker processes (on the default
+per-process cache a replay is only caught on the worker that first saw the token).
+Replay detection is best-effort; short token lifetimes and sender-constrained
+tokens (DPoP / mTLS) remain the strongest defences.
+
 **Vector store authentication:**
 
 | Env var | Default | Purpose |

@@ -298,6 +298,7 @@ def test_identity_middleware_role_escalation_forbidden(backend):
                 roles=[],
                 groups=[],
                 token_jti="j",
+                token_exp=None,
                 raw_claims={},
             )
 

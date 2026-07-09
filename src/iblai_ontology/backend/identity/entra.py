@@ -23,6 +23,7 @@ class EntraIdentity:
     roles: list[str]
     groups: list[str]
     token_jti: Optional[str]
+    token_exp: Optional[int]  # unix seconds; bounds the replay-store TTL
     raw_claims: dict[str, Any]
 
 
@@ -67,7 +68,10 @@ class EntraValidator:
                 algorithms=self.algorithms,
                 audience=f"api://{self.client_id}",
                 issuer=issuer(self.tenant_id),
-                options={"require": ["exp", "iss", "aud", "sub"]},
+                # jti is required so every accepted token is replay-trackable
+                # (see identity.replay); a token without one cannot be bound to
+                # a first-seen sender and is rejected here.
+                options={"require": ["exp", "iss", "aud", "sub", "jti"]},
             )
         except jwt.ExpiredSignatureError as exc:
             raise EntraTokenError("token expired") from exc
@@ -85,5 +89,6 @@ class EntraValidator:
             roles=claims.get("roles", []) or [],
             groups=claims.get("groups", []) or [],
             token_jti=claims.get("jti"),
+            token_exp=claims.get("exp"),
             raw_claims=claims,
         )
