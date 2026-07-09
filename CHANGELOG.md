@@ -4,6 +4,23 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10] - 2026-07-09
+
+### Security
+- Required authentication on the ChromaDB vector store (#2146). The
+  `vector-store` container previously ran with no auth on `ontology-internal`, so
+  any container on that network — or an attacker who gained code execution via
+  another finding — could read or tamper with every embedding (which encode
+  institutional content and PII) without credentials. The vector store now runs
+  ChromaDB's `TokenAuthenticationServerProvider` with a static bearer token
+  supplied via the new required `CHROMA_TOKEN` env var, and the shared
+  `VectorSearch` client (used by both the gateway and the sync engine) presents
+  that token when set. `CHROMA_TOKEN` is passed to the `vector-store`,
+  `sync-engine`, and `ontology-gateway` services in `docker-compose.yml` and
+  documented in `.env.root.example` and the README; the compose files fail fast
+  (`${CHROMA_TOKEN:?…}`) if it is unset. The client stays auth-free when the
+  token is absent, preserving local and air-gapped runs.
+
 ## [0.2.9] - 2026-07-08
 
 ### Security

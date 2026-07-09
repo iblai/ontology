@@ -33,6 +33,9 @@ class VectorSearch:
             "ONTOLOGY_FILES_ROOT", "/ontology"
         )
         self.chroma_url = os.environ.get("CHROMA_URL", "http://vector-store:8000")
+        # Static bearer token presented to an auth-enabled ChromaDB server. Left
+        # unset for local/air-gapped runs where the vector store has no auth.
+        self.chroma_token = os.environ.get("CHROMA_TOKEN") or None
 
     def _collection(self):
         try:
@@ -45,9 +48,17 @@ class VectorSearch:
         from urllib.parse import urlparse
 
         parsed = urlparse(self.chroma_url)
-        client = chromadb.HttpClient(
-            host=parsed.hostname or "localhost", port=parsed.port or 8000
-        )
+        kwargs = {"host": parsed.hostname or "localhost", "port": parsed.port or 8000}
+        if self.chroma_token:
+            # Token auth: the default transport header (Authorization) and Bearer
+            # framing match the server's TokenAuthenticationServerProvider.
+            from chromadb.config import Settings
+
+            kwargs["settings"] = Settings(
+                chroma_client_auth_provider="chromadb.auth.token_authn.TokenAuthClientProvider",
+                chroma_client_auth_credentials=self.chroma_token,
+            )
+        client = chromadb.HttpClient(**kwargs)
         return client.get_or_create_collection(self.collection_name)
 
     def index_file(self, path: str, text: str) -> None:
