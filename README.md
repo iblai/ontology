@@ -277,6 +277,21 @@ trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
 whether a connection is secure — keep the gateway reachable only via the proxy,
 never directly on `:8080`.
 
+**Vector store authentication:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `CHROMA_TOKEN` | *(required by compose)* | Static bearer token for the ChromaDB vector store |
+
+The `vector-store` container runs ChromaDB's `TokenAuthenticationServerProvider`,
+so every request must present `CHROMA_TOKEN`; without it no container on
+`ontology-internal` can read or write embeddings. The same value is passed to the
+`sync-engine` and `ontology-gateway` services, and the shared `VectorSearch`
+client presents it automatically. Generate a strong random value (e.g.
+`openssl rand -hex 32`) and set it in the root `.env`; the compose stack fails to
+start if it is unset. When `CHROMA_TOKEN` is absent (e.g. a local or air-gapped
+run against an unauthenticated store) the client connects without auth.
+
 ## Documentation
 
 | Document | Covers |

@@ -57,7 +57,10 @@ services:
   vector-store:
     image: chromadb/chroma:0.6.3
     volumes: [vector-data:/chroma/chroma]
-    environment: { ANONYMIZED_TELEMETRY: "false" }
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_SERVER_AUTHN_PROVIDER: chromadb.auth.token_authn.TokenAuthenticationServerProvider
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
     networks: [ontology-internal]
     restart: unless-stopped
 
@@ -72,6 +75,7 @@ services:
       MCP_CANVAS_URL: http://mcp-canvas:3000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
       CHROMA_URL: http://vector-store:8000
+      CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
     depends_on: [mcp-toolbox, mcp-canvas, ontology-db, vector-store]
     networks: [ontology-internal]
     restart: unless-stopped
@@ -86,6 +90,7 @@ services:
       MCP_TOOLBOX_URL: http://mcp-toolbox:5000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
       CHROMA_URL: http://vector-store:8000
+      CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
     depends_on: [mcp-toolbox, ontology-db, vector-store]
