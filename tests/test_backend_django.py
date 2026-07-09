@@ -280,6 +280,36 @@ def test_identity_middleware_no_token(backend):
     assert req.ontology is None
 
 
+def test_identity_middleware_role_escalation_forbidden(backend):
+    from django.test import RequestFactory
+
+    from iblai_ontology.backend.identity.entra import EntraIdentity
+    from iblai_ontology.backend.identity.middleware import OntologyIdentityMiddleware
+
+    mw = OntologyIdentityMiddleware(get_response=lambda req: "OK")
+
+    class FakeValidator:
+        # Token validates but grants no elevated role.
+        def validate(self, token):
+            return EntraIdentity(
+                user_id="oid-1",
+                email="u@x.edu",
+                name="U",
+                roles=[],
+                groups=[],
+                token_jti="j",
+                token_exp=None,
+                raw_claims={},
+            )
+
+    mw.validator = FakeValidator()
+    req = RequestFactory().get(
+        "/mcp", HTTP_AUTHORIZATION="Bearer x", HTTP_X_IBLAI_ROLE="Executive"
+    )
+    resp = mw(req)
+    assert resp.status_code == 403
+
+
 def test_service_mutating_commands(backend, monkeypatch):
     _make_service("svc-m")
     import iblai_ontology.backend.discovery.engine as engine_mod
@@ -368,6 +398,7 @@ def test_mcp_view_success(backend):
         permissions = Permissions(
             role="Executive", display_name="x", mcp_toolsets=["*"]
         )
+        emplid = None
 
     req = RequestFactory().post(
         "/mcp",

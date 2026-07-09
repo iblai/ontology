@@ -41,6 +41,130 @@ def test_query_cache_rejects_non_select():
         h.query_cache("DELETE FROM students")
 
 
+class _FakeCursor:
+    """Minimal cursor stub: returns a canned EXPLAIN plan, records executed SQL."""
+
+    def __init__(self, plan):
+        self._plan = plan
+        self.executed = []
+
+    def execute(self, sql):
+        self.executed.append(sql)
+
+    def fetchone(self):
+        return (self._plan,)
+
+
+# A plan referencing sync_runs (allowed) and auth_user (forbidden) via a join.
+_PLAN_SYNC_AND_AUTH = [
+    {
+        "Plan": {
+            "Node Type": "Hash Join",
+            "Plans": [
+                {"Node Type": "Seq Scan", "Relation Name": "sync_runs"},
+                {"Node Type": "Seq Scan", "Relation Name": "auth_user"},
+            ],
+        }
+    }
+]
+_PLAN_SYNC_ONLY = [{"Plan": {"Node Type": "Seq Scan", "Relation Name": "sync_runs"}}]
+
+
+def test_relation_names_walks_plan_tree():
+    names = MCPHandlers._relation_names(_PLAN_SYNC_AND_AUTH)
+    assert names == {"sync_runs", "auth_user"}
+    # Also accepts a JSON string form.
+    assert MCPHandlers._relation_names(json.dumps(_PLAN_SYNC_ONLY)) == {"sync_runs"}
+
+
+def test_cache_acl_denies_forbidden_table():
+    # IblaiOntologyAdmin is limited to sync_runs + audit_log; auth_user must 403.
+    perms = Permissions(
+        role="IblaiOntologyAdmin",
+        display_name="x",
+        cache_tables=["sync_runs", "audit_log"],
+    )
+    h = _handlers(perms)
+    cur = _FakeCursor(_PLAN_SYNC_AND_AUTH)
+    with pytest.raises(PermissionDenied):
+        h._enforce_cache_acl(cur, "SELECT * FROM sync_runs JOIN auth_user USING (id)")
+
+
+def test_cache_acl_allows_permitted_tables():
+    perms = Permissions(
+        role="IblaiOntologyAdmin",
+        display_name="x",
+        cache_tables=["sync_runs", "audit_log"],
+    )
+    h = _handlers(perms)
+    cur = _FakeCursor(_PLAN_SYNC_ONLY)
+    h._enforce_cache_acl(cur, "SELECT * FROM sync_runs")  # no raise
+
+
+def test_cache_acl_wildcard_role_skips_explain():
+    perms = Permissions(role="Executive", display_name="x", cache_tables=["*"])
+    h = _handlers(perms)
+    cur = _FakeCursor(_PLAN_SYNC_AND_AUTH)
+    h._enforce_cache_acl(cur, "SELECT * FROM auth_user")
+    assert cur.executed == []  # wildcard: no EXPLAIN needed, all tables allowed
+
+
+def test_query_cache_rejects_cte_dml():
+    # A CTE that hides a DELETE must not pass the SELECT/WITH validation.
+    h = _handlers(Permissions(role="Executive", display_name="x", mcp_toolsets=["*"]))
+    # Stacked statements are rejected outright...
+    with pytest.raises(MCPError):
+        h.query_cache("SELECT 1; DROP TABLE students")
+
+
+def test_call_tool_cache_alias_denied_for_default_role():
+    # The `default` role has no toolsets → the cache aliases must be denied,
+    # even though they are served by a built-in handler (scope-bypass regression).
+    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+
+    class R(ToolsetResolver):
+        def __init__(self):
+            pass
+
+        def scope_for(self, p):
+            return ScopedTools(toolsets=[], tool_names=[])
+
+    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
+
+    perms = Permissions(role="default", display_name="x", mcp_toolsets=[])
+    h = MCPHandlers(MCPContext(permissions=perms), resolver=R())
+    for alias in ("query-cache", "query-ontology-cache"):
+        with pytest.raises(PermissionDenied):
+            h.call_tool(alias, {"sql": "SELECT 1"})
+
+
+def test_call_tool_cache_alias_scoped_reaches_query_cache(monkeypatch):
+    # A role that DOES have query-ontology-cache in scope passes the scope gate
+    # and reaches query_cache (which we stub to avoid needing a live DB).
+    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
+    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+
+    class R(ToolsetResolver):
+        def __init__(self):
+            pass
+
+        def scope_for(self, p):
+            return ScopedTools(
+                toolsets=["admin-analytics-tools"],
+                tool_names=["query-ontology-cache"],
+            )
+
+    perms = Permissions(role="DataAnalyst", display_name="x")
+    h = MCPHandlers(MCPContext(permissions=perms), resolver=R())
+    seen = {}
+    monkeypatch.setattr(
+        h, "query_cache", lambda sql, limit=100: seen.update(sql=sql) or [{"ok": 1}]
+    )
+    out = h.call_tool("query-cache", {"sql": "SELECT 1"})
+    assert out == [{"ok": 1}]
+    assert seen["sql"] == "SELECT 1"
+
+
 def test_get_sync_status_requires_admin():
     h = _handlers(
         Permissions(
@@ -57,6 +181,53 @@ def test_call_tool_unknown_denied():
     h = _handlers(Permissions(role="x", display_name="x", mcp_toolsets=["t"]))
     with pytest.raises(PermissionDenied):
         h.call_tool("not-in-scope", {})
+
+
+def _subject_handlers(perms, subject_id):
+    """Handler whose resolver scopes get-student-enrollment, with a stubbed proxy."""
+    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
+    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+
+    class R(ToolsetResolver):
+        def __init__(self):
+            pass
+
+        def scope_for(self, p):
+            return ScopedTools(toolsets=["t"], tool_names=["get-student-enrollment"])
+
+    h = MCPHandlers(MCPContext(permissions=perms, subject_id=subject_id), resolver=R())
+    h._proxy_to_toolbox = lambda name, arguments: {"ok": name, "args": arguments}
+    return h
+
+
+def test_self_service_role_may_query_own_record():
+    perms = Permissions(role="Student", display_name="x", self_service=True)
+    h = _subject_handlers(perms, subject_id="001234567")
+    out = h.call_tool("get-student-enrollment", {"student_id": "001234567"})
+    assert out["ok"] == "get-student-enrollment"
+
+
+def test_self_service_role_cannot_query_another_subject():
+    perms = Permissions(role="Student", display_name="x", self_service=True)
+    h = _subject_handlers(perms, subject_id="001234567")
+    with pytest.raises(PermissionDenied):
+        h.call_tool("get-student-enrollment", {"student_id": "999999999"})
+
+
+def test_self_service_role_without_known_subject_denied():
+    # Fail closed: no resolved emplid -> cannot prove ownership.
+    perms = Permissions(role="Student", display_name="x", self_service=True)
+    h = _subject_handlers(perms, subject_id=None)
+    with pytest.raises(PermissionDenied):
+        h.call_tool("get-student-enrollment", {"student_id": "001234567"})
+
+
+def test_staff_role_may_query_any_subject():
+    # Non-self-service role: cross-subject access is granted by role.
+    perms = Permissions(role="AcademicAdvisor", display_name="x")
+    h = _subject_handlers(perms, subject_id="000000001")
+    out = h.call_tool("get-student-enrollment", {"student_id": "999999999"})
+    assert out["args"]["student_id"] == "999999999"
 
 
 def test_dispatch_tool_call_read_memory(tmp_path):

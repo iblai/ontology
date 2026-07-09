@@ -33,8 +33,18 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE: list[str] = [
+    # First: reject cleartext-borne tokens and wrap every response (including
+    # 401/403/429 errors below) with security headers.
+    "iblai_ontology.backend.security_headers.OntologySecurityMiddleware",
     "iblai_ontology.backend.identity.middleware.OntologyIdentityMiddleware",
+    # After identity so it can key on the resolved subject; falls back to IP.
+    "iblai_ontology.backend.ratelimit.OntologyRateLimitMiddleware",
 ]
+
+# Caddy terminates TLS and forwards the client-facing scheme; trust it so
+# request.is_secure() reflects HTTPS behind the proxy. Safe only because the
+# gateway is reachable exclusively via the proxy in production, never on :8080.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 ROOT_URLCONF = "iblai_ontology.backend.urls"
 
@@ -99,3 +109,58 @@ ENTRA_CLIENT_ID = os.environ.get("ENTRA_CLIENT_ID")
 CELERY_BROKER_URL = os.environ.get("ONTOLOGY_CELERY_BROKER", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("ONTOLOGY_CELERY_BACKEND", CELERY_BROKER_URL)
 CELERY_TIMEZONE = TIME_ZONE
+
+# --- Cache (backs gateway rate limiting) ---------------------------------
+# Set ONTOLOGY_CACHE_URL to a redis:// URL to enforce rate limits across worker
+# processes (requires the redis client). Without it, a per-process in-memory
+# cache is used — still throttles, but each worker counts independently.
+_cache_url = os.environ.get("ONTOLOGY_CACHE_URL")
+if _cache_url and _cache_url.startswith("redis"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": _cache_url,
+        }
+    }
+else:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+# --- Gateway rate limiting -----------------------------------------------
+RATELIMIT_ENABLED = (
+    os.environ.get("ONTOLOGY_RATELIMIT_ENABLED", "true").lower() == "true"
+)
+RATELIMIT_WINDOW_SECONDS = int(os.environ.get("ONTOLOGY_RATELIMIT_WINDOW", "60"))
+RATELIMIT_MAX_REQUESTS = int(os.environ.get("ONTOLOGY_RATELIMIT_MAX", "120"))
+RATELIMIT_TOOLS_CALL_MAX = int(
+    os.environ.get("ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX", "30")
+)
+
+# --- Transport security / security headers -------------------------------
+# Backs OntologySecurityMiddleware: rejects Bearer tokens over cleartext and
+# emits protective response headers. All env-configurable (see the README).
+SECURITY_HEADERS_ENABLED = (
+    os.environ.get("ONTOLOGY_SECURITY_HEADERS_ENABLED", "true").lower() == "true"
+)
+SECURITY_REQUIRE_HTTPS = (
+    os.environ.get("ONTOLOGY_REQUIRE_HTTPS", "true").lower() == "true"
+)
+SECURITY_HSTS_MAX_AGE = int(os.environ.get("ONTOLOGY_HSTS_MAX_AGE", "31536000"))
+SECURITY_HSTS_INCLUDE_SUBDOMAINS = (
+    os.environ.get("ONTOLOGY_HSTS_INCLUDE_SUBDOMAINS", "true").lower() == "true"
+)
+SECURITY_CSP = os.environ.get(
+    "ONTOLOGY_CSP", "default-src 'none'; frame-ancestors 'none'"
+)
+SECURITY_REFERRER_POLICY = os.environ.get("ONTOLOGY_REFERRER_POLICY", "no-referrer")
+SECURITY_FRAME_OPTIONS = os.environ.get("ONTOLOGY_FRAME_OPTIONS", "DENY")
+
+# --- JWT replay protection -----------------------------------------------
+# Backs the replay guard in OntologyIdentityMiddleware. Entra access tokens are
+# reuse-designed, so the default `bind` mode allows a jti to be reused from its
+# first-seen client IP while rejecting the same jti from a different IP; `strict`
+# enforces single-use; `off` disables. Backed by the Django cache (share it via
+# ONTOLOGY_CACHE_URL for cross-worker coverage). See the README.
+JWT_REPLAY_MODE = os.environ.get("ONTOLOGY_JWT_REPLAY_MODE", "bind").lower()
+JWT_REPLAY_TTL_FALLBACK = int(
+    os.environ.get("ONTOLOGY_JWT_REPLAY_TTL_FALLBACK", "3600")
+)

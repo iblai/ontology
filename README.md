@@ -236,6 +236,92 @@ Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
 - **Identity through Entra ID.** Every MCP request carries the user's Entra ID JWT; the gateway validates it and resolves the caller's role against `roles.yaml`. See [docs/identity.md](docs/identity.md).
 - **Credential isolation & containment.** Each inbound MCP server has its own credential scope; connection secrets are encrypted at rest.
 
+### Gateway hardening (environment variables)
+
+The gateway middleware is tuned entirely through environment variables on the
+`ontology-gateway` container — no code change or rebuild, just set and restart.
+
+**Rate limiting** (fixed-window throttle, keyed on the authenticated subject and
+falling back to client IP):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_RATELIMIT_ENABLED` | `true` | Master on/off switch |
+| `ONTOLOGY_RATELIMIT_WINDOW` | `60` | Window length in seconds (also the `Retry-After` value) |
+| `ONTOLOGY_RATELIMIT_MAX` | `120` | Max requests per window (general bucket) |
+| `ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX` | `30` | Stricter max per window for `tools/call` |
+
+To loosen limits for higher traffic, raise `ONTOLOGY_RATELIMIT_MAX` /
+`ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX`. Two caveats:
+- The window is **fixed**, not sliding — a client can burst up to `2×MAX` across a
+  window boundary. Size the limit accordingly.
+- Counting is **per worker process** on the default in-memory cache, so with *N*
+  workers the effective limit is ≈ `N × MAX`. Set `ONTOLOGY_CACHE_URL` to a
+  `redis://…` URL so all workers share one counter and the configured number is
+  the true global limit.
+
+**Transport security & response headers:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_SECURITY_HEADERS_ENABLED` | `true` | Emit security response headers |
+| `ONTOLOGY_REQUIRE_HTTPS` | `true` | Reject Bearer tokens received over a plaintext (non-HTTPS) connection |
+| `ONTOLOGY_HSTS_MAX_AGE` | `31536000` | `Strict-Transport-Security` max-age (seconds; `0` disables HSTS) |
+| `ONTOLOGY_HSTS_INCLUDE_SUBDOMAINS` | `true` | Add `includeSubDomains` to HSTS |
+| `ONTOLOGY_CSP` | `default-src 'none'; frame-ancestors 'none'` | `Content-Security-Policy` value |
+| `ONTOLOGY_REFERRER_POLICY` | `no-referrer` | `Referrer-Policy` value |
+| `ONTOLOGY_FRAME_OPTIONS` | `DENY` | `X-Frame-Options` value |
+
+HSTS is only emitted over HTTPS. TLS terminates at the Caddy edge, so the gateway
+trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
+whether a connection is secure — keep the gateway reachable only via the proxy,
+never directly on `:8080`.
+
+**JWT replay protection:**
+
+The token `jti` (a required, validated claim) is checked against a cache-backed
+replay store keyed on the `jti`, with each entry expiring exactly when the token
+does (`exp - now`).
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_JWT_REPLAY_MODE` | `bind` | `bind` \| `strict` \| `off` (see below) |
+| `ONTOLOGY_JWT_REPLAY_TTL_FALLBACK` | `3600` | Store TTL (seconds) for a token whose `exp` is missing |
+
+Entra ID **access tokens are bearer tokens designed for reuse** within their
+lifetime — the ibl.ai platform forwards the same token across many MCP requests —
+so blind single-use would break the integration. The modes:
+- `bind` (default): on first sight, bind the `jti` to the request's client IP;
+  the same `jti` presented from a **different** IP is rejected as replay.
+  Legitimate reuse from the platform's stable egress passes; a token stolen and
+  replayed from elsewhere is caught. (IP is read from `X-Forwarded-For` set by
+  Caddy; deployments with multiple platform egress IPs may need `off` or
+  `strict`.)
+- `strict`: single-use — any second presentation of a `jti` is rejected. Only for
+  deployments that mint one-time tokens.
+- `off`: no replay checking.
+
+As with rate limiting, the store is the Django cache: set `ONTOLOGY_CACHE_URL` to
+a `redis://…` URL so the check holds across all worker processes (on the default
+per-process cache a replay is only caught on the worker that first saw the token).
+Replay detection is best-effort; short token lifetimes and sender-constrained
+tokens (DPoP / mTLS) remain the strongest defences.
+
+**Vector store authentication:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `CHROMA_TOKEN` | *(required by compose)* | Static bearer token for the ChromaDB vector store |
+
+The `vector-store` container runs ChromaDB's `TokenAuthenticationServerProvider`,
+so every request must present `CHROMA_TOKEN`; without it no container on
+`ontology-internal` can read or write embeddings. The same value is passed to the
+`sync-engine` and `ontology-gateway` services, and the shared `VectorSearch`
+client presents it automatically. Generate a strong random value (e.g.
+`openssl rand -hex 32`) and set it in the root `.env`; the compose stack fails to
+start if it is unset. When `CHROMA_TOKEN` is absent (e.g. a local or air-gapped
+run against an unauthenticated store) the client connects without auth.
+
 ## Documentation
 
 | Document | Covers |

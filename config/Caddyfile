@@ -8,6 +8,30 @@
 # ============================================================
 
 ontology.{$ONTOLOGY_DOMAIN} {
+    # Caddy auto-provisions TLS and auto-redirects http:// -> https:// for this
+    # site, so cleartext requests never reach the gateway in a correct
+    # deployment. Security headers at the edge (the gateway also sets these as
+    # defence in depth). CSP is maximally restrictive — this is a JSON-RPC API,
+    # not an HTML UI.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
+    # Coarse per-IP rate limit (defence in depth; the gateway also throttles
+    # per-identity). Requires a Caddy build with the caddy-ratelimit plugin
+    # (github.com/mholt/caddy-ratelimit); uncomment once that build is deployed.
+    #   rate_limit {
+    #       zone ontology_ip {
+    #           key    {remote_host}
+    #           events 300
+    #           window 1m
+    #       }
+    #   }
     reverse_proxy ontology-gateway:8080
     log {
         output file /var/log/caddy/access.log
@@ -15,6 +39,15 @@ ontology.{$ONTOLOGY_DOMAIN} {
 }
 
 admin.ontology.{$ONTOLOGY_DOMAIN} {
+    # Header subset safe for an HTML dashboard (no API-grade CSP, which would
+    # break a UI). Tighten with a UI-appropriate CSP when the dashboard exists.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Frame-Options "DENY"
+        -Server
+    }
     reverse_proxy admin-dashboard:8080
     log {
         output file /var/log/caddy/admin-access.log

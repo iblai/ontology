@@ -148,3 +148,57 @@ def test_vector_search_query_shapes_results(monkeypatch):
     assert results[0].score == pytest.approx(0.9)
     assert results[0].snippet == "First line"
     vs.index_file("/ontology/students/1.md", "text")  # exercises upsert path
+
+
+# --- vector store auth wiring (#2146) -------------------------------------
+def _fake_chromadb(monkeypatch, captured):
+    """Install a stub chromadb module capturing HttpClient kwargs."""
+    import sys
+    import types
+
+    mod = types.ModuleType("chromadb")
+
+    def HttpClient(**kwargs):
+        captured.update(kwargs)
+
+        class _Client:
+            def get_or_create_collection(self, name):
+                return object()
+
+        return _Client()
+
+    mod.HttpClient = HttpClient
+    config = types.ModuleType("chromadb.config")
+    config.Settings = lambda **kw: dict(kw)
+    mod.config = config
+    monkeypatch.setitem(sys.modules, "chromadb", mod)
+    monkeypatch.setitem(sys.modules, "chromadb.config", config)
+
+
+def test_vector_store_presents_token_when_set(monkeypatch):
+    from iblai_ontology.backend.search import vector as vec
+
+    monkeypatch.setenv("CHROMA_TOKEN", "s3cr3t-token")
+    captured: dict = {}
+    _fake_chromadb(monkeypatch, captured)
+
+    vec.VectorSearch()._collection()
+
+    settings = captured["settings"]
+    assert (
+        settings["chroma_client_auth_provider"]
+        == "chromadb.auth.token_authn.TokenAuthClientProvider"
+    )
+    assert settings["chroma_client_auth_credentials"] == "s3cr3t-token"
+
+
+def test_vector_store_no_auth_when_token_absent(monkeypatch):
+    from iblai_ontology.backend.search import vector as vec
+
+    monkeypatch.delenv("CHROMA_TOKEN", raising=False)
+    captured: dict = {}
+    _fake_chromadb(monkeypatch, captured)
+
+    vec.VectorSearch()._collection()
+
+    assert "settings" not in captured

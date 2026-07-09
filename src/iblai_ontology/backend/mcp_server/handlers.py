@@ -23,6 +23,10 @@ from typing import Any, Optional
 from iblai_ontology.backend.identity.roles import Permissions
 from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
 
+# Argument names that carry a subject (person) identifier. For a self-service
+# role these must equal the caller's own subject id (see _require_subject_ownership).
+SUBJECT_ARG_KEYS = ("student_id", "student", "student_sis_id", "emplid")
+
 
 class MCPError(Exception):
     """An MCP-level error with a JSON-RPC-style code."""
@@ -41,6 +45,9 @@ class PermissionDenied(MCPError):
 class MCPContext:
     permissions: Permissions
     files_root: str = "/ontology"
+    # The caller's own subject id (emplid), resolved from their token via the
+    # IdentityMap. Used to self-scope subject tools for self-service roles.
+    subject_id: Optional[str] = None
 
 
 class MCPHandlers:
@@ -80,7 +87,10 @@ class MCPHandlers:
     def _physical_path(self, path: str) -> str:
         """Map a logical /ontology/... path to a physical path under files_root.
 
-        Blocks traversal outside the configured memory root.
+        Blocks traversal outside the configured memory root both lexically and
+        after resolving symlinks: a symlink under the root that points outside it
+        cannot escape, because the fully resolved real path is re-checked against
+        the resolved root. Returns the resolved (canonical) path.
         """
         safe_root = os.path.normpath(self.ctx.files_root)
         # Strip a leading logical "/ontology" prefix, then anchor under the root.
@@ -91,20 +101,104 @@ class MCPHandlers:
         candidate = os.path.normpath(os.path.join(safe_root, rel))
         if candidate != safe_root and not candidate.startswith(safe_root + os.sep):
             raise PermissionDenied("path escapes the memory root")
-        return candidate
+        # Re-check containment after resolving symlinks (realpath resolves every
+        # component), so a symlink inside the root pointing elsewhere is rejected.
+        real_root = os.path.realpath(safe_root)
+        real_candidate = os.path.realpath(candidate)
+        if real_candidate != real_root and not real_candidate.startswith(
+            real_root + os.sep
+        ):
+            raise PermissionDenied("path escapes the memory root")
+        return real_candidate
 
     # -- query-cache -----------------------------------------------------
+    @staticmethod
+    def _validate_read_only_sql(sql: str) -> str:
+        """Return the single statement to execute, or raise :class:`MCPError`.
+
+        Accepts one ``SELECT``/``WITH`` statement (a single optional trailing
+        ``;`` is allowed); rejects non-strings, empty input, stacked statements,
+        and any lead other than ``SELECT``/``WITH``. Writes hidden in a CTE are
+        not caught here — :meth:`query_cache` runs the statement in a PostgreSQL
+        ``READ ONLY`` transaction that rejects them at execution time.
+        """
+        if not isinstance(sql, str):
+            raise MCPError("sql must be a string")
+        statement = sql.strip()
+        # Allow a single optional trailing ';' but reject stacked statements.
+        body = statement.rstrip(";").rstrip()
+        if not body:
+            raise MCPError("empty query")
+        if ";" in body:
+            raise MCPError("only a single SQL statement is allowed")
+        # Ignore leading '(' so parenthesised selects still validate.
+        head = body.lstrip("(").lstrip().upper()
+        if not head.startswith(("SELECT", "WITH")):
+            raise MCPError("only SELECT/WITH read-only queries are allowed")
+        return body
+
+    @staticmethod
+    def _relation_names(explain_json: Any) -> set[str]:
+        """Collect every base ``Relation Name`` in an ``EXPLAIN (FORMAT JSON)`` plan.
+
+        Walks the whole plan tree so tables reached through joins, subqueries,
+        CTEs, and views are all included (the planner resolves them to their
+        underlying relations). ``explain_json`` may be a parsed object or a JSON
+        string, depending on the driver.
+        """
+        if isinstance(explain_json, str):
+            explain_json = json.loads(explain_json)
+        names: set[str] = set()
+        stack = [explain_json]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                rel = node.get("Relation Name")
+                if rel:
+                    names.add(rel)
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+        return names
+
+    def _enforce_cache_acl(self, cur, statement: str) -> None:
+        """Deny the query if it touches a cache table the role may not read.
+
+        The referenced relations are taken from the query plan
+        (``EXPLAIN (FORMAT JSON)``), which is the database's own resolution of
+        what the query reads, and each is checked against the role's
+        ``cache_tables`` ACL. Runs in the caller's READ ONLY transaction;
+        ``EXPLAIN`` plans but does not execute the query.
+        """
+        perms = self.ctx.permissions
+        if "*" in perms.cache_tables:
+            return
+        cur.execute("EXPLAIN (FORMAT JSON) " + statement)
+        row = cur.fetchone()
+        tables = self._relation_names(row[0] if row else [])
+        forbidden = sorted(t for t in tables if not perms.allows_cache_table(t))
+        if forbidden:
+            raise PermissionDenied(
+                f"role '{perms.role}' cannot access cache table(s): "
+                + ", ".join(forbidden)
+            )
+
     def query_cache(self, sql: str, limit: int = 100) -> list[dict]:
-        stripped = sql.strip().rstrip(";").lstrip().upper()
-        if not stripped.startswith(("SELECT", "WITH")):
-            raise MCPError("only SELECT/WITH queries are allowed")
+        statement = self._validate_read_only_sql(sql)
+        limit = max(1, int(limit))
         from django.db import connection
 
         with connection.cursor() as cur:
-            cur.execute(sql)
-            cols = [c[0] for c in cur.description] if cur.description else []
-            rows = cur.fetchmany(limit)
-        # Cache-table scoping is enforced at tool-definition time; this is a guard.
+            # READ ONLY transaction: any write, including DML hidden in a CTE,
+            # fails at the engine. Always rolled back; this path never commits.
+            cur.execute("BEGIN TRANSACTION READ ONLY")
+            try:
+                self._enforce_cache_acl(cur, statement)
+                cur.execute(statement)
+                cols = [c[0] for c in cur.description] if cur.description else []
+                rows = cur.fetchmany(limit)
+            finally:
+                cur.execute("ROLLBACK")
         return [dict(zip(cols, r)) for r in rows]
 
     # -- get-sync-status (admin) ----------------------------------------
@@ -128,11 +222,44 @@ class MCPHandlers:
         ]
 
     # -- tools/call ------------------------------------------------------
+    def _require_scoped(self, tool_name: str) -> None:
+        """Deny unless ``tool_name`` is in the caller's role-scoped tool set."""
+        allowed = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
+        if tool_name not in allowed:
+            raise PermissionDenied(
+                f"role '{self.ctx.permissions.role}' cannot call {tool_name}"
+            )
+
+    def _require_subject_ownership(self, arguments: dict[str, Any]) -> None:
+        """Restrict subject-scoped tools to the caller for self-service roles.
+
+        A self-service role may only query its own record: any subject-identifier
+        argument (see :data:`SUBJECT_ARG_KEYS`) must equal the caller's own
+        subject id, and the caller must have a known subject id. Non-self-service
+        roles are unrestricted here — cross-subject access is granted by role per
+        the authorization model (docs/authorization-model.md).
+        """
+        if not self.ctx.permissions.self_service:
+            return
+        for key in SUBJECT_ARG_KEYS:
+            if key not in arguments:
+                continue
+            requested = str(arguments[key])
+            if not self.ctx.subject_id or requested != self.ctx.subject_id:
+                raise PermissionDenied(
+                    f"role '{self.ctx.permissions.role}' may only access its own record"
+                )
+
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
-        # Built-in tools the gateway serves directly.
+        # Built-in tools are served directly here but remain subject to
+        # authorization: read-memory and get-sync-status carry their own checks;
+        # the cache-query aliases pass the same toolset-scope test as any tool.
         if name == "read-memory":
             return self.read_memory(arguments["path"])
         if name in ("query-ontology-cache", "query-cache"):
+            # `query-cache` is an alias for the scoped `query-ontology-cache`
+            # tool; both are gated on that tool being in the caller's scope.
+            self._require_scoped("query-ontology-cache")
             return self.query_cache(
                 arguments["sql"], limit=int(arguments.get("limit", 100))
             )
@@ -140,12 +267,10 @@ class MCPHandlers:
             return self.get_sync_status()
 
         # Otherwise the tool must be in the caller's scoped set and is proxied to
-        # the inbound MCP Toolbox.
-        allowed = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
-        if name not in allowed:
-            raise PermissionDenied(
-                f"role '{self.ctx.permissions.role}' cannot call {name}"
-            )
+        # the inbound MCP Toolbox. Self-service roles are additionally restricted
+        # to their own subject record.
+        self._require_scoped(name)
+        self._require_subject_ownership(arguments)
         return self._proxy_to_toolbox(name, arguments)
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:

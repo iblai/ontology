@@ -1,19 +1,30 @@
 """Role → access resolution (Component 3, Option A).
 
-Role *assignment* lives in the ibl.ai platform (forwarded via the
-``X-Iblai-Role`` header). This module only answers "given this role, what can the
-user access?" by resolving the role against ``roles.yaml``. Django-free.
+Role *assignment* is authoritative in the validated Entra JWT: the token's
+``roles`` claim names the internal roles the caller may assume. The
+``X-Iblai-Role`` header is only a selector for which granted role is active on a
+request (see :func:`permitted_roles`); it cannot grant a role the token lacks.
+This module answers "given a role, what can the user access?" by resolving it
+against ``roles.yaml``. Django-free.
 """
 
 from __future__ import annotations
 
 import fnmatch
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Iterable, Optional
 
 from iblai_ontology.config.reader import ConfigReader
 
 DEFAULT_ROLE = "default"
+
+
+class RoleNotPermitted(Exception):
+    """Raised when a request asks for a role its validated token does not grant."""
+
+    def __init__(self, requested: str):
+        super().__init__(f"role '{requested}' is not granted to this identity")
+        self.requested = requested
 
 
 @dataclass
@@ -26,6 +37,10 @@ class Permissions:
     concurrency_limits: dict = field(default_factory=dict)
     agents: list[str] = field(default_factory=list)
     admin_dashboard: bool = False
+    # Self-service roles may only access their own subject record; a subject
+    # identifier argument must equal the caller's own id. Non-self-service roles
+    # have cross-subject access by role grant (see docs/authorization-model.md).
+    self_service: bool = False
 
     def allows_toolset(self, toolset: str) -> bool:
         return "*" in self.mcp_toolsets or toolset in self.mcp_toolsets
@@ -45,6 +60,10 @@ class RoleResolver:
 
     def _roles(self) -> dict:
         return self.reader.get_roles()
+
+    def role_names(self) -> list[str]:
+        """Return the internal role names defined in ``roles.yaml``."""
+        return list(self._roles().keys())
 
     def resolve(
         self, role: Optional[str], *, user_emplid: Optional[str] = None
@@ -70,6 +89,7 @@ class RoleResolver:
             concurrency_limits=dict(spec.get("concurrency_limits", {})),
             agents=list(spec.get("agents", [])),
             admin_dashboard=bool(spec.get("admin_dashboard", False)),
+            self_service=bool(spec.get("self_service", False)),
         )
 
 
@@ -78,3 +98,33 @@ def resolve_permissions(
 ) -> Permissions:
     """Convenience wrapper around :class:`RoleResolver`."""
     return RoleResolver().resolve(role, user_emplid=user_emplid)
+
+
+def permitted_roles(claimed_roles: Iterable[str], resolver: RoleResolver) -> set[str]:
+    """Internal roles a validated identity may assume.
+
+    Intersects the token's ``roles`` claim with the roles defined in
+    ``roles.yaml`` (claims that name no defined role are ignored) and always
+    includes :data:`DEFAULT_ROLE`, which every authenticated caller holds.
+    """
+    defined = set(resolver.role_names())
+    allowed = {role for role in claimed_roles if role in defined}
+    allowed.add(DEFAULT_ROLE)
+    return allowed
+
+
+def select_active_role(
+    claimed_roles: Iterable[str], requested: Optional[str], resolver: RoleResolver
+) -> str:
+    """Choose the active role for a request from the token's granted roles.
+
+    ``requested`` is the client-supplied ``X-Iblai-Role`` selector. With no
+    selector the caller runs as :data:`DEFAULT_ROLE`; a selector is honoured only
+    when the token grants it, otherwise :class:`RoleNotPermitted` is raised. The
+    selector can never widen access beyond the token's :func:`permitted_roles`.
+    """
+    if not requested:
+        return DEFAULT_ROLE
+    if requested not in permitted_roles(claimed_roles, resolver):
+        raise RoleNotPermitted(requested)
+    return requested

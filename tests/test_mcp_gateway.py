@@ -109,6 +109,41 @@ def test_read_memory_blocks_traversal(tmp_path):
         handlers._physical_path("/ontology/../../etc/passwd")
 
 
+def test_read_memory_blocks_symlink_escape(tmp_path):
+    # A symlink inside the root pointing outside it must not escape the root.
+    root = tmp_path / "ontology"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("SECRET: outside the root")
+    (root / "link").symlink_to(outside, target_is_directory=True)
+    perms = Permissions(
+        role="Executive", display_name="x", memory_paths=["/ontology/**"]
+    )
+    handlers = MCPHandlers(
+        MCPContext(permissions=perms, files_root=str(root)), resolver=_resolver()
+    )
+    with pytest.raises(PermissionDenied):
+        handlers._physical_path("/ontology/link/secret.txt")
+    with pytest.raises(PermissionDenied):
+        handlers.read_memory("/ontology/link/secret.txt")
+
+
+def test_read_memory_allows_symlink_within_root(tmp_path):
+    # A symlink that stays inside the root is fine (resolved path still contained).
+    root = tmp_path / "ontology"
+    (root / "real").mkdir(parents=True)
+    (root / "real" / "f.md").write_text("OK inside root")
+    (root / "link").symlink_to(root / "real", target_is_directory=True)
+    perms = Permissions(
+        role="Executive", display_name="x", memory_paths=["/ontology/**"]
+    )
+    handlers = MCPHandlers(
+        MCPContext(permissions=perms, files_root=str(root)), resolver=_resolver()
+    )
+    assert handlers.read_memory("/ontology/link/f.md") == "OK inside root"
+
+
 def test_dispatch_tools_list():
     perms = Permissions(
         role="AcademicAdvisor", display_name="x", mcp_toolsets=["enrollment-tools"]

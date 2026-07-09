@@ -4,6 +4,172 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] - 2026-07-09
+
+### Security
+- Added JWT replay protection to the gateway (#2147). The token `jti` was
+  extracted and audit-logged but never checked, so an intercepted token could be
+  replayed for its full (~1 hour) validity window with no way to detect or block
+  it — critical when chained with the (now-fixed) cleartext-transport and role-
+  forgery findings. `jti` is now a **required, validated claim** (a token without
+  one is rejected), and `OntologyIdentityMiddleware` runs a cache-backed replay
+  guard (`identity/replay.py`) keyed on the `jti` with an entry TTL of the
+  token's remaining lifetime (`exp - now`), so the store self-expires and never
+  grows unbounded. Two modes via `ONTOLOGY_JWT_REPLAY_MODE`: `bind` (default)
+  binds a `jti` to its first-seen client IP and rejects the same `jti` presented
+  from a different IP — this catches a stolen-and-replayed token while preserving
+  the platform's legitimate reuse of an access token across requests; `strict`
+  enforces single-use; `off` disables. Backed by the Django cache, so a shared
+  `ONTOLOGY_CACHE_URL` (Redis) enforces the check across worker processes (the
+  per-process `LocMemCache` catches a replay only on the worker that first saw
+  the token — same caveat as the rate limiter). A dedicated cache store is used
+  rather than a DB uniqueness constraint on `AuditLog.entra_token_id` because the
+  audit log must record every access. Short token lifetimes and sender-
+  constrained tokens (DPoP / mTLS) remain the strongest defences and are
+  recommended in the README. Configurable via `ONTOLOGY_JWT_REPLAY_MODE` and
+  `ONTOLOGY_JWT_REPLAY_TTL_FALLBACK`.
+
+## [0.2.10] - 2026-07-09
+
+### Security
+- Required authentication on the ChromaDB vector store (#2146). The
+  `vector-store` container previously ran with no auth on `ontology-internal`, so
+  any container on that network — or an attacker who gained code execution via
+  another finding — could read or tamper with every embedding (which encode
+  institutional content and PII) without credentials. The vector store now runs
+  ChromaDB's `TokenAuthenticationServerProvider` with a static bearer token
+  supplied via the new required `CHROMA_TOKEN` env var, and the shared
+  `VectorSearch` client (used by both the gateway and the sync engine) presents
+  that token when set. `CHROMA_TOKEN` is passed to the `vector-store`,
+  `sync-engine`, and `ontology-gateway` services in `docker-compose.yml` and
+  documented in `.env.root.example` and the README; the compose files fail fast
+  (`${CHROMA_TOKEN:?…}`) if it is unset. The client stays auth-free when the
+  token is absent, preserving local and air-gapped runs.
+
+## [0.2.9] - 2026-07-08
+
+### Security
+- Hardened gateway transport security (#2145). Bearer tokens could traverse
+  cleartext HTTP and the proxy set no protective response headers, so an on-path
+  observer could capture a token (chaining with the no-replay and role-forgery
+  findings for full compromise) and defence-in-depth headers were absent. A new
+  `OntologySecurityMiddleware` (a) rejects requests that carry an
+  `Authorization: Bearer` header over a non-HTTPS connection with HTTP 403,
+  before the token is validated, and (b) emits `Strict-Transport-Security` (over
+  HTTPS only), `Content-Security-Policy`, `X-Content-Type-Options`,
+  `Referrer-Policy`, and `X-Frame-Options` on every response. TLS is trusted via
+  `SECURE_PROXY_SSL_HEADER` (Caddy's `X-Forwarded-Proto`). All behaviour is
+  configurable via `ONTOLOGY_SECURITY_HEADERS_ENABLED`, `ONTOLOGY_REQUIRE_HTTPS`,
+  `ONTOLOGY_HSTS_*`, `ONTOLOGY_CSP`, `ONTOLOGY_REFERRER_POLICY`, and
+  `ONTOLOGY_FRAME_OPTIONS`. Matching edge headers and the automatic HTTP->HTTPS
+  redirect were added to `config/Caddyfile`, and the `ONTOLOGY_RATELIMIT_*` /
+  security env vars are now documented in the README.
+
+## [0.2.8] - 2026-07-08
+
+### Security
+- Added rate limiting to the gateway (#2144). Requests to `POST /mcp` were
+  unbounded, allowing unthrottled brute force, enumeration, and data
+  exfiltration. A new `OntologyRateLimitMiddleware` applies a fixed-window limit
+  keyed on the authenticated subject (falling back to client IP), with a
+  stricter bucket for `tools/call`, returning HTTP 429 with `Retry-After` when
+  exceeded. Limits are configurable via `ONTOLOGY_RATELIMIT_*` env vars and
+  backed by the Django cache (set `ONTOLOGY_CACHE_URL` to a redis:// URL to
+  enforce across workers). A commented coarse per-IP `rate_limit` block was added
+  to `config/Caddyfile` as edge defence-in-depth (needs the caddy-ratelimit
+  plugin).
+
+## [0.2.7] - 2026-07-08
+
+### Security
+- Fixed symlink path traversal in the `read-memory` tool (#2143). Containment was
+  checked lexically (`os.path.normpath`) before symlinks were resolved, so a
+  symlink under the memory root pointing outside it let `read-memory` return
+  files outside the root (the `ontology-files` volume is shared with the sync
+  engine, so symlink provenance is not fully controlled). `_physical_path` now
+  re-checks the fully resolved real path (`os.path.realpath`) against the
+  resolved root after symlink resolution and returns the canonical path;
+  symlinks that stay within the root still work.
+
+## [0.2.6] - 2026-07-08
+
+### Security
+- Fixed URL-path injection in the Canvas and Navigate MCP servers (#2142). Both
+  interpolated caller-supplied identifiers (`student`, `student_sis_id`) directly
+  into upstream API URL paths, so a value with `../`, extra `/segments`, or
+  `?query` could reach unintended endpoints under the shared service token.
+  Identifiers are now validated and URL-encoded per path segment: Navigate via
+  `_safe_segment`, Canvas via a format-aware `_user_ref_path` (numeric Canvas id
+  or an explicit `sis_user_id:` / `sis_login_id:` reference; anything else, or a
+  value containing `/ .. ? #` or whitespace, is rejected). Both server modules
+  also read their env vars lazily (at request time) instead of at import.
+
+## [0.2.5] - 2026-07-08
+
+### Security
+- Enforced the per-role `cache_tables` ACL on cache queries (#2141). Roles carry
+  a `cache_tables` allow-list (e.g. `IblaiOntologyAdmin` is limited to
+  `sync_runs` / `audit_log`) and `Permissions.allows_cache_table()` existed, but
+  it was never called — a restricted role could `SELECT` any table, including
+  `auth_user`. `query_cache` now resolves the query's referenced relations from
+  its plan (`EXPLAIN (FORMAT JSON)`, which the database expands through joins /
+  CTEs / views) and denies (403) if any is not permitted by the role's ACL.
+  Roles with `cache_tables: ["*"]` are unaffected (the check is skipped).
+
+## [0.2.4] - 2026-07-08
+
+### Security
+- Enforced self-scoping for self-service roles on subject tools (#2140). A role
+  marked `self_service: true` (e.g. `Student`) was bound to its own record on the
+  memory layer (`${USER_EMPLID}`) but not on the data tools, so a student could
+  read another student's record by passing a different `student_id`. The gateway
+  now requires any subject-identifier argument to equal the caller's own id for
+  self-service roles (fail-closed if the caller has no resolved id); staff /
+  analytics roles keep cross-subject access, which is by design.
+
+### Added
+- `docs/authorization-model.md` documenting the role-based authorization model:
+  shared per-source service credentials and cross-subject staff access are
+  intentional; `self_service` is the only self-scoped role class. Clarifies that
+  Shannon AUTHZ-05/06/07 were false positives for this design and that #2138 is
+  the real control against unauthorized cross-subject access.
+
+## [0.2.3] - 2026-07-08
+
+### Security
+- Fixed LDAP injection in the LDAP MCP server's `get-employee` /
+  `get-org-structure` tools (#2139). Caller-supplied `email` / `department`
+  values were interpolated into LDAP search filters unescaped, so a payload like
+  `*)(objectClass=*` turned the filter into a wildcard that enumerated the whole
+  directory. Both values are now escaped per RFC 4515
+  (`ldap3.utils.conv.escape_filter_chars`) via dedicated filter builders. The
+  server module also now reads its `LDAP_*` env vars lazily (at connect time)
+  instead of at import.
+
+## [0.2.2] - 2026-07-08
+
+### Security
+- Fixed a critical privilege escalation via the trusted `X-Iblai-Role` header
+  (#2138). The gateway resolved permissions from the client-supplied header
+  without checking it against the validated Entra JWT, so any authenticated user
+  could assign themselves any role (e.g. `Executive`, `IblaiOntologyAdmin`). The
+  active role is now derived from the token's `roles` claim; `X-Iblai-Role` acts
+  only as a selector among the roles the token grants, and a request for any
+  other role is rejected with HTTP 403.
+
+## [0.2.1] - 2026-07-08
+
+### Security
+- Fixed a critical SQL injection / broken-access-control flaw in the MCP gateway
+  `query-cache` / `query-ontology-cache` tool (#2137). The cache-query aliases
+  were dispatched before the toolset-scope check, so any authenticated caller —
+  including the zero-tool `default` role — could reach the handler, which then
+  executed the caller's raw `sql` (a `SELECT`/`WITH` prefix check on a copy let
+  CTE-wrapped DML through). The aliases now pass the same toolset-scope check as
+  every other tool, and `query_cache` validates a single read-only statement and
+  runs it inside a PostgreSQL `READ ONLY` transaction that rejects any hidden
+  write at the engine.
+
 ## [0.2.0] - 2026-07-03
 
 ### Added
@@ -58,4 +224,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated Toolbox config no longer breaks the Toolbox's whole-file environment
   expansion (no `${...}` in generated comments).
 
+[0.2.8]: https://github.com/iblai/ontology/releases/tag/v0.2.8
+[0.2.7]: https://github.com/iblai/ontology/releases/tag/v0.2.7
+[0.2.6]: https://github.com/iblai/ontology/releases/tag/v0.2.6
+[0.2.5]: https://github.com/iblai/ontology/releases/tag/v0.2.5
+[0.2.4]: https://github.com/iblai/ontology/releases/tag/v0.2.4
+[0.2.3]: https://github.com/iblai/ontology/releases/tag/v0.2.3
+[0.2.2]: https://github.com/iblai/ontology/releases/tag/v0.2.2
+[0.2.1]: https://github.com/iblai/ontology/releases/tag/v0.2.1
 [0.2.0]: https://github.com/iblai/ontology/releases/tag/v0.2.0

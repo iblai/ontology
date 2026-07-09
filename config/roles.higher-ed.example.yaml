@@ -59,6 +59,10 @@ roles:
 
   Student:
     display_name: "Student"
+    # Self-service: may only access their own record. Subject tools are bound to
+    # the caller's own id (like the ${USER_EMPLID} memory path), so a student
+    # cannot query another student by passing a different student_id.
+    self_service: true
     memory_paths:
       - /ontology/students/by-id/${USER_EMPLID}.md
       - /ontology/courses/_index.md

@@ -33,6 +33,7 @@ def mcp_view(request):
         MCPContext(
             permissions=resolved.permissions,
             files_root=getattr(settings, "ONTOLOGY_FILES_ROOT", "/ontology"),
+            subject_id=resolved.emplid,
         )
     )
     response = dispatch(handlers, body)

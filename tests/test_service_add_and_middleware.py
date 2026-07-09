@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
+import pytest
 from typer.testing import CliRunner
 
 from iblai_ontology.cli import app
@@ -74,7 +75,7 @@ def test_service_add_database_path(monkeypatch):
 
 
 # --- identity middleware core (Django-free) -------------------------------
-def _token(rsa_key, tenant, client):
+def _token(rsa_key, tenant, client, roles=None):
     import jwt
 
     now = dt.datetime.now(tz=dt.timezone.utc)
@@ -86,7 +87,7 @@ def _token(rsa_key, tenant, client):
             "oid": "oid-1",
             "preferred_username": "u@x.edu",
             "name": "U",
-            "roles": [],
+            "roles": roles if roles is not None else [],
             "jti": "j",
             "iat": now,
             "exp": now + dt.timedelta(hours=1),
@@ -126,8 +127,10 @@ def test_resolve_request_and_emplid(tmp_path, monkeypatch):
 
     rsa_pub = key.public_key()
     validator = EntraValidator("t", "c", jwks_client=FakeJWKS())
+    # The token must actually grant the requested role — the X-Iblai-Role header
+    # only selects among the token's granted roles.
     resolved = resolve_request(
-        token=_token(key, "t", "c"),
+        token=_token(key, "t", "c", roles=["Student"]),
         role_header="Student",
         validator=validator,
         emplid_lookup=lambda oid: "001234567",
@@ -137,3 +140,76 @@ def test_resolve_request_and_emplid(tmp_path, monkeypatch):
     assert "/ontology/students/by-id/001234567.md" in resolved.permissions.memory_paths
     # write_audit is best-effort and must not raise without a DB.
     write_audit(resolved, action="read", resource="/x", allowed=True)
+
+
+def _identity_test_env(tmp_path, monkeypatch):
+    """Shared setup: merged roles.yaml + an RSA-backed validator + token maker."""
+    from pathlib import Path
+
+    import yaml
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from iblai_ontology.backend.identity.entra import EntraValidator
+
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    merged: dict = {"roles": {}}
+    for name in ("config/roles.yaml", "config/roles.higher-ed.example.yaml"):
+        data = yaml.safe_load(Path(name).read_text()) or {}
+        merged["roles"].update(data.get("roles", {}))
+    (cfg / "roles.yaml").write_text(yaml.safe_dump(merged))
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    rsa_pub = key.public_key()
+
+    class FakeJWKS:
+        def get_signing_key_from_jwt(self, token):
+            class _K:
+                key = rsa_pub
+
+            return _K()
+
+    validator = EntraValidator("t", "c", jwks_client=FakeJWKS())
+    return validator, (lambda roles=None: _token(key, "t", "c", roles=roles))
+
+
+def test_role_header_cannot_escalate_beyond_token(tmp_path, monkeypatch):
+    # A token that grants no elevated role cannot claim Executive via the header.
+    from iblai_ontology.backend.identity.middleware import resolve_request
+    from iblai_ontology.backend.identity.roles import RoleNotPermitted
+
+    validator, make_token = _identity_test_env(tmp_path, monkeypatch)
+    with pytest.raises(RoleNotPermitted):
+        resolve_request(
+            token=make_token(roles=[]),
+            role_header="Executive",
+            validator=validator,
+            emplid_lookup=lambda oid: None,
+        )
+
+
+def test_role_header_honoured_when_token_grants_it(tmp_path, monkeypatch):
+    from iblai_ontology.backend.identity.middleware import resolve_request
+
+    validator, make_token = _identity_test_env(tmp_path, monkeypatch)
+    resolved = resolve_request(
+        token=make_token(roles=["Executive"]),
+        role_header="Executive",
+        validator=validator,
+        emplid_lookup=lambda oid: None,
+    )
+    assert resolved.permissions.role == "Executive"
+
+
+def test_no_role_header_falls_back_to_default(tmp_path, monkeypatch):
+    from iblai_ontology.backend.identity.middleware import resolve_request
+
+    validator, make_token = _identity_test_env(tmp_path, monkeypatch)
+    resolved = resolve_request(
+        token=make_token(roles=["Executive"]),
+        role_header=None,
+        validator=validator,
+        emplid_lookup=lambda oid: None,
+    )
+    assert resolved.permissions.role == "default"
