@@ -7,7 +7,8 @@
 
 /* Scan SDK compiled JS so Tailwind v4 generates classes used inside SDK
    components (ApplicationFormRenderer, Profile, Account, etc.). */
-@source "../node_modules/@iblai/iblai-js/dist/web-containers/source/index.esm.js";
+@source "../node_modules/@iblai/iblai-js/dist/web-containers/source";
+@source "../node_modules/@iblai/iblai-js/dist/web-containers/source/next";
 
 @custom-variant dark (&:is(.dark *));
 

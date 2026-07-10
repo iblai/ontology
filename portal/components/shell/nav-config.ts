@@ -1,49 +1,46 @@
-import {
-  LayoutDashboard,
-  Database,
-  BookOpen,
-  RefreshCw,
-  Network,
-  FileCog,
-  type LucideIcon,
-} from "lucide-react";
+import { LayoutDashboard, Database, Network, type LucideIcon } from "lucide-react";
 
+/** A leaf link inside a sidebar group. `labelKey` resolves under the `nav.*` i18n namespace. */
 export interface NavItem {
   href: string;
   labelKey: string;
-  icon: LucideIcon;
 }
 
-export interface NavSection {
+/** A PlatformSidebar `menu` section: an icon + label header (accordion on desktop,
+ *  icon in the collapsed rail) over its leaf links. `labelKey` resolves under `nav.*`. */
+export interface NavGroup {
+  id: string;
   labelKey: string;
+  icon: LucideIcon;
   items: NavItem[];
 }
 
-export const NAV_SECTIONS: NavSection[] = [
+/** The console nav, grouped into PlatformSidebar sections. Section icons show in
+ *  the collapsed rail; active state highlights the matching leaf (by `href`). */
+export const PLATFORM_SIDEBAR_SECTIONS: NavGroup[] = [
   {
-    labelKey: "dashboard",
-    items: [{ href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard }],
+    id: "overview",
+    labelKey: "groupOverview",
+    icon: LayoutDashboard,
+    items: [{ href: "/dashboard", labelKey: "dashboard" }],
   },
   {
-    labelKey: "services",
-    items: [{ href: "/services", labelKey: "servicesList", icon: Database }],
+    id: "sources",
+    labelKey: "groupSources",
+    icon: Database,
+    items: [
+      { href: "/services", labelKey: "servicesList" },
+      { href: "/catalog", labelKey: "catalog" },
+      { href: "/sync", labelKey: "sync" },
+    ],
   },
   {
-    labelKey: "catalog",
-    items: [{ href: "/catalog", labelKey: "catalog", icon: BookOpen }],
-  },
-  {
-    labelKey: "sync",
-    items: [{ href: "/sync", labelKey: "sync", icon: RefreshCw }],
-  },
-  {
-    labelKey: "mcp",
-    items: [{ href: "/mcp", labelKey: "mcpGateway", icon: Network }],
-  },
-  {
-    labelKey: "config",
-    items: [{ href: "/config", labelKey: "config", icon: FileCog }],
+    id: "gateway",
+    labelKey: "groupGateway",
+    icon: Network,
+    items: [
+      { href: "/mcp", labelKey: "mcpGateway" },
+      { href: "/config", labelKey: "config" },
+    ],
   },
 ];
-
-export const ALL_NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);

@@ -11,7 +11,7 @@
 
 import { configureStore } from "@reduxjs/toolkit";
 import { coreApiSlice, mentorReducer, mentorMiddleware } from "@iblai/iblai-js/data-layer";
-import { chatSliceReducerShared, filesReducer } from "@iblai/iblai-js/web-utils";
+import { chatSliceReducerShared, filesReducer, rbacReducer } from "@iblai/iblai-js/web-utils";
 
 export const iblaiStore = configureStore({
   reducer: {
@@ -19,6 +19,9 @@ export const iblaiStore = configureStore({
     ...mentorReducer,
     chatSliceShared: chatSliceReducerShared,
     files: filesReducer,
+    // `rbac` key is required — selectRbacPermissions reads state.rbac. Not part
+    // of mentorReducer; populated by TenantProvider's onLoadPlatformPermissions.
+    rbac: rbacReducer,
   },
   middleware: (getDefaultMiddleware) => {
     const base = getDefaultMiddleware({ serializableCheck: false }).concat(coreApiSlice.middleware);

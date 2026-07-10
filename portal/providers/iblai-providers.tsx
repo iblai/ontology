@@ -13,7 +13,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Provider as ReduxProvider } from "react-redux";
 import { usePathname } from "next/navigation";
 import { initializeDataLayer } from "@iblai/iblai-js/data-layer";
-import { AuthProvider, TenantProvider } from "@iblai/iblai-js/web-utils";
+import { AuthProvider, TenantProvider, updateRbacPermissions } from "@iblai/iblai-js/web-utils";
 
 import { iblaiStore } from "@/store/iblai-store";
 import { LocalStorageService } from "@/lib/iblai/storage-service";
@@ -93,6 +93,9 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
           }}
           redirectToAuthSpa={redirectToAuthSpa}
           username={username}
+          onLoadPlatformPermissions={(perms) =>
+            iblaiStore.dispatch(updateRbacPermissions((perms ?? {}) as never))
+          }
           fallback={LOADING}
         >
           {children}

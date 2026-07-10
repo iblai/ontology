@@ -62,6 +62,9 @@
   },
   "nav": {
     "consoleHome": "Ontology Console",
+    "groupOverview": "Overview",
+    "groupSources": "Sources",
+    "groupGateway": "Gateway",
     "dashboard": "Dashboard",
     "services": "Services",
     "servicesList": "All services",
