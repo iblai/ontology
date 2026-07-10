@@ -34,8 +34,8 @@ Usage: ./dev.sh <command> [args]
   fmt           Auto-fix: ruff format + import sort
   lint          Check only (no writes): ruff format --check, import sort, lint
   check         Run lint AND tests — the pre-commit gate (matches CI)
-  serve [args]  Start the dev server (django-admin runserver "\$@";
-                e.g. ./dev.sh serve 0.0.0.0:8000 to bind on the LAN)
+  manage [args] Manage the django project,
+                e.g. ./dev.sh manage migrate)
 
 Tests run with '$PYTHON'. Activate the pyenv 'ontology' (3.11+) venv first,
 or run e.g.  PYTHON=python3.11 ./dev.sh check
@@ -72,10 +72,10 @@ check)
 	"$PYTHON" -m pytest -q
 	echo "All checks passed."
 	;;
-serve)
+manage)
 	# django-admin (not manage.py) needs the settings module in the env.
 	export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-iblai_ontology.backend.settings}"
-	django-admin runserver "$@"
+	django-admin "$@"
 	;;
 "" | -h | --help | help)
 	usage
