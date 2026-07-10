@@ -1,136 +1,46 @@
-import {
-  BookOpen,
-  Bell,
-  CalendarCheck,
-  ClipboardCheck,
-  CreditCard,
-  Database,
-  FileText,
-  LayoutDashboard,
-  Mail,
-  School,
-  type LucideIcon,
-} from "lucide-react";
-import type { Role } from "@/lib/types";
+import { LayoutDashboard, Database, Network, type LucideIcon } from "lucide-react";
 
+/** A leaf link inside a sidebar group. `labelKey` resolves under the `nav.*` i18n namespace. */
 export interface NavItem {
+  href: string;
+  labelKey: string;
+}
+
+/** A PlatformSidebar `menu` section: an icon + label header (accordion on desktop,
+ *  icon in the collapsed rail) over its leaf links. `labelKey` resolves under `nav.*`. */
+export interface NavGroup {
   id: string;
-  /** Key under the `nav` i18n namespace. */
   labelKey: string;
   icon: LucideIcon;
-  href: string;
-  exact?: boolean;
-  roles: Role[];
+  items: NavItem[];
 }
 
-const ADMINS: Role[] = ["afa_admin", "network_admin", "central_admin"];
-
-export const NAV_ITEMS: NavItem[] = [
-  // Parent
+/** The console nav, grouped into PlatformSidebar sections. Section icons show in
+ *  the collapsed rail; active state highlights the matching leaf (by `href`). */
+export const PLATFORM_SIDEBAR_SECTIONS: NavGroup[] = [
   {
-    id: "parent-dashboard",
-    labelKey: "dashboard",
+    id: "overview",
+    labelKey: "groupOverview",
     icon: LayoutDashboard,
-    href: "/parent",
-    exact: true,
-    roles: ["parent"],
+    items: [{ href: "/dashboard", labelKey: "dashboard" }],
   },
   {
-    id: "parent-billing",
-    labelKey: "billing",
-    icon: CreditCard,
-    href: "/parent/billing",
-    roles: ["parent"],
+    id: "sources",
+    labelKey: "groupSources",
+    icon: Database,
+    items: [
+      { href: "/services", labelKey: "servicesList" },
+      { href: "/catalog", labelKey: "catalog" },
+      { href: "/sync", labelKey: "sync" },
+    ],
   },
   {
-    id: "parent-documents",
-    labelKey: "documents",
-    icon: FileText,
-    href: "/parent/documents",
-    roles: ["parent"],
-  },
-  {
-    id: "parent-notifications",
-    labelKey: "notifications",
-    icon: Bell,
-    href: "/parent/notifications",
-    roles: ["parent"],
-  },
-  // Student
-  {
-    id: "student-dashboard",
-    labelKey: "dashboard",
-    icon: LayoutDashboard,
-    href: "/student",
-    exact: true,
-    roles: ["student"],
-  },
-  // Admin
-  {
-    id: "admin-dashboard",
-    labelKey: "dashboard",
-    icon: LayoutDashboard,
-    href: "/admin",
-    exact: true,
-    roles: [...ADMINS, "finance_admin"],
-  },
-  {
-    id: "admin-applications",
-    labelKey: "applications",
-    icon: FileText,
-    href: "/admin/applications",
-    roles: ADMINS,
-  },
-  {
-    id: "admin-interviews",
-    labelKey: "interviews",
-    icon: CalendarCheck,
-    href: "/admin/interviews",
-    roles: ["network_admin", "central_admin"],
-  },
-  {
-    id: "admin-billing",
-    labelKey: "billing",
-    icon: CreditCard,
-    href: "/admin/billing",
-    roles: [...ADMINS, "finance_admin"],
-  },
-  {
-    id: "admin-placement",
-    labelKey: "placement",
-    icon: ClipboardCheck,
-    href: "/admin/placement",
-    roles: ADMINS,
-  },
-  {
-    id: "admin-courses",
-    labelKey: "courses",
-    icon: BookOpen,
-    href: "/admin/courses",
-    roles: ADMINS,
-  },
-  { id: "admin-sis", labelKey: "sis", icon: Database, href: "/admin/sis", roles: ADMINS },
-  {
-    id: "admin-schools",
-    labelKey: "schools",
-    icon: School,
-    href: "/admin/schools",
-    roles: ["central_admin"],
-  },
-  {
-    id: "admin-communications",
-    labelKey: "communications",
-    icon: Mail,
-    href: "/admin/communications",
-    roles: ADMINS,
+    id: "gateway",
+    labelKey: "groupGateway",
+    icon: Network,
+    items: [
+      { href: "/mcp", labelKey: "mcpGateway" },
+      { href: "/config", labelKey: "config" },
+    ],
   },
 ];
-
-export function navItemsForRole(role: Role): NavItem[] {
-  return NAV_ITEMS.filter((i) => i.roles.includes(role));
-}
-
-export function isNavItemActive(item: NavItem, pathname: string): boolean {
-  if (item.exact) return pathname === item.href;
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
-}

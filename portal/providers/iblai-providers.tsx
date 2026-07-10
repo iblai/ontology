@@ -13,15 +13,13 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Provider as ReduxProvider } from "react-redux";
 import { usePathname } from "next/navigation";
 import { initializeDataLayer } from "@iblai/iblai-js/data-layer";
-import { AuthProvider, TenantProvider } from "@iblai/iblai-js/web-utils";
+import { AuthProvider, TenantProvider, updateRbacPermissions } from "@iblai/iblai-js/web-utils";
 
 import { iblaiStore } from "@/store/iblai-store";
 import { LocalStorageService } from "@/lib/iblai/storage-service";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant, checkTenantMismatch } from "@/lib/iblai/tenant";
-import {
-  redirectToAuthSpa,
-} from "@/lib/iblai/auth-utils";
+import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
 
 const storageService = LocalStorageService.getInstance();
 
@@ -41,13 +39,9 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
   const [isInitialized] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
-      initializeDataLayer(
-        config.dmUrl(),
-        config.lmsUrl(),
-        config.lmsUrl(),
-        storageService,
-        { 401: () => redirectToAuthSpa(undefined, undefined, true) },
-      );
+      initializeDataLayer(config.dmUrl(), config.lmsUrl(), config.lmsUrl(), storageService, {
+        401: () => redirectToAuthSpa(undefined, undefined, true),
+      });
     } catch (e) {
       console.error("[ibl.ai] initializeDataLayer failed:", e);
     }
@@ -59,7 +53,9 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem("userData");
       if (raw) return JSON.parse(raw).user_nicename ?? "";
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return "";
   }, [isInitialized]);
 
@@ -85,20 +81,21 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
           currentTenant={tenantKey}
           requestedTenant={tenantKey}
           saveCurrentTenant={(t: any) => {
-            const key = typeof t === "string" ? t : t?.key ?? String(t);
+            const key = typeof t === "string" ? t : (t?.key ?? String(t));
             localStorage.setItem("current_tenant", key);
             localStorage.setItem("tenant", key);
             checkTenantMismatch();
           }}
-          saveUserTenants={(t: unknown) =>
-            localStorage.setItem("tenants", JSON.stringify(t))
-          }
+          saveUserTenants={(t: unknown) => localStorage.setItem("tenants", JSON.stringify(t))}
           handleTenantSwitch={async () => {
             const tenant = resolveAppTenant();
             redirectToAuthSpa(undefined, tenant, false, true);
           }}
           redirectToAuthSpa={redirectToAuthSpa}
           username={username}
+          onLoadPlatformPermissions={(perms) =>
+            iblaiStore.dispatch(updateRbacPermissions((perms ?? {}) as never))
+          }
           fallback={LOADING}
         >
           {children}

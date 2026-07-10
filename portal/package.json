@@ -1,5 +1,5 @@
 {
-  "name": "enrollment-portal",
+  "name": "ontology-console",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,12 +14,12 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "typecheck": "tsgo --noEmit",
-    "check": "tsgo lib/api/__demo__.ts --ignoreConfig --types node --outDir .selfcheck --module commonjs --target es2022 --esModuleInterop --skipLibCheck && node .selfcheck/api/__demo__.js && node scripts/check-i18n.mjs"
+    "check": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "3.10.0",
     "@iblai/iblai-api": "4.166.0-ai",
-    "@iblai/iblai-js": "1.22.4-onboarding-v2.2",
+    "@iblai/iblai-js": "1.23.1",
     "@radix-ui/react-accordion": "1.2.12",
     "@radix-ui/react-alert-dialog": "1.1.13",
     "@radix-ui/react-avatar": "1.1.4",
@@ -53,6 +53,7 @@
     "react-redux": "9.2.0",
     "sonner": "2.0.7",
     "tailwind-merge": "3.2.0",
+    "yaml": "2.8.0",
     "zod": "3.24.2"
   },
   "devDependencies": {
@@ -69,10 +70,5 @@
     "tw-animate-css": "1.2.5",
     "typescript": "5.9.3"
   },
-  "packageManager": "pnpm@11.8.0",
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
-  }
+  "packageManager": "pnpm@11.8.0"
 }

@@ -23,9 +23,13 @@ dependencies = [
 # Long-running backend services (gateway, sync, discovery state).
 django = [
     "django>=5.0,<6.0",
+    "djangorestframework>=3.15,<4.0",
+    "django-cors-headers>=4.3,<5.0",
+    "environs[django]>=11,<15",
     "celery>=5.3",
     "cryptography>=42.0",
     "jinja2>=3.1",
+    "uvicorn>=0.51.0",
 ]
 # BYOK schema analysis — only needed when LLM discovery is enabled.
 llm = [

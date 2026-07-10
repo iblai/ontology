@@ -2,17 +2,15 @@ import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { cookies } from "next/headers";
-import { SessionProvider } from "@/lib/session";
 import { IblaiProviders } from "@/providers/iblai-providers";
 import { AppShell } from "@/components/shell/app-shell";
-import { MswProvider } from "@/components/shell/msw-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Enrollment Portal",
+  title: "Ontology Console · ibl.ai",
   description:
-    "Registration & enrollment for American Faith Academy and Ministry.com Network Schools",
+    "Admin console for iblai/ontology — the on-premise knowledge layer that makes your systems queryable by AI agents over MCP.",
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -26,11 +24,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body className="antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <IblaiProviders>
-            <SessionProvider>
-              <MswProvider>
-                <AppShell defaultSidebarOpen={defaultSidebarOpen}>{children}</AppShell>
-              </MswProvider>
-            </SessionProvider>
+            <AppShell defaultSidebarOpen={defaultSidebarOpen}>{children}</AppShell>
           </IblaiProviders>
         </NextIntlClientProvider>
         <Toaster />

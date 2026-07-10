@@ -34,6 +34,10 @@ Usage: ./dev.sh <command> [args]
   fmt           Auto-fix: ruff format + import sort
   lint          Check only (no writes): ruff format --check, import sort, lint
   check         Run lint AND tests — the pre-commit gate (matches CI)
+  manage [args] Manage the django project,
+                e.g. ./dev.sh manage migrate)
+  run_uvicorn [args]  Serve the Django ASGI app via uvicorn (flags passed through,
+                e.g. ./dev.sh run_uvicorn --host 0.0.0.0 --port 8000 --reload)
 
 Tests run with '$PYTHON'. Activate the pyenv 'ontology' (3.11+) venv first,
 or run e.g.  PYTHON=python3.11 ./dev.sh check
@@ -69,6 +73,16 @@ check)
 	echo "== pytest =="
 	"$PYTHON" -m pytest -q
 	echo "All checks passed."
+	;;
+manage)
+	# django-admin (not manage.py) needs the settings module in the env.
+	export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-iblai_ontology.backend.settings}"
+	django-admin "$@"
+	;;
+run_uvicorn)
+	# Serve the Django ASGI app; asgi.py sets DJANGO_SETTINGS_MODULE itself.
+	# Extra args pass through, e.g. --host 0.0.0.0 --port 8000 --reload
+	"$PYTHON" -m uvicorn iblai_ontology.backend.asgi:application "$@"
 	;;
 "" | -h | --help | help)
 	usage

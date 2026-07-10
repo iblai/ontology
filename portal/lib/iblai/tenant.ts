@@ -10,8 +10,13 @@
 import config from "@/lib/iblai/config";
 
 const PLACEHOLDER_PLATFORMS = new Set([
-  "your-main-platform", "your-platform", "your-tenant", "your-tenant-key",
-  "test-tenant", "main", "",
+  "your-main-platform",
+  "your-platform",
+  "your-tenant",
+  "your-tenant-key",
+  "test-tenant",
+  "main",
+  "",
 ]);
 
 export function resolveAppTenant(): string {

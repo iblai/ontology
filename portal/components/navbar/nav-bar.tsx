@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { Menu } from "lucide-react";
-import { useSidebar } from "@/components/ui/sidebar";
+import { useSidebar } from "@iblai/iblai-js/web-containers/next";
 import { CreditBalanceWidget } from "./credit-balance-widget";
 import { UserProfileButton } from "./user-profile-button";
 import { NotificationDropdown } from "@iblai/iblai-js/web-containers";

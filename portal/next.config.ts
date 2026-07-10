@@ -8,15 +8,32 @@ const tauriStub = path.resolve("./lib/tauri-stub.js");
 const TAURI_MODULES = ["@tauri-apps/api/core", "@tauri-apps/api/event", "@tauri-apps/plugin-os"];
 // The SDK's next bundle (SsoLogin, Account) references optional packages
 // not needed for our use case. Alias them to the no-op stub.
-const OPTIONAL_STUBS = [...TAURI_MODULES, "@iblai/agent-ai", "livekit-client", "@livekit/components-react"];
+const OPTIONAL_STUBS = [
+  ...TAURI_MODULES,
+  "@iblai/agent-ai",
+  "livekit-client",
+  "@livekit/components-react",
+];
 
 const MSW_BROWSER = path.resolve("./node_modules/msw/lib/browser/index.mjs");
 // webpack resolve.alias, SDK components bind a different ReactReduxContext
 // and RTK Query hooks silently return undefined with zero HTTP requests.
 const RTK_DIR = path.dirname(require.resolve("@reduxjs/toolkit/package.json"));
 
+// ibl.ai serves avatars / tenant logos / notification images from its API and
+// platform subdomains; allow next/image to optimize them (wildcard subdomains).
+const IMAGE_HOSTS = [
+  ...new Set([process.env.NEXT_PUBLIC_PLATFORM_BASE_DOMAIN || "iblai.app", "iblai.app", "iblai.org"]),
+];
+
 const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: true },
+  images: {
+    remotePatterns: IMAGE_HOSTS.map((hostname) => ({
+      protocol: "https" as const,
+      hostname: `**.${hostname}`,
+    })),
+  },
   webpack: (config) => {
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {

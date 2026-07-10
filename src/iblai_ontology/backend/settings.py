@@ -12,8 +12,16 @@ import os
 from pathlib import Path
 
 import yaml
+from corsheaders.defaults import default_headers
+from environs import Env
 
 from iblai_ontology.config import LLM_DEFAULT_MODELS, config_dir
+
+# Load a .env file (searched from the working directory upward) into the
+# environment before any settings are read. environs does not override vars
+# already set in the real environment, so shell/compose values still win.
+env = Env()
+env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -21,19 +29,56 @@ SECRET_KEY = os.environ.get("ONTOLOGY_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = os.environ.get("ONTOLOGY_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = os.environ.get("ONTOLOGY_ALLOWED_HOSTS", "*").split(",")
 
+# --- Logging -------------------------------------------------------------
+# Show the *real* reason behind 500s on the console. Django logs unhandled view
+# exceptions (what the SPA sees as a bare "500") to the `django.request` logger
+# with a full traceback — but its built-in console handler is gated on DEBUG,
+# so with DEBUG off you get no cause. Route request errors (and app logs) to
+# stderr regardless of DEBUG; tune volume with ONTOLOGY_LOG_LEVEL.
+LOG_LEVEL = os.environ.get("ONTOLOGY_LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+    },
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        # Unhandled 500s land here with exc_info — the full traceback.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
+
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "rest_framework",
+    "corsheaders",
     "iblai_ontology.backend.services",
     "iblai_ontology.backend.discovery",
     "iblai_ontology.backend.provisioning",
     "iblai_ontology.backend.sync",
     "iblai_ontology.backend.identity",
     "iblai_ontology.backend.mcp_server",
+    "iblai_ontology.backend.api",
 ]
 
 MIDDLEWARE: list[str] = [
-    # First: reject cleartext-borne tokens and wrap every response (including
+    # First: answer CORS preflight (OPTIONS) before anything else. The console
+    # SPA calls this API cross-origin from :3000 and preflights carry no auth,
+    # so CorsMiddleware must short-circuit them ahead of identity/rate-limit.
+    "corsheaders.middleware.CorsMiddleware",
+    # Then: reject cleartext-borne tokens and wrap every response (including
     # 401/403/429 errors below) with security headers.
     "iblai_ontology.backend.security_headers.OntologySecurityMiddleware",
     "iblai_ontology.backend.identity.middleware.OntologyIdentityMiddleware",
@@ -164,3 +209,42 @@ JWT_REPLAY_MODE = os.environ.get("ONTOLOGY_JWT_REPLAY_MODE", "bind").lower()
 JWT_REPLAY_TTL_FALLBACK = int(
     os.environ.get("ONTOLOGY_JWT_REPLAY_TTL_FALLBACK", "3600")
 )
+
+# --- REST API for the admin console (DRF) ---------------------------------
+# Two Authorization schemes: `Bearer <entra-jwt>` (resolved by the identity
+# middleware above into request.ontology) and `Token <dm_token>` plus an
+# `X-Edx-Jwt` header (verified against the ibl.ai DM and LMS — see
+# backend/api/auth.py). Leaving the DM/LMS URLs unset disables the Token
+# scheme; the API stays platform-agnostic (any platform's active admin).
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "iblai_ontology.backend.api.auth.DmTokenAuthentication",
+        "iblai_ontology.backend.api.auth.OntologyAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "iblai_ontology.backend.api.auth.AdminDashboardPermission",
+    ],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "UNAUTHENTICATED_USER": None,
+}
+ONTOLOGY_DM_URL = os.environ.get("ONTOLOGY_DM_URL", "").rstrip("/")
+ONTOLOGY_LMS_URL = os.environ.get("ONTOLOGY_LMS_URL", "").rstrip("/")
+ONTOLOGY_DM_VERIFY_TTL = int(os.environ.get("ONTOLOGY_DM_VERIFY_TTL", "300"))
+# Local dev without Entra/DM: anonymous requests act as a synthetic admin.
+ONTOLOGY_API_DEV_ALLOW_ANON = (
+    os.environ.get("ONTOLOGY_API_DEV_ALLOW_ANON", "false").lower() == "true"
+)
+
+# --- CORS (the console SPA calls this API cross-origin from :3000) --------
+# Only browser origins that host the console need listing; the two tokens
+# travel in request headers (no cookies), so credentials stay off. The custom
+# X-Edx-Jwt header must be allowlisted on top of the DRF/CORS defaults.
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "ONTOLOGY_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
+CORS_ALLOW_HEADERS = (*default_headers, "x-edx-jwt")

@@ -1,9 +1,10 @@
 allowBuilds:
+  '@parcel/watcher': set this to true or false
+  '@swc/core': set this to true or false
   canvas: set this to true or false
   msw: set this to true or false
+  sharp: set this to true or false
+# First-party ibl.ai packages: trusted, released frequently — exempt from the
+# supply-chain release-age delay.
 minimumReleaseAgeExclude:
-  - '@iblai/data-layer@1.9.2-onboarding-v2.2'
-  - '@iblai/iblai-js@1.22.4-onboarding-v2.2'
-  - '@iblai/mcp@1.7.8-onboarding-v2.2'
-  - '@iblai/web-containers@1.12.2-onboarding-v2.2'
-  - '@iblai/web-utils@1.11.11-onboarding-v2.2'
+  - "@iblai/*"
