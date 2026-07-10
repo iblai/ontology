@@ -263,7 +263,7 @@ def test_platform_attach_to_agent():
         captured["body"] = json.loads(request.content)
         return httpx.Response(200, json={"ok": True})
 
-    from iblai_ontology.backend.platform.client import PlatformClient, PlatformConfig
+    from iblai_ontology.backend.ibl_platform.client import PlatformClient, PlatformConfig
 
     client = PlatformClient(
         PlatformConfig(base_url="https://x", org="alasu", admin_token="t"),
@@ -276,7 +276,7 @@ def test_platform_attach_to_agent():
 
 
 def test_platform_config_from_env(monkeypatch):
-    from iblai_ontology.backend.platform.client import PlatformConfig
+    from iblai_ontology.backend.ibl_platform.client import PlatformConfig
 
     monkeypatch.setenv("IBLAI_ORG", "alasu")
     monkeypatch.setenv("IBLAI_ADMIN_TOKEN", "tok")
