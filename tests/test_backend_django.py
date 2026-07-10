@@ -190,7 +190,7 @@ def test_platform_commands(backend, monkeypatch):
             return {"ok": True}
 
     monkeypatch.setattr(
-        "iblai_ontology.backend.ibl_platform.client.PlatformClient", FakeClient
+        "iblai_ontology.backend.platform.client.PlatformClient", FakeClient
     )
     assert (
         runner.invoke(

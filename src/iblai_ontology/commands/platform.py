@@ -25,7 +25,7 @@ def register(
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
-    from iblai_ontology.backend.ibl_platform.client import PlatformClient
+    from iblai_ontology.backend.platform.client import PlatformClient
 
     result = PlatformClient().register_mcp_server(
         name=name, url=url, description=description, auth_scope=auth_scope
@@ -45,7 +45,7 @@ def connect(
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
-    from iblai_ontology.backend.ibl_platform.client import PlatformClient
+    from iblai_ontology.backend.platform.client import PlatformClient
 
     result = PlatformClient().create_connection(
         server=server, scope=scope, role=role, user=user, agent=agent
@@ -62,7 +62,7 @@ def attach(
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
-    from iblai_ontology.backend.ibl_platform.client import PlatformClient
+    from iblai_ontology.backend.platform.client import PlatformClient
 
     result = PlatformClient().attach_to_agent(agent_id=agent_id, server_id=server)
     typer.echo(json.dumps(result, indent=2))

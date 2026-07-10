@@ -29,6 +29,7 @@ django = [
     "celery>=5.3",
     "cryptography>=42.0",
     "jinja2>=3.1",
+    "uvicorn>=0.51.0",
 ]
 # BYOK schema analysis — only needed when LLM discovery is enabled.
 llm = [
