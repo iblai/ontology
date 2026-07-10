@@ -363,7 +363,11 @@ def _dispatch(view, method="get", path="/x", ontology=None, anon=True, data=None
     settings.ONTOLOGY_API_DEV_ALLOW_ANON = anon
     factory = APIRequestFactory()
     kwargs = {"format": "json"} if data is not None else {}
-    raw = getattr(factory, method)(path, data, **kwargs) if data is not None else getattr(factory, method)(path)
+    raw = (
+        getattr(factory, method)(path, data, **kwargs)
+        if data is not None
+        else getattr(factory, method)(path)
+    )
     raw.ontology = ontology
     return raw
 
@@ -397,7 +401,9 @@ def test_get_service_missing_returns_null(api):
     from iblai_ontology.backend.api.views import ServiceDetailView
 
     resp = _run(
-        ServiceDetailView, _dispatch(ServiceDetailView, "get", "/services/nope"), name="nope"
+        ServiceDetailView,
+        _dispatch(ServiceDetailView, "get", "/services/nope"),
+        name="nope",
     )
     assert resp.status_code == 200
     # Literal JSON null (not an empty body) so the client's res.json() → null.
@@ -516,7 +522,9 @@ def test_mcp_sources_tolerate_env_tokens_and_redact(api):
 def test_sync_schedules_infers_mode(api):
     from iblai_ontology.backend.api.views import SyncSchedulesView
 
-    resp = _run(SyncSchedulesView, _dispatch(SyncSchedulesView, "get", "/sync/schedules"))
+    resp = _run(
+        SyncSchedulesView, _dispatch(SyncSchedulesView, "get", "/sync/schedules")
+    )
     assert resp.status_code == 200
     assert resp.data
     modes = {s["mode"] for s in resp.data}

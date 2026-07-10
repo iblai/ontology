@@ -257,7 +257,9 @@ class ServiceTestView(ConsoleAPIView):
         try:
             conn = create_connection(service.adapter, cfg)
             try:
-                result = SafetyVerifier(conn, db_type=cfg.get("db_type")).run_all_tests()
+                result = SafetyVerifier(
+                    conn, db_type=cfg.get("db_type")
+                ).run_all_tests()
             finally:
                 try:
                     conn.close()
@@ -326,9 +328,7 @@ class ServiceApproveView(ConsoleAPIView):
 
             run = ProvisioningEngine().provision(name)
         except Exception as exc:
-            return _envelope(
-                False, str(exc)[:500], serializer=ApproveResultSerializer
-            )
+            return _envelope(False, str(exc)[:500], serializer=ApproveResultSerializer)
         self._audit(request, action="service.approve", resource=name)
         return _envelope(
             True,
@@ -454,7 +454,9 @@ class McpValidateView(ConsoleAPIView):
 
 class McpBuildView(ConsoleAPIView):
     def post(self, request):
-        from iblai_ontology.backend.mcp_server.toolbox_config import write_toolbox_config
+        from iblai_ontology.backend.mcp_server.toolbox_config import (
+            write_toolbox_config,
+        )
         from iblai_ontology.config import config_dir
 
         src = config_dir() / "tools.yaml"
