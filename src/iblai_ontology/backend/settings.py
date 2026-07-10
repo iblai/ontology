@@ -29,6 +29,36 @@ SECRET_KEY = os.environ.get("ONTOLOGY_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = os.environ.get("ONTOLOGY_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = os.environ.get("ONTOLOGY_ALLOWED_HOSTS", "*").split(",")
 
+# --- Logging -------------------------------------------------------------
+# Show the *real* reason behind 500s on the console. Django logs unhandled view
+# exceptions (what the SPA sees as a bare "500") to the `django.request` logger
+# with a full traceback — but its built-in console handler is gated on DEBUG,
+# so with DEBUG off you get no cause. Route request errors (and app logs) to
+# stderr regardless of DEBUG; tune volume with ONTOLOGY_LOG_LEVEL.
+LOG_LEVEL = os.environ.get("ONTOLOGY_LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+    },
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        # Unhandled 500s land here with exc_info — the full traceback.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
+
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",

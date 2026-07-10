@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Play } from "lucide-react";
+import { Play, CalendarClock, Activity } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
 import type { SyncSchedule, SyncRun } from "@/lib/ontology/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortableHeader } from "@/components/shared/data-table";
 import { SectionHeader } from "@/components/console/section-header";
+import { EmptyState } from "@/components/console/empty-state";
 import { StatusBadge } from "@/components/console/status-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -216,7 +217,7 @@ export default function SyncPage() {
           {schedules === null ? (
             <Skeleton className="h-64 rounded-lg" />
           ) : schedules.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("noSchedules")}</p>
+            <EmptyState icon={CalendarClock} title={t("noSchedules")} />
           ) : (
             <DataTable columns={scheduleCols} data={schedules} pageSize={15} />
           )}
@@ -226,7 +227,7 @@ export default function SyncPage() {
           {status === null ? (
             <Skeleton className="h-64 rounded-lg" />
           ) : status.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("noRuns")}</p>
+            <EmptyState icon={Activity} title={t("noRuns")} />
           ) : (
             <DataTable columns={statusCols} data={status} pageSize={15} />
           )}

@@ -13,6 +13,7 @@ import type {
   SyncRun,
 } from "@/lib/ontology/types";
 import { StatusBadge } from "@/components/console/status-badge";
+import { EmptyState } from "@/components/console/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -335,7 +336,7 @@ export function ServiceDetailClient({ service }: { service: Service }) {
               </Card>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{tc("noResults")}</p>
+            <EmptyState title={tc("noResults")} />
           )}
         </TabsContent>
 
@@ -362,9 +363,7 @@ export function ServiceDetailClient({ service }: { service: Service }) {
               </Button>
             )}
             {runs.length === 0 ? (
-              <div className="rounded-md border border-dashed p-6 text-center">
-                <p className="text-sm text-muted-foreground">{t("pipeline.noRuns")}</p>
-              </div>
+              <EmptyState title={t("pipeline.noRuns")} />
             ) : (
               <div className="flex flex-col gap-4">
                 {runs.map((run) => (
@@ -427,7 +426,7 @@ export function ServiceDetailClient({ service }: { service: Service }) {
                 </CardContent>
               </Card>
             ) : (
-              <p className="text-sm text-muted-foreground">{t("sync.noRuns")}</p>
+              <EmptyState title={t("sync.noRuns")} />
             )}
           </div>
         </TabsContent>

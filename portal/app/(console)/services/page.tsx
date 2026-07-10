@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Database } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
 import type { Service } from "@/lib/ontology/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortableHeader } from "@/components/shared/data-table";
 import { SectionHeader } from "@/components/console/section-header";
+import { EmptyState } from "@/components/console/empty-state";
 import { StatusBadge } from "@/components/console/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -149,18 +150,16 @@ export default function ServicesPage() {
       {services === null ? (
         <Skeleton className="h-64 rounded-lg" />
       ) : services.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-          <p className="text-sm font-medium text-foreground">{t("empty")}</p>
-          <p className="text-xs text-muted-foreground">{t("emptyHint")}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-2"
-            onClick={() => router.push("/catalog")}
-          >
-            {t("addService")}
-          </Button>
-        </div>
+        <EmptyState
+          icon={Database}
+          title={t("empty")}
+          hint={t("emptyHint")}
+          action={
+            <Button size="sm" variant="outline" onClick={() => router.push("/catalog")}>
+              {t("addService")}
+            </Button>
+          }
+        />
       ) : (
         <DataTable
           columns={columns}
