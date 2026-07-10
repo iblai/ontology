@@ -170,7 +170,10 @@ def test_platform_client_register_and_connect():
         captured[request.url.path] = json.loads(request.content)
         return httpx.Response(200, json={"id": 14, "ok": True})
 
-    from iblai_ontology.backend.ibl_platform.client import PlatformClient, PlatformConfig
+    from iblai_ontology.backend.ibl_platform.client import (
+        PlatformClient,
+        PlatformConfig,
+    )
 
     transport = httpx.MockTransport(handler)
     client = PlatformClient(
