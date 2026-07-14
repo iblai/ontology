@@ -447,7 +447,10 @@ class McpTestResultSerializer(serializers.Serializer):
 
 class AddServiceSerializer(serializers.Serializer):
     name = serializers.CharField()
-    service_type = serializers.ChoiceField(choices=["database", "api"])
+    # Optional: the chosen adapter's SERVICE_TYPE is authoritative for the stored
+    # category (DiscoveryEngine.run), so this is accepted for the SPA's
+    # AddServiceInput shape but not required — and never overrides the adapter.
+    service_type = serializers.ChoiceField(choices=["database", "api"], required=False)
     adapter = serializers.CharField()
     host = serializers.CharField(required=False, allow_blank=True, default="")
     port = serializers.IntegerField(required=False, allow_null=True)

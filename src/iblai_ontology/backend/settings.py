@@ -231,6 +231,16 @@ REST_FRAMEWORK = {
 ONTOLOGY_DM_URL = os.environ.get("ONTOLOGY_DM_URL", "").rstrip("/")
 ONTOLOGY_LMS_URL = os.environ.get("ONTOLOGY_LMS_URL", "").rstrip("/")
 ONTOLOGY_DM_VERIFY_TTL = int(os.environ.get("ONTOLOGY_DM_VERIFY_TTL", "300"))
+# Optional allowlist of platform keys/orgs the console trusts. Empty (default)
+# keeps the platform-agnostic behaviour (any platform's active admin qualifies);
+# set it to scope console admin to specific platforms — important when DM/LMS is
+# the shared ibl.ai platform, where an unrelated platform's admin would otherwise
+# gain full control. Matched against each membership's ``key`` or ``org``.
+ONTOLOGY_ADMIN_PLATFORMS = {
+    p.strip()
+    for p in os.environ.get("ONTOLOGY_ADMIN_PLATFORMS", "").split(",")
+    if p.strip()
+}
 # Local dev without Entra/DM: anonymous requests act as a synthetic admin.
 ONTOLOGY_API_DEV_ALLOW_ANON = (
     os.environ.get("ONTOLOGY_API_DEV_ALLOW_ANON", "false").lower() == "true"
