@@ -382,11 +382,17 @@ class SyncStatusView(ConsoleAPIView):
     def get(self, request):
         from iblai_ontology.backend.sync.models import SyncRun
 
-        latest: dict = {}
-        # Latest run per schedule_name, computed portably (SQLite has no DISTINCT ON).
-        for run in SyncRun.objects.order_by("schedule_name", "-started_at"):
-            latest.setdefault(run.schedule_name, run)
-        runs = sorted(latest.values(), key=lambda r: r.started_at, reverse=True)
+        # Latest run per schedule_name. One indexed query per distinct schedule
+        # (schedule count is small and bounded) instead of scanning the whole,
+        # unbounded SyncRun table into Python. SQLite has no DISTINCT ON.
+        names = SyncRun.objects.values_list("schedule_name", flat=True).distinct()
+        latest = (
+            SyncRun.objects.filter(schedule_name=n).order_by("-started_at").first()
+            for n in names
+        )
+        runs = sorted(
+            (r for r in latest if r), key=lambda r: r.started_at, reverse=True
+        )
         return Response(SyncRunSerializer(runs, many=True).data)
 
 

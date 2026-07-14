@@ -557,3 +557,104 @@ def test_admin_entra_is_200(api):
     )
     resp = _run(CountsView, raw)
     assert resp.status_code == 200
+
+
+# --- follow-ups from PR review #2179 -------------------------------------
+
+
+def test_sync_status_returns_latest_per_schedule(api):
+    """M1: newest run per schedule, without loading the whole table."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from iblai_ontology.backend.api.views import SyncStatusView
+    from iblai_ontology.backend.sync.models import SyncRun
+
+    now = timezone.now()
+    for name, hours_ago, status in [
+        ("students", 2, "failed"),
+        ("students", 0, "success"),  # newest for students
+        ("courses", 3, "success"),
+        ("courses", 1, "failed"),  # newest for courses
+    ]:
+        SyncRun.objects.create(
+            schedule_name=name,
+            source_system="peoplesoft",
+            started_at=now - timedelta(hours=hours_ago),
+            status=status,
+        )
+    resp = _run(SyncStatusView, _dispatch(SyncStatusView, "get", "/sync/status"))
+    assert resp.status_code == 200
+    assert {r["schedule_name"]: r["status"] for r in resp.data} == {
+        "students": "success",
+        "courses": "failed",
+    }
+    assert resp.data[0]["schedule_name"] == "students"  # newest overall, first
+
+
+def test_dm_auth_admin_platform_allowlist_grants_listed(api, monkeypatch):
+    """M3: with an allowlist set, an admin on a listed platform still qualifies."""
+    from django.conf import settings
+
+    from iblai_ontology.backend.api.auth import DmTokenAuthentication
+
+    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
+    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
+    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", {"acme"})
+    _install_httpx(
+        monkeypatch,
+        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
+        lms=_FakeResp(
+            200,
+            [{"username": "jane", "org": "acme", "active": True, "is_admin": True}],
+        ),
+        counter=[],
+    )
+    req = _drf_request(HTTP_AUTHORIZATION="Token allow-yes", HTTP_X_EDX_JWT="jwt")
+    principal, _ = DmTokenAuthentication().authenticate(req)
+    assert principal.admin is True
+
+
+def test_dm_auth_admin_platform_allowlist_denies_other(api, monkeypatch):
+    """M3: an admin, but on a platform outside the allowlist, is not admin here."""
+    from django.conf import settings
+
+    from iblai_ontology.backend.api.auth import DmTokenAuthentication
+
+    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
+    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
+    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", {"acme"})
+    _install_httpx(
+        monkeypatch,
+        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
+        lms=_FakeResp(
+            200,
+            [{"username": "jane", "org": "other-co", "active": True, "is_admin": True}],
+        ),
+        counter=[],
+    )
+    req = _drf_request(HTTP_AUTHORIZATION="Token allow-no", HTTP_X_EDX_JWT="jwt")
+    principal, _ = DmTokenAuthentication().authenticate(req)
+    assert principal.admin is False
+
+
+def test_add_service_without_service_type_is_accepted(api, monkeypatch):
+    """L2: service_type is optional now — omitting it is not a 400."""
+    from iblai_ontology.backend.api.views import ServicesView
+
+    def _boom(self, **kw):  # fail fast — exercise validation, not real DB I/O
+        raise RuntimeError("no db here")
+
+    monkeypatch.setattr(
+        "iblai_ontology.backend.discovery.engine.DiscoveryEngine.run", _boom
+    )
+    raw = _dispatch(
+        ServicesView,
+        "post",
+        "/services",
+        data={"name": "newsvc", "adapter": "peoplesoft", "host": "db.edu"},
+    )
+    resp = _run(ServicesView, raw)
+    assert resp.status_code == 200  # not 400 — service_type no longer required
+    assert resp.data["ok"] is False  # engine raised → business-rule envelope

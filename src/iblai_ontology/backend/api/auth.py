@@ -11,7 +11,9 @@ Two Authorization schemes (wired in ``settings.REST_FRAMEWORK``):
   ``{ONTOLOGY_DM_URL}/api/core/token/verify/`` and reads the caller's platform
   memberships from ``{ONTOLOGY_LMS_URL}/api/ibl/users/manage/platform/`` with
   the edX JWT. Admin = at least one membership with ``active && is_admin`` —
-  platform-agnostic, any platform's admin qualifies. The two credentials are
+  platform-agnostic by default (any platform's admin qualifies), or scoped to
+  ``ONTOLOGY_ADMIN_PLATFORMS`` (by ``key``/``org``) when that allowlist is set.
+  The two credentials are
   bound by username (same user must hold both). Verdicts are cached for
   ``ONTOLOGY_DM_VERIFY_TTL`` seconds, so an upstream revocation takes effect
   within the TTL.
@@ -134,7 +136,16 @@ class DmTokenAuthentication(BaseAuthentication):
             raise AuthenticationFailed(
                 "DM token and edX JWT belong to different users."
             )
-        admin = any(m.get("active") and m.get("is_admin") for m in mine)
+        # Admin = an active admin membership. When ONTOLOGY_ADMIN_PLATFORMS is
+        # set, that membership must also be on an allowed platform (by key/org);
+        # an empty allowlist keeps the platform-agnostic default.
+        allowed = settings.ONTOLOGY_ADMIN_PLATFORMS
+        admin = any(
+            m.get("active")
+            and m.get("is_admin")
+            and (not allowed or m.get("key") in allowed or m.get("org") in allowed)
+            for m in mine
+        )
         return OntologyPrincipal(
             kind="dm",
             user_id=str(user.get("user_id") or ""),
