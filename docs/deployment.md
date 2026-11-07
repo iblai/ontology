@@ -169,11 +169,18 @@ Credentials are **split per MCP server** for isolation — each container loads 
 | File | Vars | Container |
 |---|---|---|
 | `.env` | `ONTOLOGY_DB_PASSWORD`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | compose `${...}` + gateway/admin |
+| `secrets/ontology_credential_key` | the registry's Fernet key, one line | ontology-gateway, mounted at `/run/secrets/ontology_credential_key` via `secrets:` |
 | `.env.mcp` | `PEOPLESOFT_DB_HOST/PORT/NAME`, `PEOPLESOFT_RO_USER/PASSWORD`, `ONTOLOGY_DB_USER`, `ONTOLOGY_DB_PASSWORD` | mcp-toolbox |
 | `.env.canvas` | `CANVAS_BASE_URL`, `CANVAS_API_TOKEN` | mcp-canvas |
 | `.env.slate` | `SLATE_BASE_URL`, `SLATE_API_KEY` | mcp-slate |
 | `.env.navigate` | `NAVIGATE_BASE_URL`, `NAVIGATE_API_KEY` | mcp-navigate |
 | `.env.ldap` | `LDAP_URI`, `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD`, `LDAP_BASE_DN` | mcp-ldap |
+
+The registry key is a **Compose secret**, not an env var: generate it once with
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > secrets/ontology_credential_key && chmod 600 secrets/ontology_credential_key`,
+and export `ONTOLOGY_CREDENTIAL_KEY_FILE=./secrets/ontology_credential_key` for host-side `ontology`
+commands so the CLI and the gateway share one key. `secrets/` is git-ignored, and Compose refuses
+to start the stack while the file is missing.
 
 `CANVAS_BASE_URL` is the instance root only — **no trailing slash, no `/api/v1`** (the server appends it). The Canvas token must be **admin-scoped** to look up other users; the tools accept a Canvas user id, a SIS id, or a `sis_login_id:` ref.
 
@@ -204,8 +211,9 @@ ONTOLOGY_DB_PASSWORD=<generated-during-setup>
 ENTRA_TENANT_ID=<university-tenant-id>
 ENTRA_CLIENT_ID=<iblai-ontology-app-client-id>
 
-# Credential encryption (Fernet) for the service registry
-ONTOLOGY_CREDENTIAL_KEY=<generated-during-setup>
+# Credential encryption (Fernet) for the service registry: a Compose secret file,
+# not an env var — see "Environment File" above.
+# ONTOLOGY_CREDENTIAL_KEY_FILE=./secrets/ontology_credential_key
 ```
 
 ---

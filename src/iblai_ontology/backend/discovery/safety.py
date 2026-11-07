@@ -7,7 +7,8 @@ correctly denied". If ANY write succeeds, the overall result is ``FAILED`` and
 nothing else runs.
 
 This module is intentionally Django-free: it operates on any DB-API 2.0
-connection (oracledb, psycopg2, pymysql, pyodbc).
+connection (oracledb, psycopg2, pymysql, pyodbc) or the auto-ontology connector
+shim in ``connectors.py``.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from enum import Enum
 from typing import Optional
 
 logger = logging.getLogger("iblai_ontology.safety")
+
+_UNPROBED = object()
 
 
 class TestResult(Enum):
@@ -73,6 +76,15 @@ PERMISSION_INDICATORS = (
     "must be owner",
 )
 
+# Dropping our probe table after CREATE was denied: nothing to drop is a denial too
+# (the Oracle branch already treats ORA-00942 this way).
+MISSING_TABLE_INDICATORS = (
+    "does not exist",
+    "doesn't exist",
+    "unknown table",
+    "no such table",
+)
+
 
 class SafetyVerifier:
     """Verifies that DB credentials are read-only by attempting writes."""
@@ -89,10 +101,14 @@ class SafetyVerifier:
 
     def __init__(self, connection, db_type: Optional[str] = None) -> None:
         self.connection = connection
+        self._probe_target = _UNPROBED
         self.db_type = db_type or self._detect_db_type()
 
     # -- detection -------------------------------------------------------
     def _detect_db_type(self) -> str:
+        declared = getattr(self.connection, "db_type", None)
+        if declared:
+            return declared
         module_name = type(self.connection).__module__
         if "cx_Oracle" in module_name or "oracledb" in module_name:
             return "oracle"
@@ -106,6 +122,10 @@ class SafetyVerifier:
 
     # -- helpers ---------------------------------------------------------
     def _find_existing_table(self) -> Optional[str]:
+        connector = getattr(self.connection, "connector", None)
+        if connector is not None:
+            target = self._connector_probe_target(connector)
+            return target[0] if target else None
         cursor = self.connection.cursor()
         queries = {
             "oracle": "SELECT table_name FROM user_tables WHERE ROWNUM = 1",
@@ -121,6 +141,10 @@ class SafetyVerifier:
         return row[0] if row else None
 
     def _get_first_column(self, table_name: str) -> str:
+        connector = getattr(self.connection, "connector", None)
+        if connector is not None:
+            target = self._connector_probe_target(connector)
+            return target[1] if target else "id"
         cursor = self.connection.cursor()
         queries = {
             "oracle": (
@@ -144,15 +168,33 @@ class SafetyVerifier:
         row = cursor.fetchone()
         return row[0] if row else "id"
 
+    def _connector_probe_target(self, connector) -> Optional[tuple[str, str]]:
+        """One metadata round-trip: the quoted table and column the write probes target."""
+        if self._probe_target is _UNPROBED:
+            from iblai_ontology.backend.discovery.connectors import (
+                first_table_and_column,
+            )
+
+            self._probe_target = first_table_and_column(connector)
+        return self._probe_target
+
     def _get_test_sql(self, test_name: str, existing_table: str) -> str:
         col = self._get_first_column(existing_table)
+        # Oracle rejects the COLUMN keyword; Trino and ClickHouse require it.
+        add = "ADD" if self.db_type == "oracle" else "ADD COLUMN"
+        # ClickHouse before 25.7 parses no UPDATE statement; its mutation form works on every version.
+        update = (
+            f"ALTER TABLE {existing_table} UPDATE {col} = {col} WHERE 1=0"
+            if self.db_type == "clickhouse"
+            else f"UPDATE {existing_table} SET {col} = {col} WHERE 1=0"
+        )
         return {
             "CREATE TABLE": "CREATE TABLE __iblai_safety_test (id INTEGER)",
             "INSERT": f"INSERT INTO {existing_table} ({col}) VALUES (NULL)",
-            "UPDATE": f"UPDATE {existing_table} SET {col} = {col} WHERE 1=0",
+            "UPDATE": update,
             "DELETE": f"DELETE FROM {existing_table} WHERE 1=0",
             "DROP TABLE": "DROP TABLE __iblai_safety_test",
-            "ALTER TABLE": f"ALTER TABLE {existing_table} ADD __iblai_safety_col INTEGER",
+            "ALTER TABLE": f"ALTER TABLE {existing_table} {add} __iblai_safety_col INTEGER",
             "TRUNCATE": f"TRUNCATE TABLE {existing_table}",
         }[test_name]
 
@@ -220,7 +262,11 @@ class SafetyVerifier:
             )
         except Exception as exc:
             error_str = str(exc).lower()
-            if any(ind in error_str for ind in PERMISSION_INDICATORS):
+            denied = any(ind in error_str for ind in PERMISSION_INDICATORS) or (
+                test_name == "DROP TABLE"
+                and any(ind in error_str for ind in MISSING_TABLE_INDICATORS)
+            )
+            if denied:
                 return SafetyTestResult(
                     test_name=test_name,
                     sql_attempted=sql,
@@ -280,5 +326,22 @@ CREATE LOGIN iblai_readonly WITH PASSWORD = '<STRONG_PASSWORD_HERE>';
 USE your_database;
 CREATE USER iblai_readonly FOR LOGIN iblai_readonly;
 ALTER ROLE db_datareader ADD MEMBER iblai_readonly;
+""",
+    "snowflake": """\
+-- Snowflake: create a read-only role and user (run as SECURITYADMIN)
+CREATE ROLE iblai_readonly;
+GRANT USAGE ON WAREHOUSE your_warehouse TO ROLE iblai_readonly;
+GRANT USAGE ON DATABASE your_database TO ROLE iblai_readonly;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE your_database TO ROLE iblai_readonly;
+GRANT SELECT ON ALL TABLES IN DATABASE your_database TO ROLE iblai_readonly;
+GRANT SELECT ON FUTURE TABLES IN DATABASE your_database TO ROLE iblai_readonly;
+CREATE USER iblai_readonly PASSWORD = '<STRONG_PASSWORD_HERE>' DEFAULT_ROLE = iblai_readonly;
+GRANT ROLE iblai_readonly TO USER iblai_readonly;
+""",
+    "clickhouse": """\
+-- ClickHouse: create a read-only user
+-- readonly = 2, not 1: the connector sets per-query limits, which readonly = 1 rejects
+CREATE USER iblai_readonly IDENTIFIED BY '<STRONG_PASSWORD_HERE>' SETTINGS readonly = 2;
+GRANT SELECT ON your_database.* TO iblai_readonly;
 """,
 }

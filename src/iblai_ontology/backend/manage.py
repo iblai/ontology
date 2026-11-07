@@ -16,8 +16,7 @@ def main() -> None:
         from django.core.management import execute_from_command_line
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
-            "Django is not installed. Install the backend extra: "
-            "pip install 'iblai-ontology[django]'"
+            "Django is not installed. Install the backend extra: uv sync --extra django"
         ) from exc
     execute_from_command_line(sys.argv)
 

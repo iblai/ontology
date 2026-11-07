@@ -161,7 +161,9 @@ class ServiceSerializer(serializers.ModelSerializer):
     def get_connection_config(self, obj) -> dict:
         # _redact masks password/secret/token/key values; then stringify to the
         # Record<string,string> the SPA expects.
-        return {k: str(v) for k, v in _redact(dict(self._config(obj))).items()}
+        cfg = dict(self._config(obj))
+        cfg.update(cfg.pop("options", None) or {})  # engine fields shown flat
+        return {k: str(v) for k, v in _redact(cfg).items()}
 
     def get_domain(self, obj) -> str:
         return _adapter_domain_map().get(obj.adapter, "higher-ed")
@@ -270,7 +272,7 @@ class ProvisioningStepSerializer(serializers.ModelSerializer):
 class ProvisioningRunSerializer(serializers.ModelSerializer):
     id = serializers.CharField(read_only=True)
     service_name = serializers.CharField(source="service.name", read_only=True)
-    steps = ProvisioningStepSerializer(many=True, read_only=True)
+    steps = serializers.SerializerMethodField()
 
     class Meta:
         model = ProvisioningRun
@@ -285,6 +287,14 @@ class ProvisioningRunSerializer(serializers.ModelSerializer):
             "steps",
         ]
 
+    def get_steps(self, run):
+        from iblai_ontology.backend import store
+
+        steps = store.filter(
+            ProvisioningStep, run=run.pk
+        )  # not run.steps: DM rows have no manager
+        return ProvisioningStepSerializer(steps, many=True).data
+
 
 # ---------------------------------------------------------------------------
 # Sync schedules (config yaml) + runs (model)
@@ -292,7 +302,7 @@ class ProvisioningRunSerializer(serializers.ModelSerializer):
 
 
 class SyncScheduleSerializer(serializers.Serializer):
-    """Reads ConfigReader().get_sync_schedules() dicts (or SyncSchedule rows)."""
+    """Reads ConfigReader().get_sync_schedules() dicts."""
 
     name = serializers.CharField()
     cron = serializers.CharField(required=False, allow_blank=True, default="")
@@ -301,6 +311,7 @@ class SyncScheduleSerializer(serializers.Serializer):
     mode = serializers.SerializerMethodField()
     description = serializers.CharField(required=False, allow_blank=True, default="")
     enabled = serializers.SerializerMethodField()
+    output = serializers.DictField(required=False)
 
     def _get(self, obj, key, default=None):
         if isinstance(obj, dict):
@@ -460,3 +471,145 @@ class AddServiceSerializer(serializers.Serializer):
         required=False, allow_blank=True, default="", write_only=True
     )
     domain = serializers.CharField(required=False, allow_blank=True, default="")
+    # Engine fields for the auto-ontology connectors (warehouse, schema, http_scheme).
+    options = serializers.DictField(child=serializers.CharField(), required=False)
+
+
+# ---------------------------------------------------------------------------
+# Table edits (PATCH /services/<name>/tables) and the relationship graph
+# ---------------------------------------------------------------------------
+
+
+class GraphQuerySerializer(serializers.Serializer):
+    columns = serializers.BooleanField(default=False)
+
+
+class GraphNodeSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    kind = serializers.CharField()
+    label = serializers.CharField(allow_blank=True)
+    group = serializers.CharField(allow_blank=True)
+    meta = serializers.DictField()
+    health = serializers.CharField(allow_null=True, required=False)
+
+
+class GraphLinkSerializer(serializers.Serializer):
+    source = serializers.CharField()
+    target = serializers.CharField()
+    kind = serializers.CharField()
+    wildcard = serializers.BooleanField(default=False)
+
+
+class GraphHubSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    label = serializers.CharField(allow_blank=True)
+    kind = serializers.CharField()
+    degree = serializers.IntegerField()
+
+
+class GraphStatsSerializer(serializers.Serializer):
+    hubs = GraphHubSerializer(many=True)
+    orphans = serializers.IntegerField()
+    dangling = serializers.IntegerField()
+
+
+class GraphSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    nodes = GraphNodeSerializer(many=True)
+    links = GraphLinkSerializer(many=True)
+    stats = GraphStatsSerializer()
+
+
+class GraphRecordsQuerySerializer(serializers.Serializer):
+    domain = serializers.RegexField(r"^[a-z][a-z0-9_-]{0,63}$")
+    limit = serializers.IntegerField(min_value=1, max_value=2000, default=500)
+
+
+class GraphRecordsSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    nodes = GraphNodeSerializer(many=True)
+    links = GraphLinkSerializer(many=True)
+    total = serializers.IntegerField(default=0)
+
+
+class TableEditSerializer(serializers.Serializer):
+    tables = serializers.ListField(
+        child=serializers.CharField(max_length=256), allow_empty=False, max_length=5000
+    )
+    # Becomes a directory under the text-memory root (sync/writer.py): a safe slug only.
+    entity_group = serializers.RegexField(r"^[a-z][a-z0-9_]{0,63}$", required=False)
+    description = serializers.CharField(
+        required=False, allow_blank=True, max_length=2000
+    )
+
+    def validate(self, attrs):
+        if "entity_group" not in attrs and "description" not in attrs:
+            raise serializers.ValidationError("entity_group or description is required")
+        return attrs
+
+
+class TableEditResultSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    updated = serializers.IntegerField(default=0)
+
+
+# ---------------------------------------------------------------------------
+# Config writes (roles.yaml, sync-schedules.yaml, tools.yaml)
+# ---------------------------------------------------------------------------
+
+
+class RoleInputSerializer(serializers.Serializer):
+    display_name = serializers.CharField()
+    mcp_toolsets = serializers.ListField(child=serializers.CharField(), default=list)
+    memory_paths = serializers.ListField(child=serializers.CharField(), default=list)
+    cache_tables = serializers.ListField(child=serializers.CharField(), default=list)
+    agents = serializers.ListField(child=serializers.CharField(), default=list)
+    admin_dashboard = serializers.BooleanField(default=False)
+    self_service = serializers.BooleanField(required=False)
+    concurrency_limits = serializers.DictField(required=False)
+
+
+class SyncScheduleInputSerializer(serializers.Serializer):
+    cron = serializers.CharField(required=False, allow_blank=True)
+    source = serializers.CharField()
+    tool = serializers.CharField()
+    output = serializers.DictField(child=serializers.CharField(), required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    mode = serializers.ChoiceField(choices=["full", "delta", "event"], required=False)
+    enabled = serializers.BooleanField(required=False)
+
+    def validate_cron(self, value):
+        if value:
+            from celery.schedules import crontab
+
+            from iblai_ontology.backend.sync.scheduler import _parse_cron
+
+            try:
+                crontab(**_parse_cron(value))
+            except Exception as exc:
+                raise serializers.ValidationError(f"invalid cron: {exc}")
+        return value
+
+    def validate(self, attrs):
+        if not self.partial and attrs.get("mode") != "event" and not attrs.get("cron"):
+            raise serializers.ValidationError("cron is required unless mode is event")
+        return attrs
+
+
+class McpToolInputSerializer(McpToolSerializer):
+    parameters = McpToolParameterSerializer(many=True, required=False)
+
+
+class McpConfigTextSerializer(serializers.Serializer):
+    text = serializers.CharField(
+        allow_blank=True, trim_whitespace=False, max_length=1_000_000
+    )
+
+
+class McpSaveResultSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    report = ComplianceReportSerializer(required=False)

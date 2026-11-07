@@ -209,6 +209,7 @@ class MCPHandlers:
             or "*" in self.ctx.permissions.mcp_toolsets
         ):
             raise PermissionDenied("sync status requires an admin role")
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.sync.models import SyncRun
 
         return [
@@ -218,7 +219,7 @@ class MCPHandlers:
                 "started_at": str(r.started_at),
                 "records": r.records_processed,
             }
-            for r in SyncRun.objects.order_by("-started_at")[:50]
+            for r in store.filter(SyncRun, order="-started_at", limit=50)
         ]
 
     # -- tools/call ------------------------------------------------------

@@ -28,11 +28,13 @@ service_urls = [
     path("services/<str:name>/discover", views.ServiceDiscoverView.as_view()),
     path("services/<str:name>/approve", views.ServiceApproveView.as_view()),
     path("services/<str:name>/sync", views.ServiceSyncView.as_view()),
+    path("services/<str:name>/tables", views.ServiceTablesView.as_view()),
 ]
 
 sync_urls = [
     path("sync/run", views.SyncRunAllView.as_view()),
     path("sync/schedules", views.SyncSchedulesView.as_view()),
+    path("sync/schedules/<str:name>", views.SyncScheduleDetailView.as_view()),
     path("sync/status", views.SyncStatusView.as_view()),
     path("sync/history", views.SyncHistoryView.as_view()),
 ]
@@ -45,10 +47,19 @@ mcp_urls = [
     path("mcp/validate", views.McpValidateView.as_view()),
     path("mcp/build", views.McpBuildView.as_view()),
     path("mcp/test/<str:tool>", views.McpTestView.as_view()),
+    path("mcp/tools/<str:name>", views.McpResourceView.as_view(), {"kind": "tool"}),
+    path(
+        "mcp/toolsets/<str:name>", views.McpResourceView.as_view(), {"kind": "toolset"}
+    ),
+    path("mcp/sources/<str:name>", views.McpResourceView.as_view(), {"kind": "source"}),
+    path("mcp/config", views.McpConfigView.as_view()),
 ]
 
 misc_urls = [
     path("roles", views.RolesView.as_view()),
+    path("roles/<str:name>", views.RoleDetailView.as_view()),
+    path("graph", views.GraphView.as_view()),
+    path("graph/records", views.GraphRecordsView.as_view()),
     path("counts", views.CountsView.as_view()),
     path("reset", views.ResetView.as_view()),
 ]

@@ -8,7 +8,8 @@
 #
 #   docker build -f sync-engine/Dockerfile -t ontology-sync-engine .
 # ============================================================
-FROM python:3.12-slim
+FROM python:3.13-slim
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -17,10 +18,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install the package with the Django backend extra (Celery lives here),
+# Install from uv.lock: the Django backend extra (Celery lives here),
 # plus DB drivers and the vector index used by the sync engine.
 COPY . /src
-RUN pip install --no-cache-dir "/src[django,db,vector]"
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON_DOWNLOADS=never UV_NO_CACHE=1
+RUN uv sync --project /src --locked --no-dev --no-editable \
+    --extra django --extra db --extra vector
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Run worker and beat together in one container for the on-prem stack.
 CMD ["celery", "-A", "iblai_ontology.backend.celery:app", \

@@ -64,7 +64,9 @@ class ProvisioningStep(models.Model):
     completed_at = models.DateTimeField(null=True)
     output = models.JSONField(default=dict)
     error_message = models.TextField(blank=True, null=True)
-    order = models.IntegerField(default=0)
+    order = models.IntegerField(
+        default=0, db_column="position"
+    )  # "order" is reserved in the DM
 
     class Meta:
         ordering = ["order"]

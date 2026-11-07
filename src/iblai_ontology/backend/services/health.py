@@ -40,10 +40,11 @@ def check_connectivity(service_name: str) -> ConnectivityResult:
     """Connect to a service and time the round-trip; verify read-only posture."""
     import time
 
+    from iblai_ontology.backend import store
     from iblai_ontology.backend.discovery.safety import SafetyVerifier
     from iblai_ontology.backend.services.models import Service
 
-    service = Service.objects.get(name=service_name)
+    service = store.get(Service, name=service_name)
     start = time.time()
     conn = _connection_for(service)
     latency_ms = int((time.time() - start) * 1000)
@@ -62,10 +63,11 @@ def check_connectivity(service_name: str) -> ConnectivityResult:
 
 def full_safety_report(service_name: str) -> SafetyReport:
     """Run the full read-only safety suite and return a per-test report."""
+    from iblai_ontology.backend import store
     from iblai_ontology.backend.discovery.safety import SafetyVerifier, TestResult
     from iblai_ontology.backend.services.models import Service
 
-    service = Service.objects.get(name=service_name)
+    service = store.get(Service, name=service_name)
     conn = _connection_for(service)
     try:
         result = SafetyVerifier(conn).run_all_tests()

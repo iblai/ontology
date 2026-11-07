@@ -105,10 +105,11 @@ def check_sync() -> SyncHealth:
 
         from django.utils import timezone
 
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.sync.models import SyncRun
 
         since = timezone.now() - timedelta(hours=24)
-        failed = SyncRun.objects.filter(status="failed", started_at__gte=since).count()
+        failed = store.count(SyncRun, status="failed", started_at__gte=since)
     except Exception:
         failed = 0
     return SyncHealth(

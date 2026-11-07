@@ -10,12 +10,19 @@ contract; only auth/transport/unexpected errors use non-2xx.
 
 from __future__ import annotations
 
+import json
+import logging
+import re
+from pathlib import Path
+
+import yaml
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from iblai_ontology.backend import store
 from iblai_ontology.backend.services.models import Service, ServiceHealth
 from iblai_ontology.config.reader import ConfigReader, _redact
 
@@ -39,6 +46,8 @@ from .serializers import (
     SyncRunSerializer,
     SyncScheduleSerializer,
 )
+
+logger = logging.getLogger("iblai_ontology.audit")
 
 
 def _envelope(ok: bool, message: str, *, extra: dict | None = None, serializer=None):
@@ -84,7 +93,8 @@ class ConsoleAPIView(APIView):
             else:
                 from iblai_ontology.backend.identity.models import AuditLog
 
-                AuditLog.objects.create(
+                store.create(
+                    AuditLog,
                     user_id=getattr(principal, "user_id", "") or "dev-anon",
                     user_email=getattr(principal, "email", "") or "",
                     user_role=getattr(principal, "role", "") or "dev-anon",
@@ -94,7 +104,7 @@ class ConsoleAPIView(APIView):
                     ip_address=self._client_ip(request) or None,
                 )
         except Exception:  # pragma: no cover - auditing must not break requests
-            pass
+            logger.exception("audit write failed: %s %s", action, resource)
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +151,7 @@ class HealthRecheckView(ConsoleAPIView):
 
 class ServicesView(ConsoleAPIView):
     def get(self, request):
-        services = Service.objects.all()
-        return Response(ServiceSerializer(services, many=True).data)
+        return Response(ServiceSerializer(store.filter(Service), many=True).data)
 
     def post(self, request):
         from .serializers import AddServiceSerializer
@@ -151,7 +160,7 @@ class ServicesView(ConsoleAPIView):
         form.is_valid(raise_exception=True)
         v = form.validated_data
         name = v["name"]
-        if Service.objects.filter(name=name).exists():
+        if store.count(Service, name=name):
             self._audit(request, action="service.add", resource=name, allowed=False)
             return _envelope(False, f"Service '{name}' already exists.")
         try:
@@ -166,6 +175,7 @@ class ServicesView(ConsoleAPIView):
                 user=v.get("user", ""),
                 password=v.get("password", ""),
                 use_llm=False,
+                options=v.get("options"),
             )
         except Exception as exc:
             self._audit(request, action="service.add", resource=name, allowed=False)
@@ -176,13 +186,13 @@ class ServicesView(ConsoleAPIView):
 
 class ServiceDetailView(ConsoleAPIView):
     def get(self, request, name):
-        service = Service.objects.filter(name=name).first()
+        service = store.first(Service, name=name)
         if not service:
             return _json_null()  # 200 JSON null when missing (SPA contract)
         return Response(ServiceSerializer(service).data)
 
     def delete(self, request, name):
-        if not Service.objects.filter(name=name).exists():
+        if not store.count(Service, name=name):
             return _envelope(False, f"Service '{name}' not found.")
         try:
             from iblai_ontology.backend.provisioning.pipeline import ProvisioningEngine
@@ -190,7 +200,7 @@ class ServiceDetailView(ConsoleAPIView):
             ProvisioningEngine().teardown(name)  # best-effort de-provision
         except Exception:
             pass
-        Service.objects.filter(name=name).delete()  # FK-cascades health/runs
+        store.delete(Service, name=name)  # cascades to health, runs, steps and tables
         self._audit(request, action="service.delete", resource=name)
         return _envelope(True, f"Service '{name}' removed.")
 
@@ -199,9 +209,12 @@ class ServiceRunsView(ConsoleAPIView):
     def get(self, request, name):
         from iblai_ontology.backend.provisioning.models import ProvisioningRun
 
-        runs = ProvisioningRun.objects.filter(service__name=name).prefetch_related(
-            "steps"
-        )
+        service = store.first(Service, name=name)
+        runs = store.filter(ProvisioningRun, service=service.pk) if service else []
+        for run in runs:
+            run.service = (
+                service  # the serializer's service_name, without another lookup
+            )
         return Response(ProvisioningRunSerializer(runs, many=True).data)
 
 
@@ -209,7 +222,7 @@ class ServiceSafetyView(ConsoleAPIView):
     def get(self, request, name):
         from iblai_ontology.backend.discovery.models import SafetyReport
 
-        report = SafetyReport.objects.filter(service_name=name).first()
+        report = store.first(SafetyReport, service_name=name)
         if not report:
             return _json_null()
         return Response(SafetyReportSerializer(report).data)
@@ -217,7 +230,7 @@ class ServiceSafetyView(ConsoleAPIView):
 
 class ServiceStatusView(ConsoleAPIView):
     def post(self, request, name):
-        service = Service.objects.filter(name=name).first()
+        service = store.first(Service, name=name)
         if not service:
             return _envelope(False, f"Service '{name}' not found.")
         try:
@@ -226,7 +239,8 @@ class ServiceStatusView(ConsoleAPIView):
             result = check_connectivity(name)
         except Exception as exc:
             return _envelope(False, str(exc)[:500])
-        health = ServiceHealth.objects.create(
+        health = store.create(
+            ServiceHealth,
             service=service,
             connected=result.connected,
             read_only=result.read_only,
@@ -239,7 +253,7 @@ class ServiceStatusView(ConsoleAPIView):
 
 class ServiceTestView(ConsoleAPIView):
     def post(self, request, name):
-        service = Service.objects.filter(name=name).first()
+        service = store.first(Service, name=name)
         if not service:
             return _envelope(False, f"Service '{name}' not found.")
         from iblai_ontology.backend.discovery.engine import create_connection
@@ -265,7 +279,8 @@ class ServiceTestView(ConsoleAPIView):
                     conn.close()
                 except Exception:
                     pass
-            report = SafetyReportModel.objects.create(
+            report = store.create(
+                SafetyReportModel,
                 service_name=name,
                 db_type=result.db_type,
                 host=cfg.get("host", ""),
@@ -289,7 +304,7 @@ class ServiceTestView(ConsoleAPIView):
             )
             service.safety_status = result.overall_status.value
             service.last_safety_check_at = timezone.now()
-            service.save(update_fields=["safety_status", "last_safety_check_at"])
+            store.save(service, ["safety_status", "last_safety_check_at"])
         except Exception as exc:
             return _envelope(False, str(exc)[:500])
         self._audit(request, action="service.test", resource=name)
@@ -298,7 +313,7 @@ class ServiceTestView(ConsoleAPIView):
 
 class ServiceDiscoverView(ConsoleAPIView):
     def post(self, request, name):
-        if not Service.objects.filter(name=name).exists():
+        if not store.count(Service, name=name):
             return _envelope(False, f"Service '{name}' not found.")
         try:
             from iblai_ontology.backend.discovery.engine import DiscoveryEngine
@@ -314,7 +329,7 @@ class ServiceDiscoverView(ConsoleAPIView):
 
 class ServiceApproveView(ConsoleAPIView):
     def post(self, request, name):
-        service = Service.objects.filter(name=name).first()
+        service = store.first(Service, name=name)
         if not service:
             return _envelope(False, f"Service '{name}' not found.")
         if service.safety_status != "passed":
@@ -340,7 +355,7 @@ class ServiceApproveView(ConsoleAPIView):
 
 class ServiceSyncView(ConsoleAPIView):
     def post(self, request, name):
-        if not Service.objects.filter(name=name).exists():
+        if not store.count(Service, name=name):
             return _envelope(False, f"Service '{name}' not found.")
         from iblai_ontology.backend.sync.engine import SyncRunner
 
@@ -380,26 +395,13 @@ class SyncSchedulesView(ConsoleAPIView):
 
 class SyncStatusView(ConsoleAPIView):
     def get(self, request):
-        from iblai_ontology.backend.sync.models import SyncRun
+        from iblai_ontology.backend.sync.engine import latest_runs
 
-        # Latest run per schedule_name. One indexed query per distinct schedule
-        # (schedule count is small and bounded) instead of scanning the whole,
-        # unbounded SyncRun table into Python. SQLite has no DISTINCT ON.
-        names = SyncRun.objects.values_list("schedule_name", flat=True).distinct()
-        latest = (
-            SyncRun.objects.filter(schedule_name=n).order_by("-started_at").first()
-            for n in names
-        )
-        runs = sorted(
-            (r for r in latest if r), key=lambda r: r.started_at, reverse=True
-        )
-        return Response(SyncRunSerializer(runs, many=True).data)
+        return Response(SyncRunSerializer(latest_runs(), many=True).data)
 
 
 class SyncHistoryView(ConsoleAPIView):
     def get(self, request):
-        from django.db.models import Q
-
         from iblai_ontology.backend.sync.models import SyncRun
 
         service = request.query_params.get("service", "all")
@@ -408,13 +410,20 @@ class SyncHistoryView(ConsoleAPIView):
         except (TypeError, ValueError):
             limit = 20
         limit = max(1, min(limit, 200))
-        qs = SyncRun.objects.all()
-        if service and service != "all":
-            qs = qs.filter(
-                Q(source_system__icontains=service)
-                | Q(schedule_name__icontains=service)
-            )
-        runs = qs.order_by("-started_at")[:limit]
+        if not service or service == "all":
+            runs = store.filter(SyncRun, order="-started_at", limit=limit)
+        else:
+            # Either column matches: the newest N of the union lie within each side's newest N.
+            merged = {
+                r.pk: r
+                for key in ("source_system__icontains", "schedule_name__icontains")
+                for r in store.filter(
+                    SyncRun, order="-started_at", limit=limit, **{key: service}
+                )
+            }
+            runs = sorted(merged.values(), key=lambda r: r.started_at, reverse=True)[
+                :limit
+            ]
         return Response(SyncRunSerializer(runs, many=True).data)
 
 
@@ -524,7 +533,7 @@ class CountsView(ConsoleAPIView):
         from iblai_ontology.backend.identity.roles import RoleResolver
 
         payload = {
-            "services": Service.objects.count(),
+            "services": store.count(Service),
             "tools": len(reader.get_tools()),
             "toolsets": len(reader.get_toolsets()),
             "roles": len(RoleResolver().role_names()),
@@ -543,7 +552,350 @@ class ResetView(ConsoleAPIView):
         from iblai_ontology.backend.discovery.models import SafetyReport
         from iblai_ontology.backend.sync.models import SyncRun
 
-        Service.objects.all().delete()
-        SyncRun.objects.all().delete()
-        SafetyReport.objects.all().delete()
+        store.delete(Service)
+        store.delete(SyncRun)
+        store.delete(SafetyReport)
         return _envelope(True, "Reset complete.")
+
+
+# ---------------------------------------------------------------------------
+# Semantic map + console edits (table categories, roles, schedules, tools.yaml)
+# ---------------------------------------------------------------------------
+
+_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+# Lines of tools.yaml whose key looks like a secret and whose value is not a ${VAR}.
+_SECRET_LINE_RE = re.compile(
+    r"^(\s*[\w-]*(?:password|secret|api_key|api-key|token|client_secret|key)\s*:\s*)"
+    r"(?!['\"]?\$\{)(\S.*)$",
+    re.I | re.M,
+)
+
+
+def _plain(data):
+    """validated_data (OrderedDicts) -> plain dicts/lists that yaml.safe_dump accepts."""
+    return json.loads(json.dumps(data))
+
+
+_EMPTY_GRAPH = {
+    "nodes": [],
+    "links": [],
+    "stats": {"hubs": [], "orphans": 0, "dangling": 0},
+}
+
+
+def _graph_services():
+    from iblai_ontology.backend.services.registry import with_tables
+
+    return [with_tables(s) for s in store.filter(Service)]
+
+
+class GraphView(ConsoleAPIView):
+    def get(self, request):
+        from iblai_ontology.backend.graph.builder import build_graph
+        from iblai_ontology.backend.health.checks import check_storage
+        from iblai_ontology.config.reader import ConfigReader
+        from iblai_ontology.config.writer import load_roles
+
+        from .serializers import GraphQuerySerializer, GraphSerializer
+
+        query = GraphQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        reader = ConfigReader()
+        try:
+            data = build_graph(
+                _graph_services(),
+                reader=reader,
+                roles=load_roles(),
+                schedules=reader.get_sync_schedules(),
+                by_domain=check_storage().by_domain,
+                columns=query.validated_data["columns"],
+            )
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            return _envelope(
+                False, str(exc)[:500], extra=_EMPTY_GRAPH, serializer=GraphSerializer
+            )
+        return Response(GraphSerializer({"ok": True, "message": "", **data}).data)
+
+
+class GraphRecordsView(ConsoleAPIView):
+    def get(self, request):
+        import os
+
+        from iblai_ontology.backend.graph.builder import domain_records, record_fk_map
+
+        from .serializers import GraphRecordsQuerySerializer, GraphRecordsSerializer
+
+        query = GraphRecordsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        v = query.validated_data
+        found = domain_records(
+            v["domain"],
+            files_root=os.environ.get("ONTOLOGY_FILES_ROOT", "/ontology"),
+            fk_map=record_fk_map(_graph_services()),
+            limit=v["limit"],
+        )
+        if found is None:
+            return _envelope(
+                False,
+                "Unknown domain.",
+                extra={"nodes": [], "links": [], "total": 0},
+                serializer=GraphRecordsSerializer,
+            )
+        return Response(
+            GraphRecordsSerializer({"ok": True, "message": "", **found}).data
+        )
+
+
+class ServiceTablesView(ConsoleAPIView):
+    def patch(self, request, name):
+        from iblai_ontology.backend.discovery.config_generator import (
+            apply_table_edits,
+            rewrite_entity_files,
+        )
+
+        from .serializers import TableEditResultSerializer, TableEditSerializer
+
+        service = store.first(Service, name=name)
+        if not service:
+            return _envelope(
+                False,
+                f"Service '{name}' not found.",
+                serializer=TableEditResultSerializer,
+            )
+        form = TableEditSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        v = form.validated_data
+        known: set[str] = set()
+        for t in (service.schema_manifest or {}).get("tables") or []:
+            schema, table = t.get("schema_name") or "", t.get("table_name") or ""
+            known.add(f"{schema}.{table}" if schema else table)
+        unknown = [t for t in v["tables"] if t not in known]
+        if unknown:
+            return _envelope(
+                False,
+                f"Unknown tables: {', '.join(unknown[:5])}",
+                serializer=TableEditResultSerializer,
+            )
+        # ponytail: last write wins on llm_analysis; no locking.
+        analysis = apply_table_edits(
+            dict(service.llm_analysis or {}),
+            v["tables"],
+            entity_group=v.get("entity_group"),
+            description=v.get("description"),
+        )
+        service.llm_analysis = analysis
+        # ponytail: one JSON value under the DM's 2 MiB cap (see the engine's analysis save).
+        store.save(service, ["llm_analysis"])
+        generated = Path("config/generated") / name  # cwd-relative, like the engine
+        if generated.is_dir():
+            rewrite_entity_files(name, analysis, generated)
+        self._audit(request, action="service.tables", resource=name)
+        return _envelope(
+            True,
+            f"Updated {len(v['tables'])} table(s).",
+            extra={"updated": len(v["tables"])},
+            serializer=TableEditResultSerializer,
+        )
+
+
+class RoleDetailView(ConsoleAPIView):
+    def put(self, request, name):
+        from iblai_ontology.config import writer
+
+        from .serializers import RoleInputSerializer
+
+        if not _NAME_RE.match(name):
+            return _envelope(False, "Invalid name.")
+        existing = writer.load_roles().get(name)
+        form = RoleInputSerializer(data=request.data, partial=existing is not None)
+        form.is_valid(raise_exception=True)
+        spec = {**(existing or {}), **_plain(form.validated_data)}
+        known = set(ConfigReader().get_toolsets())
+        bad = [
+            t
+            for t in spec.get("mcp_toolsets") or []
+            if t != "*" and known and t not in known
+        ]
+        if bad:
+            return _envelope(False, f"Unknown toolsets: {', '.join(bad)}")
+        writer.put_role(name, spec)
+        self._audit(request, action="role.upsert", resource=name)
+        return _envelope(True, f"Role '{name}' saved.")
+
+    def delete(self, request, name):
+        from iblai_ontology.backend.identity.roles import DEFAULT_ROLE
+        from iblai_ontology.config import writer
+
+        if name == DEFAULT_ROLE:
+            return _envelope(
+                False, "The default role is the fallback and cannot be deleted."
+            )
+        if not writer.delete_role(name):
+            return _envelope(False, f"Role '{name}' not found.")
+        self._audit(request, action="role.delete", resource=name)
+        return _envelope(True, f"Role '{name}' removed.")
+
+
+class SyncScheduleDetailView(ConsoleAPIView):
+    def put(self, request, name):
+        from iblai_ontology.backend.provisioning.sync_generator import (
+            SyncScheduleGenerator,
+        )
+
+        from .serializers import SyncScheduleInputSerializer
+
+        if not _NAME_RE.match(name):
+            return _envelope(False, "Invalid name.")
+        gen = SyncScheduleGenerator()
+        existing = next((s for s in gen._existing() if s.get("name") == name), None)
+        form = SyncScheduleInputSerializer(
+            data=request.data, partial=existing is not None
+        )
+        form.is_valid(raise_exception=True)
+        merged = {**(existing or {}), **_plain(form.validated_data), "name": name}
+        # ponytail: beat reads the yaml at start; restart it for cron/enabled changes.
+        gen.apply(yaml.safe_dump({"schedules": [merged]}, sort_keys=False))
+        self._audit(request, action="schedule.upsert", resource=name)
+        return _envelope(
+            True, f"Schedule '{name}' saved. Restart the sync scheduler to apply it."
+        )
+
+    def delete(self, request, name):
+        from iblai_ontology.config import writer
+
+        if not writer.delete_schedule(name):
+            return _envelope(False, f"Schedule '{name}' not found.")
+        self._audit(request, action="schedule.delete", resource=name)
+        return _envelope(True, f"Schedule '{name}' removed.")
+
+
+class McpResourceView(ConsoleAPIView):
+    """PUT/DELETE one ``kind: tool | toolset | source`` document of tools.yaml."""
+
+    def _result(self, request, report, *, action, resource, ok_message):
+        from .serializers import McpSaveResultSerializer
+
+        if not report.ok:
+            message = "; ".join(
+                i.message for i in report.issues if i.severity == "error"
+            )
+            return Response(
+                McpSaveResultSerializer(
+                    {"ok": False, "message": message[:500], "report": report}
+                ).data
+            )
+        self._audit(request, action=action, resource=resource)
+        return Response(
+            McpSaveResultSerializer(
+                {"ok": True, "message": ok_message, "report": report}
+            ).data
+        )
+
+    def put(self, request, name, kind):
+        from iblai_ontology.backend.mcp_server.toolbox_compat import save_tools_yaml
+        from iblai_ontology.backend.provisioning.tools_generator import ToolsGenerator
+
+        from .serializers import (
+            McpSaveResultSerializer,
+            McpSourceSerializer,
+            McpToolInputSerializer,
+            McpToolsetSerializer,
+        )
+
+        if not _NAME_RE.match(name):
+            return _envelope(False, "Invalid name.", serializer=McpSaveResultSerializer)
+        inputs = {
+            "tool": McpToolInputSerializer,
+            "toolset": McpToolsetSerializer,
+            "source": McpSourceSerializer,
+        }
+        gen = ToolsGenerator()
+        existing = next(
+            (
+                d
+                for d in gen._existing_docs()
+                if d.get("kind") == kind and d.get("name") == name
+            ),
+            None,
+        )
+        body = request.data if isinstance(request.data, dict) else {}
+        form = inputs[kind](
+            data={**body, "kind": kind, "name": name}, partial=existing is not None
+        )
+        form.is_valid(raise_exception=True)
+        merged = {
+            **(existing or {}),
+            **_plain(form.validated_data),
+            "kind": kind,
+            "name": name,
+        }
+        report = save_tools_yaml(
+            gen.merge(yaml.safe_dump(merged, sort_keys=False)), gen.path
+        )
+        return self._result(
+            request,
+            report,
+            action=f"mcp.{kind}.upsert",
+            resource=name,
+            ok_message=f"{kind} '{name}' saved. Build and restart the MCP Toolbox to apply.",
+        )
+
+    def delete(self, request, name, kind):
+        from iblai_ontology.backend.mcp_server.toolbox_compat import save_tools_yaml
+        from iblai_ontology.backend.provisioning.tools_generator import ToolsGenerator
+
+        from .serializers import McpSaveResultSerializer
+
+        gen = ToolsGenerator()
+        docs = gen._existing_docs()
+        rest = [
+            d for d in docs if not (d.get("kind") == kind and d.get("name") == name)
+        ]
+        if len(rest) == len(docs):
+            return _envelope(
+                False, f"{kind} '{name}' not found.", serializer=McpSaveResultSerializer
+            )
+        report = save_tools_yaml(
+            yaml.safe_dump_all(rest, default_flow_style=False, sort_keys=False),
+            gen.path,
+        )
+        return self._result(
+            request,
+            report,
+            action=f"mcp.{kind}.delete",
+            resource=name,
+            ok_message=f"{kind} '{name}' removed. Build and restart the MCP Toolbox to apply.",
+        )
+
+
+class McpConfigView(ConsoleAPIView):
+    def get(self, request):
+        from iblai_ontology.config import config_dir
+
+        from .serializers import McpConfigTextSerializer
+
+        path = config_dir() / "tools.yaml"
+        text = path.read_text() if path.exists() else ""
+        # Unexpanded (${VAR} stays a reference); literal secret values are masked.
+        masked = _SECRET_LINE_RE.sub(r"\1********", text)
+        return Response(McpConfigTextSerializer({"text": masked}).data)
+
+    def put(self, request):
+        from iblai_ontology.backend.mcp_server.toolbox_compat import save_tools_yaml
+        from iblai_ontology.config import config_dir
+
+        from .serializers import McpConfigTextSerializer
+
+        form = McpConfigTextSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        report = save_tools_yaml(
+            form.validated_data["text"], config_dir() / "tools.yaml"
+        )
+        return McpResourceView._result(
+            self,
+            request,
+            report,
+            action="mcp.config.save",
+            resource="tools.yaml",
+            ok_message="tools.yaml saved. Build and restart the MCP Toolbox to apply.",
+        )

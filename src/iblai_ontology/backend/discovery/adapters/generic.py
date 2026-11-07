@@ -27,3 +27,15 @@ class GenericMySQLAdapter(BaseAdapter):
 class GenericSQLServerAdapter(BaseAdapter):
     SYSTEM_NAME = "generic-mssql"
     DB_TYPE = "sqlserver"
+
+
+@register("generic-trino")
+class GenericTrinoAdapter(BaseAdapter):
+    SYSTEM_NAME = "generic-trino"
+    DB_TYPE = "trino"
+
+
+@register("generic-clickhouse")
+class GenericClickHouseAdapter(BaseAdapter):
+    SYSTEM_NAME = "generic-clickhouse"
+    DB_TYPE = "clickhouse"

@@ -1,0 +1,13 @@
+# The gateway and sync-engine images build from the repo root (COPY . /src).
+.git
+.venv
+frontend
+cache
+.env*
+!.env*.example
+*.sqlite3
+secrets
+config/generated
+**/__pycache__
+.pytest_cache
+.ruff_cache

@@ -11,7 +11,12 @@ import logging
 from pathlib import Path
 
 from iblai_ontology.backend.discovery.adapters import get_adapter
-from iblai_ontology.backend.discovery.config_generator import ConfigGenerator
+from iblai_ontology.backend.discovery.config_generator import (
+    ConfigGenerator,
+    apply_overrides,
+    rewrite_entity_files,
+)
+from iblai_ontology.backend.discovery.connectors import CONNECTOR_DB_TYPES, connect
 from iblai_ontology.backend.discovery.introspection import SchemaIntrospector
 from iblai_ontology.backend.discovery.llm_analyzer import (
     LLMAnalysisResult,
@@ -30,6 +35,9 @@ _DB_TYPE = {
     "generic-postgres": "postgresql",
     "generic-mysql": "mysql",
     "generic-mssql": "sqlserver",
+    "snowflake": "snowflake",
+    "generic-trino": "trino",
+    "generic-clickhouse": "clickhouse",
 }
 
 
@@ -37,6 +45,8 @@ def create_connection(adapter_or_type: str, config: dict):
     """Create a DB-API 2.0 connection for a service from its config."""
     db_type = config.get("db_type") or _DB_TYPE.get(adapter_or_type, "oracle")
 
+    if db_type in CONNECTOR_DB_TYPES:
+        return connect(db_type, config)
     if db_type == "oracle":
         import oracledb
 
@@ -97,12 +107,15 @@ class DiscoveryEngine:
         use_llm: bool = True,
         skip_safety: bool = False,
         output_dir: str | None = None,
+        options: dict | None = None,
     ):
         from django.utils import timezone
 
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.discovery.models import SafetyReport
         from iblai_ontology.backend.services.encryption import encrypt_connection_config
         from iblai_ontology.backend.services.models import Service
+        from iblai_ontology.backend.services.registry import save_manifest
 
         db_type = _DB_TYPE.get(service_type, "oracle")
         config = {
@@ -112,19 +125,21 @@ class DiscoveryEngine:
             "database": database,
             "username": user,
             "password": password,
+            "options": options or {},
         }
         adapter = get_adapter(service_type)
 
-        service, _ = Service.objects.update_or_create(
-            name=name,
-            defaults={
-                "display_name": f"{service_type} @ {host}",
-                "service_type": adapter.SERVICE_TYPE,
-                "adapter": service_type,
-                "host": host,
-                "connection_config_encrypted": encrypt_connection_config(config),
-            },
-        )
+        defaults = {
+            "display_name": f"{service_type} @ {host}",
+            "service_type": adapter.SERVICE_TYPE,
+            "adapter": service_type,
+            "host": host,
+            "connection_config_encrypted": encrypt_connection_config(config),
+        }
+        service = store.first(Service, name=name) or Service(name=name)
+        for field, value in defaults.items():
+            setattr(service, field, value)
+        store.save(service, [*defaults, "updated_at"])
 
         conn = create_connection(service_type, config)
         try:
@@ -132,7 +147,8 @@ class DiscoveryEngine:
             if not skip_safety:
                 logger.info("Running read-only safety verification for %s", name)
                 safety = SafetyVerifier(conn, db_type=db_type).run_all_tests()
-                SafetyReport.objects.create(
+                store.create(
+                    SafetyReport,
                     service_name=name,
                     db_type=db_type,
                     host=host,
@@ -151,7 +167,7 @@ class DiscoveryEngine:
                 )
                 service.last_safety_check_at = timezone.now()
                 service.safety_status = safety.overall_status.value
-                service.save(update_fields=["last_safety_check_at", "safety_status"])
+                store.save(service, ["last_safety_check_at", "safety_status"])
                 if not safety.all_passed:
                     raise SafetyError(
                         f"Safety verification failed: {safety.summary}\n"
@@ -160,20 +176,27 @@ class DiscoveryEngine:
 
             # Step 2 — introspect
             manifest = SchemaIntrospector(conn, db_type).introspect()
-            service.schema_manifest = manifest.to_dict()
             service.last_discovery_at = timezone.now()
-            service.save(update_fields=["schema_manifest", "last_discovery_at"])
+            save_manifest(service, manifest.to_dict(), ("last_discovery_at",))
 
             # Step 3 — analyze (LLM or rule-based)
             analysis = self._analyze(manifest, adapter, use_llm)
-            service.llm_analysis = analysis.to_dict()
-            service.save(update_fields=["llm_analysis"])
+            analysis_dict = analysis.to_dict()
+            # Console edits (entity group, description) survive a rediscovery.
+            overrides = (service.llm_analysis or {}).get("overrides") or {}
+            apply_overrides(analysis_dict, overrides)
+            service.llm_analysis = analysis_dict
+            # ponytail: one JSON value (~0.25 MB rule-based at 847 tables, under the DM's
+            # 2 MiB cap to ~7k tables); move per-table descriptions to ServiceTable past that.
+            store.save(service, ["llm_analysis"])
 
             # Step 4 — generate config
             out = output_dir or str(Path("config/generated") / name)
             written = ConfigGenerator(name, manifest, analysis).generate_all(out)
+            if overrides:
+                rewrite_entity_files(name, analysis_dict, out)
             service.status = Service.Status.PENDING
-            service.save(update_fields=["status"])
+            store.save(service, ["status"])
             return {"manifest": manifest, "analysis": analysis, "generated": written}
         finally:
             try:
@@ -182,10 +205,11 @@ class DiscoveryEngine:
                 pass
 
     def rediscover(self, name: str, *, use_llm: bool = True):
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.services.encryption import decrypt_connection_config
         from iblai_ontology.backend.services.models import Service
 
-        service = Service.objects.get(name=name)
+        service = store.get(Service, name=name)
         config = decrypt_connection_config(service.connection_config_encrypted)
         return self.run(
             name=name,
@@ -196,6 +220,7 @@ class DiscoveryEngine:
             user=config["username"],
             password=config["password"],
             use_llm=use_llm,
+            options=config.get("options"),
         )
 
     @staticmethod

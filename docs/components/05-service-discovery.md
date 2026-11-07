@@ -79,6 +79,9 @@ When verification fails, the engine emits ready-to-run SQL to create a proper re
 | **PostgreSQL** | `CREATE ROLE iblai_readonly WITH LOGIN`; `GRANT CONNECT` on the DB, `GRANT USAGE` on schemas, `GRANT SELECT ON ALL TABLES`, and `ALTER DEFAULT PRIVILEGES … GRANT SELECT` for future tables. |
 | **MySQL** | `CREATE USER 'iblai_readonly'@'%'`; `GRANT SELECT ON db.*`; `FLUSH PRIVILEGES`. |
 | **SQL Server** | `CREATE LOGIN` + `CREATE USER`; `ALTER ROLE db_datareader ADD MEMBER iblai_readonly` (SELECT-only). |
+| **Snowflake** | `CREATE ROLE iblai_readonly`; `GRANT USAGE` on the warehouse, database and schemas; `GRANT SELECT ON ALL TABLES` (and `FUTURE TABLES`); a user whose default role it is. |
+| **ClickHouse** | `CREATE USER iblai_readonly … SETTINGS readonly = 2` (not `1`: the connector sets per-query limits, which `readonly = 1` rejects); `GRANT SELECT ON db.*`. |
+| **Trino** | Access control belongs to the underlying connector (file, Ranger, OPA); the engine prints no recipe. |
 
 The full statements are produced at runtime by the engine; representative Oracle remediation:
 
@@ -99,7 +102,7 @@ END;
 
 ## Schema Introspection
 
-Once safety passes, the introspector builds a complete **manifest** of accessible tables, columns, relationships, and statistics. It supports Oracle, PostgreSQL, MySQL, and SQL Server, using each system's catalog views (`all_tables`/`all_tab_columns`, `information_schema`, `sys.tables`/`sys.columns`). For each table it collects row count, columns (name, type, nullability, max length), primary keys, and foreign keys.
+Once safety passes, the introspector builds a complete **manifest** of accessible tables, columns, relationships, and statistics. It supports Oracle, PostgreSQL, MySQL, and SQL Server (plus Snowflake, Trino and ClickHouse through the auto-ontology connectors, see the adapter table), using each system's catalog views (`all_tables`/`all_tab_columns`, `information_schema`, `sys.tables`/`sys.columns`). For each table it collects row count, columns (name, type, nullability, max length), primary keys, and foreign keys.
 
 The manifest serializes to JSON and to a human-readable Markdown summary (tables sorted by row count, with a per-table column table marking PKs and FKs). Generated artifacts land under `config/manifests/`:
 
@@ -185,8 +188,13 @@ iblai-ontology ships pre-built adapters for common higher-ed systems. Database a
 | **Generic PostgreSQL** | PostgreSQL | `psycopg2` | Schema discovery only |
 | **Generic MySQL** | MySQL | `pymysql` | Schema discovery only |
 | **Generic SQL Server** | SQL Server | `pyodbc` | Schema discovery only |
+| **Snowflake** | Snowflake | NVIDIA auto-ontology connector (`[auto-ontology]` extra) | Schema discovery only; `--option warehouse=…` required |
+| **Generic Trino** | Trino | NVIDIA auto-ontology connector (`[auto-ontology]` extra) | Schema discovery only; Trino declares no key constraints |
+| **Generic ClickHouse** | ClickHouse (HTTP) | NVIDIA auto-ontology connector (`[auto-ontology]` extra) | Schema discovery only; the sorting key is reported as the PK |
 
-The CLI exposes these as the `--service-type` choices on `ontology service add`: `peoplesoft`, `banner`, `workday`, `canvas`, `slate`, `navigate`, `generic-oracle`, `generic-postgres`, `generic-mysql`, `generic-mssql`.
+The CLI exposes these as the `--service-type` choices on `ontology service add`: `peoplesoft`, `banner`, `workday`, `canvas`, `slate`, `navigate`, `generic-oracle`, `generic-postgres`, `generic-mysql`, `generic-mssql`, `snowflake`, `generic-trino`, `generic-clickhouse`.
+
+The last three ride on [NVIDIA auto-ontology](https://github.com/NVIDIA/auto-ontology)'s connectors (`uv sync --extra auto-ontology`, Python 3.13). Engine-specific fields travel as repeatable `--option KEY=VALUE` (`warehouse`, `schema`, `http_scheme`) and as `options` on `POST /services`; the safety suite and introspection run unchanged on top of them, with one difference — the connector contract carries no row counts, so sync cadences for these engines fall back to the size-agnostic default. Databricks and DuckDB connectors exist upstream but are not exposed: MCP Toolbox 1.5.0 has no kind to serve them.
 
 ---
 

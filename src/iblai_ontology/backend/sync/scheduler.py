@@ -41,8 +41,8 @@ def build_beat_schedule() -> dict[str, dict[str, Any]]:
     for sched in ConfigReader().get_sync_schedules():
         name = sched["name"]
         cron = sched.get("cron")
-        if not cron:
-            continue  # event-driven schedules have no cron
+        if not cron or sched.get("enabled", True) is False:
+            continue  # event-driven schedules have no cron; disabled ones never run
         beat[f"sync-{name}"] = {
             "task": "iblai_ontology.backend.sync.tasks.run_schedule",
             "schedule": crontab(**_parse_cron(cron)),

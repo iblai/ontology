@@ -95,3 +95,61 @@ def test_generate_all_writes_artifacts(tmp_path):
     assert (
         "CREATE TABLE IF NOT EXISTS cache." in open(written["cache-schema.sql"]).read()
     )
+
+
+# --- console edits on the stored analysis dict --------------------------------
+
+
+def _stored():
+    return _analysis().to_dict()
+
+
+def test_apply_table_edits_moves_group_and_records_override():
+    from iblai_ontology.backend.discovery.config_generator import apply_table_edits
+
+    analysis = apply_table_edits(
+        _stored(), ["SYSADM.PS_STDNT_CAR_TERM"], entity_group="alumni"
+    )
+    td = analysis["table_descriptions"][0]
+    assert td["entity_group"] == "alumni"
+    assert analysis["entity_groups"] == {"alumni": ["PS_STDNT_CAR_TERM"]}  # bare name
+    assert analysis["overrides"] == {
+        "SYSADM.PS_STDNT_CAR_TERM": {"entity_group": "alumni"}
+    }
+
+    # A table the analysis never described (LLM top-100 cut, seed data) is added.
+    analysis = apply_table_edits(analysis, ["SYSADM.PS_NEW"], description="New.")
+    added = analysis["table_descriptions"][-1]
+    assert added["table_name"] == "SYSADM.PS_NEW" and added["description"] == "New."
+    assert added["entity_group"] == "other"
+    assert analysis["entity_groups"] == {"alumni": ["PS_STDNT_CAR_TERM"]}
+
+
+def test_apply_overrides_survives_a_fresh_analysis():
+    from iblai_ontology.backend.discovery.config_generator import (
+        apply_overrides,
+        apply_table_edits,
+    )
+
+    edited = apply_table_edits(
+        _stored(), ["SYSADM.PS_STDNT_CAR_TERM"], entity_group="alumni", description="D"
+    )
+    fresh = apply_overrides(_stored(), edited["overrides"])
+    assert fresh["table_descriptions"][0]["entity_group"] == "alumni"
+    assert fresh["table_descriptions"][0]["description"] == "D"
+    assert fresh["entity_groups"] == {"alumni": ["PS_STDNT_CAR_TERM"]}
+
+
+def test_rewrite_entity_files(tmp_path):
+    from iblai_ontology.backend.discovery.config_generator import (
+        apply_table_edits,
+        rewrite_entity_files,
+    )
+
+    analysis = apply_table_edits(
+        _stored(), ["SYSADM.PS_STDNT_CAR_TERM"], entity_group="alumni"
+    )
+    rewrite_entity_files("peoplesoft", analysis, tmp_path)
+    groups = yaml.safe_load((tmp_path / "entity-groups.yaml").read_text())
+    assert groups == {"entity_groups": {"alumni": ["PS_STDNT_CAR_TERM"]}}
+    assert "_(alumni, sync 1h)_" in (tmp_path / "table-descriptions.md").read_text()

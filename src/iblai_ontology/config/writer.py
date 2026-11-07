@@ -77,3 +77,64 @@ class ConfigWriter:
         data["llm"].setdefault("max_tokens", 4096)
         data["llm"].setdefault("temperature", 0.2)
         self._save(data)
+
+
+# -- roles.yaml / sync-schedules.yaml, read raw so ``${VAR}`` survives a rewrite --
+
+
+def _dir(directory: str | Path | None) -> Path:
+    return Path(directory) if directory else config_dir()
+
+
+def _raw_load(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
+def _raw_dump(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def load_roles(directory: str | Path | None = None) -> dict[str, dict[str, Any]]:
+    """The ``roles:`` mapping of roles.yaml, unexpanded."""
+    return _raw_load(_dir(directory) / "roles.yaml").get("roles") or {}
+
+
+def put_role(
+    name: str, spec: dict[str, Any], directory: str | Path | None = None
+) -> None:
+    """Create or replace one role (structured writes drop YAML comments)."""
+    path = _dir(directory) / "roles.yaml"
+    data = _raw_load(path)
+    roles = data.get("roles") or {}
+    roles[name] = spec
+    data["roles"] = roles
+    _raw_dump(path, data)
+
+
+def delete_role(name: str, directory: str | Path | None = None) -> bool:
+    path = _dir(directory) / "roles.yaml"
+    data = _raw_load(path)
+    roles = data.get("roles") or {}
+    if name not in roles:
+        return False
+    del roles[name]
+    data["roles"] = roles
+    _raw_dump(path, data)
+    return True
+
+
+def delete_schedule(name: str, directory: str | Path | None = None) -> bool:
+    path = _dir(directory) / "sync-schedules.yaml"
+    data = _raw_load(path)
+    schedules = data.get("schedules") or []
+    rest = [s for s in schedules if s.get("name") != name]
+    if len(rest) == len(schedules):
+        return False
+    data["schedules"] = rest
+    _raw_dump(path, data)
+    return True

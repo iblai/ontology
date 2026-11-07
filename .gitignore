@@ -15,6 +15,7 @@ venv/
 *.local.yaml
 docker-compose.override.yml
 .claude/
+secrets/
 
 # iblai-ontology runtime artifacts
 config/generated/

@@ -31,30 +31,36 @@ def _normalise(row: dict[str, Any]) -> dict[str, Any]:
     return {k.lower(): v for k, v in row.items()}
 
 
+def _key_columns(primary_key: str | list[str]) -> list[str]:
+    return [primary_key] if isinstance(primary_key, str) else list(primary_key)
+
+
 def upsert_rows(
-    cursor, table: str, rows: list[dict], primary_key: str
+    cursor, table: str, rows: list[dict], primary_key: str | list[str]
 ) -> tuple[int, int]:
-    """Insert/update rows by primary key. Returns (created, updated)."""
+    """Insert/update rows by primary key (one column or several). Returns (created, updated)."""
+    keys = _key_columns(primary_key)
     created = updated = 0
     for raw in rows:
         row = _normalise(raw)
-        if primary_key not in row:
-            raise KeyError(
-                f"primary key '{primary_key}' not in row columns {list(row)}"
-            )
+        missing = [k for k in keys if k not in row]
+        if missing:
+            raise KeyError(f"primary key {missing} not in row columns {list(row)}")
         cols = list(row.keys())
         cursor.execute(
-            f"SELECT 1 FROM {table} WHERE {primary_key} = %s", [row[primary_key]]
+            f"SELECT 1 FROM {table} WHERE " + " AND ".join(f"{k} = %s" for k in keys),
+            [row[k] for k in keys],
         )
         exists = cursor.fetchone() is not None
         placeholders = ", ".join(["%s"] * len(cols))
-        updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c != primary_key)
+        updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c not in keys)
+        conflict = ", ".join(keys)
         sql = (
             f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
-            f"ON CONFLICT ({primary_key}) DO UPDATE SET {updates}"
+            f"ON CONFLICT ({conflict}) DO UPDATE SET {updates}"
             if updates
             else f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
-            f"ON CONFLICT ({primary_key}) DO NOTHING"
+            f"ON CONFLICT ({conflict}) DO NOTHING"
         )
         cursor.execute(sql, [row[c] for c in cols])
         if exists:
@@ -68,7 +74,7 @@ def write_memories(
     rows: list[dict],
     *,
     entity_group: str,
-    primary_key: str,
+    primary_key: str | list[str],
     files_root: str,
     indexer: Optional[Any] = None,
 ) -> list[str]:
@@ -81,7 +87,9 @@ def write_memories(
     written: list[str] = []
     for raw in rows:
         row = _normalise(raw)
-        pk_value = row.get(primary_key, "unknown")
+        pk_value = "-".join(
+            str(row.get(k, "unknown")) for k in _key_columns(primary_key)
+        )
         context = dict(row)
         context.setdefault("id", pk_value)
         context.setdefault("fields", {k: v for k, v in row.items()})
@@ -113,7 +121,7 @@ def write_entities(
     rows: Iterable[dict],
     *,
     cache_table: Optional[str],
-    primary_key: str,
+    primary_key: str | list[str],
     entity_group: str = "generic",
     files_root: Optional[str] = None,
     indexer: Optional[Any] = None,

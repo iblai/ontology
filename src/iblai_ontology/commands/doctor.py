@@ -28,7 +28,7 @@ def _driver_available(module: str) -> bool:
 
 def run_checks() -> list[Check]:
     """Run all diagnostics and return the results (pure; CLI renders them)."""
-    from iblai_ontology.config import config_dir
+    from iblai_ontology.config import config_dir, credential_key
     from iblai_ontology.config.reader import ConfigReader
     from iblai_ontology.config.validator import ConfigValidator
 
@@ -84,6 +84,18 @@ def run_checks() -> list[Check]:
             "ENTRA_TENANT_ID + ENTRA_CLIENT_ID",
         )
     )
+
+    # 5. Registry encryption key (env var or Compose secret file).
+    try:
+        checks.append(
+            Check(
+                "credential key",
+                bool(credential_key()),
+                "ONTOLOGY_CREDENTIAL_KEY or ONTOLOGY_CREDENTIAL_KEY_FILE",
+            )
+        )
+    except OSError as exc:
+        checks.append(Check("credential key", False, str(exc)))
     return checks
 
 

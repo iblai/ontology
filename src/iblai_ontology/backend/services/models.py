@@ -33,6 +33,7 @@ class Service(models.Model):
     # Connection details, Fernet-encrypted JSON (see encryption.py).
     connection_config_encrypted = models.BinaryField(null=True, blank=True)
 
+    # The manifest header plus one summary per table; the tables themselves are ServiceTable rows.
     schema_manifest = models.JSONField(null=True, blank=True)
     llm_analysis = models.JSONField(null=True, blank=True)
     last_discovery_at = models.DateTimeField(null=True, blank=True)
@@ -70,3 +71,15 @@ class ServiceHealth(models.Model):
 
     class Meta:
         ordering = ["-checked_at"]
+
+
+class ServiceTable(models.Model):
+    """One discovered table (columns, keys): an 847-table manifest is over the DM's 2 MiB body cap."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="+")
+    position = models.IntegerField(default=0)
+    payload = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["position"]

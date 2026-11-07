@@ -1,4 +1,4 @@
-"""Discovery models (Component 5): safety reports and discovered schema."""
+"""Discovery models (Component 5): safety reports."""
 
 from __future__ import annotations
 
@@ -35,23 +35,3 @@ class SafetyReport(models.Model):
 
     def __str__(self) -> str:
         return f"SafetyReport({self.service_name}, {self.status})"
-
-
-class DiscoveredService(models.Model):
-    """A snapshot of a service discovery run (manifest + analysis)."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    service = models.ForeignKey(
-        "services.Service", on_delete=models.CASCADE, related_name="discoveries"
-    )
-    db_type = models.CharField(max_length=50)
-    total_tables = models.IntegerField(default=0)
-    total_columns = models.IntegerField(default=0)
-    total_rows = models.BigIntegerField(default=0)
-    schema_manifest = models.JSONField(default=dict)
-    llm_analysis = models.JSONField(null=True, blank=True)
-    used_llm = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]

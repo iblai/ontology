@@ -593,6 +593,74 @@ def test_sync_status_returns_latest_per_schedule(api):
     assert resp.data[0]["schedule_name"] == "students"  # newest overall, first
 
 
+def test_runs_view_nests_steps_and_service_name(api):
+    from iblai_ontology.backend.api.views import ServiceRunsView
+    from iblai_ontology.backend.provisioning.models import (
+        ProvisioningRun,
+        ProvisioningStep,
+    )
+
+    svc = _make_service(name="runs-svc")
+    run = ProvisioningRun.objects.create(service=svc, status="completed")
+    for i, step_type in enumerate(["cache_schema", "mcp_tools"]):
+        ProvisioningStep.objects.create(
+            run=run, step_type=step_type, status="completed", order=i
+        )
+    resp = _run(
+        ServiceRunsView,
+        _dispatch(ServiceRunsView, path="/services/runs-svc/runs"),
+        name="runs-svc",
+    )
+    assert resp.status_code == 200
+    (body,) = resp.data
+    assert body["service_name"] == "runs-svc"
+    assert [(s["step_type"], s["order"]) for s in body["steps"]] == [
+        ("cache_schema", 0),
+        ("mcp_tools", 1),
+    ]
+    missing = _run(
+        ServiceRunsView,
+        _dispatch(ServiceRunsView, path="/services/nope/runs"),
+        name="nope",
+    )
+    assert missing.data == []
+
+
+def test_sync_history_service_filter_matches_either_column(api):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from iblai_ontology.backend.api.views import SyncHistoryView
+    from iblai_ontology.backend.sync.models import SyncRun
+
+    now = timezone.now()
+    for schedule, source, hours_ago in [
+        ("canvas-activity", "canvas", 3),  # both columns match
+        ("lms-pull", "canvas", 1),  # the source matches
+        ("canvas-mirror", "slate", 2),  # only the schedule name matches
+        ("slate-apps", "slate", 0),  # neither
+    ]:
+        SyncRun.objects.create(
+            schedule_name=schedule,
+            source_system=source,
+            started_at=now - timedelta(hours=hours_ago),
+        )
+    names = lambda path: [  # noqa: E731
+        r["schedule_name"]
+        for r in _run(SyncHistoryView, _dispatch(SyncHistoryView, path=path)).data
+    ]
+    assert names("/sync/history?service=canvas&limit=2") == [
+        "lms-pull",
+        "canvas-mirror",
+    ]
+    assert names("/sync/history?service=canvas") == [
+        "lms-pull",
+        "canvas-mirror",
+        "canvas-activity",
+    ]
+
+
 def test_dm_auth_admin_platform_allowlist_grants_listed(api, monkeypatch):
     """M3: with an allowlist set, an admin on a listed platform still qualifies."""
     from django.conf import settings
@@ -658,3 +726,377 @@ def test_add_service_without_service_type_is_accepted(api, monkeypatch):
     resp = _run(ServicesView, raw)
     assert resp.status_code == 200  # not 400 — service_type no longer required
     assert resp.data["ok"] is False  # engine raised → business-rule envelope
+
+
+# --- semantic map + console edits -------------------------------------------
+
+
+@pytest.fixture()
+def cfg(tmp_path, monkeypatch):
+    """A scratch copy of the repo's config files so writes never touch config/."""
+    import shutil
+
+    from tests.conftest import REPO_ROOT
+
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    for name in ("roles.yaml", "tools.yaml", "sync-schedules.yaml"):
+        shutil.copy(REPO_ROOT / "config" / name, cfg / name)
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
+    return cfg
+
+
+def _map_service(name="c1", *, analysis=True):
+    from iblai_ontology.backend.services.models import Service
+
+    tables = [
+        {
+            "schema_name": "SYSADM",
+            "table_name": "PS_STDNT_ENRL",
+            "row_count": 10,
+            "columns": [{"name": "EMPLID"}, {"name": "STRM"}, {"name": "CLASS_NBR"}],
+        },
+        {
+            "schema_name": "SYSADM",
+            "table_name": "PS_CLASS_TBL",
+            "row_count": 5,
+            "columns": [{"name": "CRSE_ID"}, {"name": "STRM"}, {"name": "SUBJECT"}],
+        },
+    ]
+    llm = {
+        "table_descriptions": [
+            {
+                "table_name": "SYSADM.PS_STDNT_ENRL",
+                "description": "Enrollment",
+                "entity_group": "students",
+                "suggested_sync_cadence": "1h",
+                "sync_rationale": "",
+            },
+            {
+                "table_name": "SYSADM.PS_CLASS_TBL",
+                "description": "Classes",
+                "entity_group": "courses",
+                "suggested_sync_cadence": "6h",
+                "sync_rationale": "",
+            },
+        ],
+        "entity_groups": {"students": ["PS_STDNT_ENRL"], "courses": ["PS_CLASS_TBL"]},
+    }
+    from iblai_ontology.backend.services.registry import save_manifest
+
+    service = Service.objects.create(
+        name=name,
+        display_name=name,
+        service_type="database",
+        adapter="peoplesoft",
+        host="db.edu",
+        connection_config_encrypted=b"",
+        llm_analysis=llm if analysis else {"provider": "rule-based"},
+    )
+    save_manifest(service, {"db_type": "oracle", "tables": tables})
+    return service
+
+
+def test_graph_view_builds_from_registry_and_config(api, cfg):
+    from iblai_ontology.backend.api.views import GraphView
+
+    _map_service()
+    body = _run(GraphView, _dispatch(GraphView, path="/graph")).data
+    assert body["ok"] is True
+    kinds = {n["kind"] for n in body["nodes"]}
+    assert {
+        "service",
+        "table",
+        "entity_group",
+        "role",
+        "toolset",
+        "tool",
+        "source",
+        "schedule",
+    } <= kinds
+    assert "column" not in kinds
+    assert any(link["kind"] == "grants" for link in body["links"])
+    assert {"hubs", "orphans", "dangling"} <= set(body["stats"])
+    with_columns = _run(
+        GraphView, _dispatch(GraphView, path="/graph?columns=true")
+    ).data
+    assert sum(n["kind"] == "column" for n in with_columns["nodes"]) == 6
+
+
+def test_graph_records_view(api, tmp_path):
+    import os
+
+    from iblai_ontology.backend.api.views import GraphRecordsView
+
+    root = os.environ["ONTOLOGY_FILES_ROOT"]
+    os.makedirs(os.path.join(root, "students"), exist_ok=True)
+    with open(os.path.join(root, "students", "S1.md"), "w") as f:
+        f.write("# S1\n\n- id: S1\n")
+    body = _run(
+        GraphRecordsView,
+        _dispatch(GraphRecordsView, path="/graph/records?domain=students"),
+    ).data
+    assert body["ok"] is True and body["total"] == 1
+    assert body["nodes"][0]["id"] == "memory_record:students:S1"
+    body = _run(
+        GraphRecordsView, _dispatch(GraphRecordsView, path="/graph/records?domain=nope")
+    ).data
+    assert body["ok"] is False and body["message"] == "Unknown domain."
+    resp = _run(
+        GraphRecordsView, _dispatch(GraphRecordsView, path="/graph/records?domain=Bad!")
+    )
+    assert resp.status_code == 400
+
+
+def test_patch_tables_moves_group_and_rewrites_files(api, tmp_path, monkeypatch):
+    import yaml
+
+    from iblai_ontology.backend.api.views import ServiceTablesView
+    from iblai_ontology.backend.identity.models import AuditLog
+    from iblai_ontology.backend.services.models import Service
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config" / "generated" / "c1").mkdir(parents=True)
+    _map_service()
+    raw = _dispatch(
+        ServiceTablesView,
+        "patch",
+        "/services/c1/tables",
+        data={"tables": ["SYSADM.PS_STDNT_ENRL"], "entity_group": "alumni"},
+    )
+    body = _run(ServiceTablesView, raw, name="c1").data
+    assert body == {"ok": True, "message": "Updated 1 table(s).", "updated": 1}
+    analysis = Service.objects.get(name="c1").llm_analysis
+    assert analysis["table_descriptions"][0]["entity_group"] == "alumni"
+    assert analysis["entity_groups"] == {
+        "courses": ["PS_CLASS_TBL"],
+        "alumni": ["PS_STDNT_ENRL"],
+    }
+    assert analysis["overrides"] == {"SYSADM.PS_STDNT_ENRL": {"entity_group": "alumni"}}
+    groups = yaml.safe_load(
+        (tmp_path / "config/generated/c1/entity-groups.yaml").read_text()
+    )
+    assert groups["entity_groups"]["alumni"] == ["PS_STDNT_ENRL"]
+    assert AuditLog.objects.filter(action="service.tables", resource="c1").exists()
+
+
+def test_patch_tables_unknown_table_and_missing_field(api):
+    from iblai_ontology.backend.api.views import ServiceTablesView
+
+    _map_service()
+    raw = _dispatch(
+        ServiceTablesView,
+        "patch",
+        "/services/c1/tables",
+        data={"tables": ["SYSADM.NOPE"], "description": "x"},
+    )
+    body = _run(ServiceTablesView, raw, name="c1").data
+    assert body["ok"] is False and "Unknown tables: SYSADM.NOPE" in body["message"]
+    raw = _dispatch(
+        ServiceTablesView,
+        "patch",
+        "/services/c1/tables",
+        data={"tables": ["SYSADM.PS_X"]},
+    )
+    assert _run(ServiceTablesView, raw, name="c1").status_code == 400
+    raw = _dispatch(
+        ServiceTablesView,
+        "patch",
+        "/services/zz/tables",
+        data={"tables": ["a"], "description": "x"},
+    )
+    assert _run(ServiceTablesView, raw, name="zz").data["ok"] is False
+
+
+def test_role_crud_roundtrip(api, cfg):
+    from iblai_ontology.backend.api.views import RoleDetailView, RolesView
+
+    body = {
+        "display_name": "Auditor",
+        "mcp_toolsets": ["*"],
+        "memory_paths": ["/ontology/students/by-id/${USER_EMPLID}.md"],
+    }
+    raw = _dispatch(RoleDetailView, "put", "/roles/Auditor", data=body)
+    assert _run(RoleDetailView, raw, name="Auditor").data["ok"] is True
+    names = [r["name"] for r in _run(RolesView, _dispatch(RolesView)).data]
+    assert "Auditor" in names
+    assert (
+        "${USER_EMPLID}" in (cfg / "roles.yaml").read_text()
+    )  # literal, never expanded
+
+    raw = _dispatch(
+        RoleDetailView, "put", "/roles/Auditor", data={"display_name": "Audit"}
+    )
+    assert _run(RoleDetailView, raw, name="Auditor").data["ok"] is True
+    role = next(
+        r for r in _run(RolesView, _dispatch(RolesView)).data if r["name"] == "Auditor"
+    )
+    assert role["display_name"] == "Audit" and role["mcp_toolsets"] == ["*"]
+
+    raw = _dispatch(
+        RoleDetailView, "put", "/roles/Auditor", data={"mcp_toolsets": ["nope"]}
+    )
+    body = _run(RoleDetailView, raw, name="Auditor").data
+    assert body["ok"] is False and "nope" in body["message"]
+
+    assert _run(
+        RoleDetailView, _dispatch(RoleDetailView, "delete"), name="Auditor"
+    ).data["ok"]
+    assert "Auditor" not in [
+        r["name"] for r in _run(RolesView, _dispatch(RolesView)).data
+    ]
+    assert (
+        _run(RoleDetailView, _dispatch(RoleDetailView, "delete"), name="Auditor").data[
+            "ok"
+        ]
+        is False
+    )
+    assert (
+        _run(RoleDetailView, _dispatch(RoleDetailView, "delete"), name="default").data[
+            "ok"
+        ]
+        is False
+    )
+    raw = _dispatch(RoleDetailView, "put", "/roles/x", data={})
+    assert (
+        _run(RoleDetailView, raw, name="x").status_code == 400
+    )  # display_name required
+
+
+def test_schedule_toggle_preserves_fields_and_validates(api, cfg):
+    from iblai_ontology.backend.api.views import (
+        SyncScheduleDetailView,
+        SyncSchedulesView,
+    )
+
+    before = _run(SyncSchedulesView, _dispatch(SyncSchedulesView)).data
+    name = before[0]["name"]
+    raw = _dispatch(
+        SyncScheduleDetailView,
+        "put",
+        f"/sync/schedules/{name}",
+        data={"enabled": False},
+    )
+    assert _run(SyncScheduleDetailView, raw, name=name).data["ok"] is True
+    after = _run(SyncSchedulesView, _dispatch(SyncSchedulesView)).data
+    assert after[0]["name"] == name and after[0]["enabled"] is False
+    assert (
+        after[0]["output"] == before[0]["output"]
+        and after[0]["cron"] == before[0]["cron"]
+    )
+
+    raw = _dispatch(
+        SyncScheduleDetailView,
+        "put",
+        f"/sync/schedules/{name}",
+        data={"cron": "not a cron"},
+    )
+    assert _run(SyncScheduleDetailView, raw, name=name).status_code == 400
+    raw = _dispatch(
+        SyncScheduleDetailView,
+        "put",
+        "/sync/schedules/new-one",
+        data={"source": "s", "cron": "0 * * * *"},
+    )
+    assert (
+        _run(SyncScheduleDetailView, raw, name="new-one").status_code == 400
+    )  # tool required
+    raw = _dispatch(
+        SyncScheduleDetailView,
+        "put",
+        "/sync/schedules/new-one",
+        data={"source": "s", "tool": "t", "cron": "0 * * * *", "mode": "full"},
+    )
+    assert _run(SyncScheduleDetailView, raw, name="new-one").data["ok"] is True
+    assert _run(
+        SyncScheduleDetailView,
+        _dispatch(SyncScheduleDetailView, "delete"),
+        name="new-one",
+    ).data["ok"]
+    assert "new-one" not in (cfg / "sync-schedules.yaml").read_text()
+    assert (
+        _run(
+            SyncScheduleDetailView,
+            _dispatch(SyncScheduleDetailView, "delete"),
+            name="new-one",
+        ).data["ok"]
+        is False
+    )
+
+
+def test_mcp_tool_upsert_delete_and_guards(api, cfg):
+    from iblai_ontology.backend.api.views import McpResourceView
+
+    raw = _dispatch(
+        McpResourceView,
+        "put",
+        "/mcp/tools/ping",
+        data={
+            "type": "postgres-sql",
+            "source": "ontology-cache",
+            "statement": "SELECT 1",
+        },
+    )
+    body = _run(McpResourceView, raw, name="ping", kind="tool").data
+    assert body["ok"] is True and "name: ping" in (cfg / "tools.yaml").read_text()
+
+    text = (cfg / "tools.yaml").read_text()
+    body = _run(
+        McpResourceView,
+        _dispatch(McpResourceView, "delete"),
+        name="ontology-cache",
+        kind="source",
+    ).data
+    assert body["ok"] is False and "undefined source" in body["message"]
+    assert (cfg / "tools.yaml").read_text() == text  # referenced: untouched
+
+    raw = _dispatch(
+        McpResourceView,
+        "put",
+        "/mcp/sources/x",
+        data={"type": "postgres", "host": "h", "password": "hunter2"},
+    )
+    body = _run(McpResourceView, raw, name="x", kind="source").data
+    assert body["ok"] is False and "literal 'password'" in body["message"]
+    assert (cfg / "tools.yaml").read_text() == text
+
+    body = _run(
+        McpResourceView, _dispatch(McpResourceView, "delete"), name="ping", kind="tool"
+    ).data
+    assert body["ok"] is True and "name: ping" not in (cfg / "tools.yaml").read_text()
+    body = _run(
+        McpResourceView, _dispatch(McpResourceView, "delete"), name="ping", kind="tool"
+    ).data
+    assert body["ok"] is False
+
+
+def test_mcp_config_get_masks_and_put_validates(api, cfg, monkeypatch):
+    from iblai_ontology.backend.api.views import McpConfigView
+
+    monkeypatch.setenv("ONTOLOGY_DB_PASSWORD", "xyz-secret")
+    original = (cfg / "tools.yaml").read_text()
+    text = _run(McpConfigView, _dispatch(McpConfigView)).data["text"]
+    assert "${ONTOLOGY_DB_PASSWORD}" in text and "xyz-secret" not in text
+    assert text == original  # unexpanded and comment-complete
+
+    (cfg / "tools.yaml").write_text(
+        original + "---\nkind: source\nname: lit\ntype: postgres\npassword: hunter2\n"
+    )
+    masked = _run(McpConfigView, _dispatch(McpConfigView)).data["text"]
+    assert "hunter2" not in masked and "password: ********" in masked
+    (cfg / "tools.yaml").write_text(original)
+
+    raw = _dispatch(McpConfigView, "put", "/mcp/config", data={"text": "kind: [\n"})
+    body = _run(McpConfigView, raw).data
+    assert body["ok"] is False and "parse error" in body["message"]
+    assert (cfg / "tools.yaml").read_text() == original
+
+    raw = _dispatch(
+        McpConfigView,
+        "put",
+        "/mcp/config",
+        data={"text": original + "\n# trailing note\n"},
+    )
+    body = _run(McpConfigView, raw).data
+    assert body["ok"] is True and body["report"]["tools"] >= 5
+    assert (cfg / "tools.yaml").read_text().endswith("# trailing note\n")

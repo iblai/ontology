@@ -91,7 +91,9 @@ services:
 
   # --- Sync Engine ---
   sync-engine:
-    build: ./sync-engine
+    build:
+      context: .
+      dockerfile: sync-engine/Dockerfile
     volumes:
       - ontology-files:/ontology
       - ./config/sync-schedules.yaml:/app/config.yaml
@@ -101,6 +103,11 @@ services:
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
       CHROMA_URL: http://vector-store:8000
       CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
+      ONTOLOGY_DATA_STORE: ${ONTOLOGY_DATA_STORE:-local}
+      IBLAI_BASE_URL: ${IBLAI_BASE_URL:-}
+      IBLAI_ORG: ${IBLAI_ORG:-}
+      IBLAI_ADMIN_TOKEN: ${IBLAI_ADMIN_TOKEN:-}
+      IBLAI_AUTH_SCHEME: ${IBLAI_AUTH_SCHEME:-}
     depends_on:
       - mcp-toolbox
       - mcp-canvas
@@ -108,11 +115,14 @@ services:
       - vector-store
     networks:
       - ontology-internal
+      - ontology-exposed  # with ONTOLOGY_DATA_STORE=dm every sync run is written to the DM
     restart: unless-stopped
 
   # --- MCP Outbound: Exposure Gateway ---
   ontology-gateway:
-    build: ./gateway
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     volumes:
       - ontology-files:/ontology:ro
       - ./config/roles.yaml:/app/roles.yaml
@@ -123,6 +133,14 @@ services:
       CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
+      ONTOLOGY_CREDENTIAL_KEY_FILE: /run/secrets/ontology_credential_key
+      ONTOLOGY_DATA_STORE: ${ONTOLOGY_DATA_STORE:-local}
+      IBLAI_BASE_URL: ${IBLAI_BASE_URL:-}
+      IBLAI_ORG: ${IBLAI_ORG:-}
+      IBLAI_ADMIN_TOKEN: ${IBLAI_ADMIN_TOKEN:-}
+      IBLAI_AUTH_SCHEME: ${IBLAI_AUTH_SCHEME:-}
+    secrets:
+      - ontology_credential_key
     depends_on:
       - mcp-toolbox
       - ontology-db
@@ -157,6 +175,12 @@ services:
       - ontology-internal
       - ontology-exposed
     restart: unless-stopped
+
+# Registry Fernet key — generate once:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > secrets/ontology_credential_key
+secrets:
+  ontology_credential_key:
+    file: ./secrets/ontology_credential_key
 
 networks:
   ontology-internal:

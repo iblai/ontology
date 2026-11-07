@@ -114,3 +114,32 @@ def test_write_memories_no_db(tmp_path):
     assert len(files) == 1
     assert (tmp_path / "students" / "001.md").exists()
     assert idx.indexed == ["/ontology/students/001.md"]
+
+
+def test_disabled_schedule_skipped_by_beat_and_run_all_due(tmp_path, monkeypatch):
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "sync-schedules.yaml").write_text(
+        "schedules:\n"
+        "  - name: alpha\n"
+        "    cron: '0 2 * * *'\n"
+        "    source: peoplesoft\n"
+        "    tool: get-a\n"
+        "  - name: beta\n"
+        "    cron: '0 3 * * *'\n"
+        "    source: peoplesoft\n"
+        "    tool: get-b\n"
+        "    enabled: false\n"
+    )
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
+    beat = scheduler.build_beat_schedule()
+    assert "sync-alpha" in beat and "sync-beta" not in beat
+
+    ran: list[str] = []
+    runner = SyncRunner()
+    monkeypatch.setattr(
+        runner, "_run_schedule", lambda sched, force_full: ran.append(sched["name"])
+    )
+    runner.run_all_due()
+    runner.run_service("peoplesoft")
+    assert ran == ["alpha", "alpha"]

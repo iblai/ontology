@@ -4,6 +4,79 @@ All notable changes to iblai-ontology are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Relationship graph: `GET /graph` turns the registry and config into one typed graph
+  (services, tables, columns, entity groups, MCP sources/tools/toolsets, roles, schedules,
+  memory domains; foreign keys, SQL table references, grants, memory and cache reach, sync
+  flows) with dangling-reference stubs and orphan health, and `GET /graph/records` expands a
+  memory domain into its records linked by foreign-key values. The console's new **Semantic map**
+  page draws it Obsidian-style on a force layout, focuses a role to show what it reaches,
+  and toggles toolset, memory-domain and cache-table grants in place (`*` becomes an
+  explicit list on the first revoke). `seed_example_data` adds foreign keys and, when
+  `ONTOLOGY_FILES_ROOT` is set, a small synthetic memory vault.
+- `PATCH /services/<name>/tables` edits a discovered table's entity group and description;
+  edits are recorded as `overrides` on the stored analysis and survive a rediscovery.
+- Console editors with their write endpoints: roles (`PUT|DELETE /roles/<name>`, a new
+  Roles page), sync schedules (`PUT|DELETE /sync/schedules/<name>`, enable/disable and
+  edit from the Sync page), MCP tools, toolsets and sources (`PUT|DELETE
+  /mcp/{tools,toolsets,sources}/<name>`) and a raw `tools.yaml` editor
+  (`GET|PUT /mcp/config`) that validates against the Toolbox schema before writing and
+  refuses literal secrets on sources (`${VAR}` references only). Every write is audited.
+- `seed_example_data` stores a few columns per table and a discovery-shaped analysis, so
+  a demo backend shows entity groups in the catalog and the graph.
+- `auto-ontology` extra: NVIDIA's [auto-ontology](https://github.com/NVIDIA/auto-ontology)
+  connectors (tracking `main`, the commit pinned in `uv.lock`) back three new database
+  sources — `snowflake`, `generic-trino`, `generic-clickhouse` — through the same read-only
+  safety suite, introspection and generated config as the DB-API drivers. `ontology service add
+  --option KEY=VALUE` (and `options` on `POST /services`) carries engine fields such as
+  `warehouse`, `schema` and `http_scheme`. Databricks and DuckDB connectors are not
+  exposed: MCP Toolbox 1.5.0 has no kind to serve them.
+- `ONTOLOGY_CREDENTIAL_KEY_FILE`: the registry's Fernet key can come from a file instead of
+  the environment. `docker-compose.yml` mounts `secrets/ontology_credential_key` into the
+  gateway as a Compose secret — the only container that decrypts the registry, and one that
+  received no key at all before. `ontology doctor` reports whether a key is configured.
+- Switchable record store: `ONTOLOGY_DATA_STORE=dm` keeps the registry and run history —
+  services and their discovered tables, safety reports, health checks, provisioning runs and
+  steps, sync runs, the audit log — in the ibl.ai DM's platform database (DM PR #3103) instead
+  of the backend's own; `local`, the default, is unchanged. The student-data cache, memory
+  files, vector index, identity map and YAML config stay local, and the DM holds connection
+  credentials only as Fernet ciphertext. `ontology platform database` creates the DM database
+  and its tables from the Django models and adds whatever a later version needs.
+  `IBLAI_AUTH_SCHEME=Api-Token` lets the platform client use a platform API key.
+
+### Changed
+- Discovered tables are one `ServiceTable` row each (a migration moves existing manifests);
+  `Service.schema_manifest` keeps per-table summaries. `ProvisioningStep.order` is stored in a
+  `position` column. The unused `DiscoveredService` and `SyncSchedule` models are gone.
+- A failed audit write is logged (`iblai_ontology.audit`) instead of dropped silently.
+- `chromadb` is pinned `>=0.6,<0.7` to match the `chromadb/chroma:0.6.3` server image (1.x
+  dropped the built-in server token auth the compose stack relies on).
+- A schedule with `enabled: false` in `sync-schedules.yaml` is now skipped by Celery beat,
+  `run_all_due` and manual syncs (it was read by the API only).
+- Python 3.13 is the only supported version (`requires-python >=3.13,<3.14`, CI, both
+  images) because auto-ontology requires 3.12–3.13. `pydantic` moved from `==2.13.3` to
+  `>=2.13.5,<3`.
+- uv project: `uv.lock` pins every dependency, the dev tools are a `dev` dependency group
+  (pytest, pytest-cov, ruff 0.14.14), and CI and both images install with `uv sync
+  --locked`. `DEV.md` replaces `dev.sh`. Both images now build from the repo root, as their
+  Dockerfiles expect, and a `.dockerignore` keeps `.env*`, `.venv` and `frontend/` out of
+  them.
+- The console moved to its own repository; its CI job left with it.
+
+
+### Fixed
+- The safety suite's UPDATE probe uses `ALTER TABLE … UPDATE` on ClickHouse: before 25.7
+  ClickHouse has no `UPDATE` statement, so the probe was a syntax error and the suite refused
+  every ClickHouse source on those versions.
+- `ontology mcp validate` / `POST /mcp/validate` report a broken `tools.yaml` (parse error,
+  non-mapping document) as compliance errors instead of raising.
+- Safety suite: dropping the probe table after its `CREATE` was denied now counts as denied on
+  every engine ("does not exist"), as the Oracle branch already did via ORA-00942 — before, the
+  DROP test came back inconclusive on PostgreSQL, MySQL and SQL Server and failed the suite. The
+  ALTER probe uses `ADD COLUMN` everywhere but Oracle (Trino and ClickHouse reject the bare form).
+
 ## [0.2.11] - 2026-07-09
 
 ### Security

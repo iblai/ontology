@@ -12,7 +12,8 @@ def _fernet():
     key = settings.CREDENTIAL_ENCRYPTION_KEY
     if not key:
         raise RuntimeError(
-            "ONTOLOGY_CREDENTIAL_KEY is not set. Generate one with:\n"
+            "ONTOLOGY_CREDENTIAL_KEY is not set (nor a readable "
+            "ONTOLOGY_CREDENTIAL_KEY_FILE). Generate one with:\n"
             '    python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"'
         )

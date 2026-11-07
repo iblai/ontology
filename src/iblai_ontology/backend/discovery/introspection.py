@@ -110,6 +110,13 @@ class SchemaIntrospector:
         self.db_type = db_type
 
     def introspect(self) -> SchemaManifest:
+        connector = getattr(self.connection, "connector", None)
+        if connector is not None:
+            from iblai_ontology.backend.discovery.connectors import (
+                manifest_from_connector,
+            )
+
+            return manifest_from_connector(connector, self.db_type)
         start = time.time()
         schemas = self._list_schemas()
         tables: list[TableInfo] = []

@@ -94,3 +94,70 @@ def test_remediation_sql_per_dialect():
     ]:
         v = SafetyVerifier(FakeConnection(deny_writes=True), db_type=db_type)
         assert marker in v.remediation_sql()
+
+
+class RecordingCursor(FakeCursor):
+    """Records SQL; a DROP of the never-created probe table reports it missing."""
+
+    def __init__(self, log: list[str], **kw):
+        super().__init__(**kw)
+        self.log = log
+
+    def execute(self, sql: str):
+        self.log.append(sql)
+        if sql.strip().upper().startswith("DROP"):
+            raise Exception(
+                "Table demo.__iblai_safety_test does not exist. (UNKNOWN_TABLE)"
+            )
+        super().execute(sql)
+
+
+class RecordingConnection(FakeConnection):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.log: list[str] = []
+
+    def cursor(self):
+        return RecordingCursor(
+            self.log, deny_writes=self.deny_writes, has_table=self.has_table
+        )
+
+
+def test_drop_of_never_created_probe_table_counts_as_denied():
+    result = SafetyVerifier(
+        RecordingConnection(deny_writes=True), db_type="postgresql"
+    ).run_all_tests()
+    assert result.all_passed
+    drop = next(t for t in result.tests if t.test_name == "DROP TABLE")
+    assert drop.result == Status.PASSED
+
+
+def test_missing_table_excuses_only_the_drop_probe():
+    class MissingOnInsert(RecordingCursor):
+        def execute(self, sql: str):
+            if sql.strip().upper().startswith("INSERT"):
+                raise Exception('relation "some_table" does not exist')
+            super().execute(sql)
+
+    class Conn(RecordingConnection):
+        def cursor(self):
+            return MissingOnInsert(self.log, deny_writes=True)
+
+    result = SafetyVerifier(
+        Conn(deny_writes=True), db_type="postgresql"
+    ).run_all_tests()
+    insert = next(t for t in result.tests if t.test_name == "INSERT")
+    assert insert.result == Status.ERROR
+    assert not result.all_passed
+
+
+def test_alter_probe_uses_add_column_except_on_oracle():
+    pg = RecordingConnection(deny_writes=True)
+    SafetyVerifier(pg, db_type="postgresql").run_all_tests()
+    assert any(s.startswith("ALTER TABLE SOME_TABLE ADD COLUMN ") for s in pg.log)
+
+    ora = RecordingConnection(deny_writes=True)
+    SafetyVerifier(ora, db_type="oracle").run_all_tests()
+    assert any(
+        s.startswith("ALTER TABLE SOME_TABLE ADD __iblai_safety_col") for s in ora.log
+    )

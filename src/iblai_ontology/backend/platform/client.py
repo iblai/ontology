@@ -25,6 +25,8 @@ class PlatformConfig:
     base_url: str
     org: str
     admin_token: str
+    # "Api-Token" for a platform API key; a DM "Token" expires (knox, 14 days by default).
+    auth_scheme: str = "Token"
 
     @classmethod
     def from_env(cls) -> "PlatformConfig":
@@ -34,10 +36,17 @@ class PlatformConfig:
             raise RuntimeError(
                 "IBLAI_ORG and IBLAI_ADMIN_TOKEN must be set to talk to the ibl.ai platform."
             )
+        scheme = os.environ.get("IBLAI_AUTH_SCHEME") or "Token"
+        if scheme not in ("Token", "Api-Token"):
+            raise RuntimeError(
+                f"IBLAI_AUTH_SCHEME must be Token or Api-Token, not {scheme!r}."
+            )
         return cls(
-            base_url=os.environ.get("IBLAI_BASE_URL", DEFAULT_BASE),
+            # Compose passes unset variables as empty strings.
+            base_url=(os.environ.get("IBLAI_BASE_URL") or DEFAULT_BASE).rstrip("/"),
             org=org,
             admin_token=token,
+            auth_scheme=scheme,
         )
 
 
@@ -58,9 +67,28 @@ class PlatformClient:
 
     def _headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Token {self.config.admin_token}",
+            "Authorization": f"{self.config.auth_scheme} {self.config.admin_token}",
             "Content-Type": "application/json",
         }
+
+    def db(
+        self, method: str, path: str, *, ok: tuple[int, ...] = (), **kw
+    ) -> httpx.Response:
+        """A platform-database call (DM PR #3103): ``…/providers/supabase/databases/<path>``.
+
+        Raises with the DM's own message on any 4xx/5xx not listed in ``ok``.
+        """
+        url = (
+            f"{self.config.base_url}/api/ai-mentor/orgs/{self.config.org}"
+            f"/providers/supabase/databases/{path}"
+        )
+        headers = {**self._headers(), **kw.pop("headers", {})}
+        resp = self._client.request(method, url, headers=headers, **kw)
+        if resp.is_error and resp.status_code not in ok:
+            raise RuntimeError(
+                f"DM {method} {path}: HTTP {resp.status_code} {resp.text[:500]}"
+            )
+        return resp
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         resp = self._client.post(self._url(path), json=payload, headers=self._headers())

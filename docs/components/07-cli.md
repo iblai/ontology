@@ -13,8 +13,8 @@ A comprehensive command-line interface for every management operation: service i
 
 ```bash
 pip install iblai-ontology
-# or, developing this repo:
-pip install -e ".[dev]"
+# or, developing this repo (see DEV.md):
+uv sync
 # inside the container:
 docker compose exec ontology-gateway ontology --help
 ```
@@ -50,7 +50,7 @@ ontology
 
 | Command | What it does | Key args / options |
 |---|---|---|
-| `add` | Full discovery → safety → introspect → (LLM) → provision pipeline. | Prompts: `--name`, `--service-type`, `--host`, `--port`, `--database`, `--user`, `--password`. Flags: `--llm-discover/--no-llm-discover` (default on), `--skip-safety` (not recommended). |
+| `add` | Full discovery → safety → introspect → (LLM) → provision pipeline. | Prompts: `--name`, `--service-type`, `--host`, `--port`, `--database`, `--user`, `--password`. Flags: `--llm-discover/--no-llm-discover` (default on), `--skip-safety` (not recommended), `--option KEY=VALUE` (repeatable; engine fields such as `warehouse`, `schema`, `http_scheme` for the auto-ontology connectors). |
 | `list` | List all integrated services with status. | — |
 | `status <name>` | Connectivity + read-only verified + latency for one service. | `name` (arg) |
 | `test <name>` | Run the 7-test read-only safety suite; exits non-zero on failure. | `name` (arg) |
@@ -59,7 +59,7 @@ ontology
 | `sync <name>` | Trigger a manual sync for one service. | `name` (arg) |
 | `remove <name>` | Teardown — drop cache tables and remove config. | `name` (arg); `--yes` to skip the prompt |
 
-`--service-type` accepts: `peoplesoft`, `banner`, `workday`, `canvas`, `slate`, `navigate`, `generic-oracle`, `generic-postgres`, `generic-mysql`, `generic-mssql`.
+`--service-type` accepts: `peoplesoft`, `banner`, `workday`, `canvas`, `slate`, `navigate`, `generic-oracle`, `generic-postgres`, `generic-mysql`, `generic-mssql`, `snowflake`, `generic-trino`, `generic-clickhouse` (the last three need the `auto-ontology` extra).
 
 ```bash
 ontology service add        # interactive: prompts for everything

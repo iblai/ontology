@@ -36,14 +36,10 @@ def status() -> None:
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
-    from iblai_ontology.backend.sync.models import SyncRun
+    from iblai_ontology.backend.sync.engine import latest_runs
     from iblai_ontology.utils.output import print_table
 
-    # Latest run per schedule (DB-agnostic — dedupe in Python, no DISTINCT ON).
-    latest = {}
-    for r in SyncRun.objects.order_by("-started_at"):
-        latest.setdefault(r.schedule_name, r)
-    latest = list(latest.values())
+    latest = latest_runs()
     print_table(
         title="Sync Status",
         columns=["Schedule", "Service", "Status", "Last Run", "Duration", "Records"],
@@ -70,13 +66,12 @@ def history(
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
+    from iblai_ontology.backend import store
     from iblai_ontology.backend.sync.models import SyncRun
     from iblai_ontology.utils.output import print_table
 
-    qs = SyncRun.objects.all()
-    if service:
-        qs = qs.filter(source_system=service)
-    runs = qs.order_by("-started_at")[:limit]
+    where = {"source_system": service} if service else {}
+    runs = store.filter(SyncRun, order="-started_at", limit=limit, **where)
     print_table(
         title="Sync History",
         columns=[

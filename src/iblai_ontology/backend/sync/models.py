@@ -7,32 +7,6 @@ import uuid
 from django.db import models
 
 
-class SyncSchedule(models.Model):
-    """A configured sync schedule (mirrors an entry in sync-schedules.yaml)."""
-
-    class Mode(models.TextChoices):
-        FULL = "full", "Full refresh"
-        DELTA = "delta", "Delta refresh"
-        EVENT = "event", "Event-driven"
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255, unique=True)
-    cron = models.CharField(max_length=100, blank=True, default="")
-    source = models.CharField(max_length=255)
-    tool = models.CharField(max_length=255)
-    mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.FULL)
-    text_memories_path = models.CharField(max_length=500, blank=True, default="")
-    structured_cache_table = models.CharField(max_length=255, blank=True, default="")
-    description = models.TextField(blank=True, default="")
-    enabled = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.cron})"
-
-
 class SyncRun(models.Model):
     """A single execution of a sync schedule."""
 

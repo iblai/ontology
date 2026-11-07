@@ -15,7 +15,7 @@ import yaml
 from corsheaders.defaults import default_headers
 from environs import Env
 
-from iblai_ontology.config import LLM_DEFAULT_MODELS, config_dir
+from iblai_ontology.config import LLM_DEFAULT_MODELS, config_dir, credential_key
 
 # Load a .env file (searched from the working directory upward) into the
 # environment before any settings are read. environs does not override vars
@@ -142,8 +142,9 @@ LLM_MODEL = _llm.get("model") or (
 LLM_MAX_TOKENS = _llm.get("max_tokens", 4096)
 LLM_TEMPERATURE = _llm.get("temperature", 0.2)
 
-# Fernet key for encrypting service connection credentials at rest.
-CREDENTIAL_ENCRYPTION_KEY = os.environ.get("ONTOLOGY_CREDENTIAL_KEY")
+# Fernet key for the service registry: ONTOLOGY_CREDENTIAL_KEY, or the file named by
+# ONTOLOGY_CREDENTIAL_KEY_FILE (a Compose secret).
+CREDENTIAL_ENCRYPTION_KEY = credential_key()
 
 # Text memory root and Entra ID identity config.
 ONTOLOGY_FILES_ROOT = os.environ.get("ONTOLOGY_FILES_ROOT", "/ontology")
@@ -241,6 +242,22 @@ ONTOLOGY_ADMIN_PLATFORMS = {
     for p in os.environ.get("ONTOLOGY_ADMIN_PLATFORMS", "").split(",")
     if p.strip()
 }
+# Where the registry and run history live (backend/store.py): this database, or the DM
+# platform database of IBLAI_ORG, reached with IBLAI_BASE_URL / IBLAI_ADMIN_TOKEN.
+ONTOLOGY_DATA_STORE = os.environ.get("ONTOLOGY_DATA_STORE") or "local"
+if ONTOLOGY_DATA_STORE not in ("local", "dm"):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        f"ONTOLOGY_DATA_STORE must be local or dm, not {ONTOLOGY_DATA_STORE!r}."
+    )
+if ONTOLOGY_DATA_STORE == "dm":
+    from iblai_ontology.backend.platform.client import PlatformConfig
+
+    # Fails here, not on the first request, when IBLAI_ORG / IBLAI_ADMIN_TOKEN are missing.
+    _platform = PlatformConfig.from_env()
+    # Only the store's own platform's admins drive a console that writes into its database.
+    ONTOLOGY_ADMIN_PLATFORMS = ONTOLOGY_ADMIN_PLATFORMS or {_platform.org}
 # Local dev without Entra/DM: anonymous requests act as a synthetic admin.
 ONTOLOGY_API_DEV_ALLOW_ANON = (
     os.environ.get("ONTOLOGY_API_DEV_ALLOW_ANON", "false").lower() == "true"

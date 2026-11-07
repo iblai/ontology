@@ -16,6 +16,7 @@ All files live under the directory returned by :func:`config_dir` — the
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 DEFAULT_CONFIG_DIRNAME = "config"
@@ -32,3 +33,13 @@ LLM_DEFAULT_MODELS = {
     "anthropic": "claude-opus-4-8",
     "openai": "gpt-4o",
 }
+
+
+def credential_key(environ: Mapping[str, str] = os.environ) -> str | None:
+    """The registry's Fernet key: ``ONTOLOGY_CREDENTIAL_KEY``, else the file named by
+    ``ONTOLOGY_CREDENTIAL_KEY_FILE`` (a Compose secret); a set but unreadable path raises."""
+    key = environ.get("ONTOLOGY_CREDENTIAL_KEY")
+    if key:
+        return key
+    path = environ.get("ONTOLOGY_CREDENTIAL_KEY_FILE")
+    return Path(path).read_text().strip() if path else None

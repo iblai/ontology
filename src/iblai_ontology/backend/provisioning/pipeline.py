@@ -32,21 +32,22 @@ class ProvisioningEngine:
     def provision(self, name: str):
         from django.utils import timezone
 
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.provisioning.models import (
             ProvisioningRun,
             ProvisioningStep,
         )
         from iblai_ontology.backend.services.models import Service
 
-        service = Service.objects.get(name=name)
+        service = store.get(Service, name=name)
         gen = self._generated_dir(name)
         if not gen.exists():
             raise FileNotFoundError(
                 f"No generated config for '{name}'. Run `ontology service discover {name}` first."
             )
 
-        run = ProvisioningRun.objects.create(
-            service=service, status=ProvisioningRun.Status.RUNNING
+        run = store.create(
+            ProvisioningRun, service=service, status=ProvisioningRun.Status.RUNNING
         )
         steps = [
             (ProvisioningStep.StepType.CACHE_SCHEMA, self._step_cache_schema),
@@ -58,7 +59,8 @@ class ProvisioningEngine:
         ]
         try:
             for order, (step_type, fn) in enumerate(steps):
-                step = ProvisioningStep.objects.create(
+                step = store.create(
+                    ProvisioningStep,
                     run=run,
                     step_type=step_type,
                     order=order,
@@ -69,17 +71,17 @@ class ProvisioningEngine:
                 step.output = output or {}
                 step.status = ProvisioningStep.Status.COMPLETED
                 step.completed_at = timezone.now()
-                step.save()
+                store.save(step)
             run.status = ProvisioningRun.Status.COMPLETED
             run.completed_at = timezone.now()
-            run.save()
+            store.save(run)
             service.status = Service.Status.ACTIVE
-            service.save(update_fields=["status"])
+            store.save(service, ["status"])
         except Exception as exc:
             run.status = ProvisioningRun.Status.FAILED
             run.error_message = str(exc)[:1000]
             run.completed_at = timezone.now()
-            run.save()
+            store.save(run)
             raise
         return run
 
@@ -145,6 +147,7 @@ class ProvisioningEngine:
     # -- teardown --------------------------------------------------------
     def teardown(self, name: str) -> None:
         """Remove a service integration: drop generated config + registry rows."""
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.services.models import Service
 
         gen = self._generated_dir(name)
@@ -152,5 +155,5 @@ class ProvisioningEngine:
             for f in gen.glob("*"):
                 f.unlink()
             gen.rmdir()
-        Service.objects.filter(name=name).delete()
+        store.delete(Service, name=name)
         logger.info("Tore down service '%s'", name)

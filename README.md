@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/coverage-85%25-brightgreen.svg" alt="Coverage 85%">
   <img src="https://img.shields.io/badge/tests-163%20passing-brightgreen.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="Python 3.13+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/protocol-MCP-8A2BE2.svg" alt="MCP">
   <a href="https://github.com/googleapis/mcp-toolbox"><img src="https://img.shields.io/badge/inbound-MCP%20Toolbox-4285F4.svg" alt="MCP Toolbox"></a>
@@ -25,6 +25,8 @@ iblai/ontology is a **unified knowledge layer that runs inside your network**. I
 The prevailing approach extracts your data through a VPN tunnel into a vendor cloud. iblai/ontology does the opposite: **no data extraction, no VPN to our cloud, no third-party infrastructure holding your data.** The agent runtime (where models execute) is a separate concern and can run anywhere; the knowledge layer — the data, the cache, the permissions — stays on-premise and is exposed over MCP so any *authorized* runtime can connect.
 
 > **You will have your data, and we may not even have access to it.**
+
+One opt-in exception: with `ONTOLOGY_DATA_STORE=dm` the service registry and run history (schema metadata, safety and sync results, the console audit log) live in your ibl.ai platform's database instead of the backend's own — never source records, and credentials only as ciphertext whose key stays with you ([DEV.md](DEV.md#dm-store-ontology_data_storedm)).
 
 It is **domain-agnostic**: the same stack serves a university (higher-ed systems) and an enterprise (CRM/ITSM/HCM/data-warehouse), with built-in defaults for both (see [the catalog](#built-in-service-catalog)).
 
@@ -62,34 +64,30 @@ Full design: **[docs/architecture.md](docs/architecture.md)**.
 ## Quick start
 
 ```bash
-pip install -e ".[dev]"      # core CLI + tests
-ontology --help
-ontology config init         # scaffold a deployment (config/, sql/, compose)
+uv sync                      # core CLI + the dev group (pytest, ruff)
+uv run ontology --help
+uv run ontology config init  # scaffold a deployment (config/, sql/, compose)
 ```
 
-Hybrid stack — a lean, Django-free CLI + config layer (works on a fresh checkout) and a Django + Celery backend for the long-running services. Install extras as needed:
+Hybrid stack — a lean, Django-free CLI + config layer (works on a fresh checkout) and a Django + Celery backend for the long-running services. Add extras as needed:
 
 ```bash
-pip install -e ".[django]"   # backend services (gateway, sync, discovery)
-pip install -e ".[llm]"      # BYOK schema analysis (anthropic / openai)
-pip install -e ".[db]"       # source drivers (oracle, postgres, mysql, mssql)
-pip install -e ".[vector]"   # ChromaDB vector index
+uv sync --extra django         # backend services (gateway, sync, discovery)
+uv sync --extra llm            # BYOK schema analysis (anthropic / openai)
+uv sync --extra db             # source drivers (oracle, postgres, mysql, mssql)
+uv sync --extra vector         # ChromaDB vector index
+uv sync --extra auto-ontology  # Snowflake / Trino / ClickHouse connectors (NVIDIA auto-ontology)
 ```
+
+`uv sync` is exact, so pass every extra you want in one call (`--extra django --extra db`, or `--all-extras`).
 
 Names: distribution **`iblai-ontology`** · import package **`iblai_ontology`** · command **`ontology`**.
 
 ### Local checks
 
-`./dev.sh` mirrors the CI gates so you can confirm everything passes before committing:
+**[DEV.md](DEV.md)** has the commands CI runs (ruff format, import sort, lint, pytest) and the ones for running the backend.
 
-```bash
-./dev.sh setup            # install into the active venv (dev + django extras)
-./dev.sh test -k canvas   # pytest (args passed through)
-./dev.sh fmt              # auto-fix ruff format + import sort
-./dev.sh check            # ruff format/lint/import-sort + full pytest (== CI)
-```
-
-CI runs the same on every PR to `main`: `.github/workflows/ruff-format.yml` (ruff) and `.github/workflows/tests.yml` (pytest).
+CI runs them on every PR to `main`: `.github/workflows/ruff-format.yml` (ruff) and `.github/workflows/tests.yml` (pytest).
 
 ## End to end
 
@@ -232,7 +230,7 @@ Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
 ## Security posture
 
 - **Read-only everywhere.** No source writes in v1. Before touching any data, the safety suite attempts seven write operations and requires **all seven be denied** — otherwise it refuses to proceed and prints remediation SQL.
-- **Data stays on-premise.** Source credentials never leave your network; the agent runtime queries at runtime, scoped by the authenticated user.
+- **Data stays on-premise.** Source credentials never leave your network in readable form (with `ONTOLOGY_DATA_STORE=dm` the DM holds only their ciphertext; the key stays in the gateway); the agent runtime queries at runtime, scoped by the authenticated user.
 - **Identity through Entra ID.** Every MCP request carries the user's Entra ID JWT; the gateway validates it and resolves the caller's role against `roles.yaml`. See [docs/identity.md](docs/identity.md).
 - **Credential isolation & containment.** Each inbound MCP server has its own credential scope; connection secrets are encrypted at rest.
 

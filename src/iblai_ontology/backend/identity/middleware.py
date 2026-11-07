@@ -15,6 +15,7 @@ it to Django's middleware contract.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -25,6 +26,8 @@ from iblai_ontology.backend.identity.roles import (
     RoleResolver,
     select_active_role,
 )
+
+logger = logging.getLogger("iblai_ontology.audit")
 
 ROLE_HEADER = "X-Iblai-Role"
 
@@ -89,9 +92,11 @@ def write_audit(
 ) -> None:
     """Persist an audit_log row (best-effort; never blocks the request)."""
     try:
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.identity.models import AuditLog
 
-        AuditLog.objects.create(
+        store.create(
+            AuditLog,
             user_id=resolved.identity.user_id,
             user_email=resolved.identity.email,
             user_role=resolved.permissions.role,
@@ -103,7 +108,7 @@ def write_audit(
             entra_token_id=resolved.identity.token_jti or "",
         )
     except Exception:  # pragma: no cover - auditing must not break requests
-        pass
+        logger.exception("audit write failed: %s %s", action, resource)
 
 
 class OntologyIdentityMiddleware:

@@ -9,11 +9,12 @@ Guarded on purpose — it refuses to run unless **both**:
 and it needs ``ONTOLOGY_CREDENTIAL_KEY`` set (the same key the server runs with)
 to seal the demo connection credentials.
 
-    django-admin seed_example_data      # or: ./dev.sh manage seed_example_data
+    uv run python -m iblai_ontology.backend.manage seed_example_data
 """
 
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -27,7 +28,8 @@ from iblai_ontology.backend.discovery.models import SafetyReport
 from iblai_ontology.backend.provisioning.models import ProvisioningRun, ProvisioningStep
 from iblai_ontology.backend.services.encryption import encrypt_connection_config
 from iblai_ontology.backend.services.models import Service
-from iblai_ontology.backend.sync.models import SyncRun, SyncSchedule
+from iblai_ontology.backend.services.registry import save_manifest
+from iblai_ontology.backend.sync.models import SyncRun
 
 # Demo credential value — masked by the API's redactor anyway; never a real secret.
 _SECRET = "demo-not-a-real-secret"
@@ -171,6 +173,119 @@ _MANIFESTS = {
     },
 }
 
+# A few columns per seeded table (the real pipeline stores every column), and the
+# entity group + description the analysis would produce, so the semantic map has
+# something to colour. Mirrors portal/lib/ontology/mock/seed.ts.
+_COLUMNS = {
+    "PS_STDNT_CAR_TERM": ["EMPLID", "STRM", "ACAD_CAREER", "CUM_GPA", "TOT_CUMULATIVE"],
+    "PS_STDNT_ENRL": [
+        "EMPLID",
+        "STRM",
+        "CLASS_NBR",
+        "ENRL_STATUS_REASON",
+        "CRSE_GRADE_OFF",
+    ],
+    "PS_FIN_AID_AWD": [
+        "EMPLID",
+        "AID_YEAR",
+        "ITEM_TYPE",
+        "OFFER_AMOUNT",
+        "DISBURSED_AMT",
+    ],
+    "PS_CLASS_TBL": ["CRSE_ID", "STRM", "CLASS_NBR", "SUBJECT", "CATALOG_NBR"],
+    "PS_STDNT_BIO": ["EMPLID", "NAME", "BIRTHDATE", "SEX", "CITIZENSHIP_STATUS"],
+    "PS_INSTITUTION": ["INSTITUTION", "DESCR", "COUNTRY", "EFFDT"],
+    "enrollments": ["id", "user_id", "course_id", "role", "enrollment_state"],
+    "submissions": ["id", "assignment_id", "user_id", "score", "submitted_at"],
+    "courses": ["id", "name", "course_code", "term_id", "workflow_state"],
+    "users": ["id", "name", "email", "login_id", "created_at"],
+    "assignments": ["id", "course_id", "title", "due_at", "points_possible"],
+    "applications": ["id", "prospect_id", "program", "term", "status"],
+    "prospects": ["id", "first_name", "last_name", "email", "source"],
+    "decisions": ["id", "application_id", "decision", "decided_at", "notes"],
+    "ORDERS": ["ORDER_ID", "CUSTOMER_ID", "ORDER_DATE", "TOTAL_AMOUNT", "STATUS"],
+    "CUSTOMERS": ["CUSTOMER_ID", "NAME", "EMAIL", "REGION", "CREATED_AT"],
+    "EMPLOYEES": ["EMPLOYEE_ID", "NAME", "DEPARTMENT", "HIRE_DATE", "SALARY"],
+    "LEDGER": ["ENTRY_ID", "ACCOUNT", "AMOUNT", "POSTED_AT", "MEMO"],
+}
+_GROUPS = {
+    "PS_STDNT_CAR_TERM": (
+        "students",
+        "Student career/term records: GPA, credits, status.",
+    ),
+    "PS_STDNT_ENRL": ("enrollment", "Class enrollments per student and term."),
+    "PS_FIN_AID_AWD": ("financial_aid", "Financial aid awards by aid year."),
+    "PS_CLASS_TBL": ("courses", "Scheduled class sections per term."),
+    "PS_STDNT_BIO": ("students", "Student biographic and demographic data."),
+    "PS_INSTITUTION": ("other", "Institution reference table."),
+    "enrollments": ("enrollment", "Course enrollments with role and state."),
+    "submissions": ("courses", "Assignment submissions and scores."),
+    "courses": ("courses", "Canvas courses by term."),
+    "users": ("students", "Canvas user accounts."),
+    "assignments": ("courses", "Assignments with due dates and points."),
+    "applications": ("admissions", "Admission applications by program and term."),
+    "prospects": ("admissions", "Prospective students and their source."),
+    "decisions": ("admissions", "Admission decisions per application."),
+    "ORDERS": ("finance", "Sales orders and totals."),
+    "CUSTOMERS": ("customers", "Customer master records."),
+    "EMPLOYEES": ("hr", "Employee records with department and salary."),
+    "LEDGER": ("finance", "General ledger entries."),
+}
+# Foreign keys the discovery adapters would report, so the graph can link tables and records.
+_FOREIGN_KEYS = {
+    "PS_STDNT_ENRL": [
+        ("EMPLID", "PS_STDNT_BIO", "EMPLID"),
+        ("CLASS_NBR", "PS_CLASS_TBL", "CLASS_NBR"),
+    ],
+    "PS_STDNT_CAR_TERM": [("EMPLID", "PS_STDNT_BIO", "EMPLID")],
+    "PS_FIN_AID_AWD": [("EMPLID", "PS_STDNT_BIO", "EMPLID")],
+    "enrollments": [("user_id", "users", "id"), ("course_id", "courses", "id")],
+    "submissions": [("assignment_id", "assignments", "id"), ("user_id", "users", "id")],
+    "assignments": [("course_id", "courses", "id")],
+    "applications": [("prospect_id", "prospects", "id")],
+    "decisions": [("application_id", "applications", "id")],
+    "ORDERS": [("CUSTOMER_ID", "CUSTOMERS", "CUSTOMER_ID")],
+}
+
+for _manifest in _MANIFESTS.values():
+    for _t in _manifest["tables"]:
+        _t["foreign_keys"] = [
+            {"column": c, "references_table": rt, "references_column": rc}
+            for c, rt, rc in _FOREIGN_KEYS.get(_t["table_name"], [])
+        ]
+        _t["columns"] = [
+            {
+                "name": c,
+                "data_type": "text",
+                "nullable": i > 0,
+                "is_primary_key": i == 0,
+            }
+            for i, c in enumerate(_COLUMNS[_t["table_name"]])
+        ]
+
+
+def _analysis(service: str) -> dict:
+    """A discovery-shaped llm_analysis (table_descriptions + entity_groups)."""
+    descriptions, groups = [], {}
+    for t in _MANIFESTS[service]["tables"]:
+        group, desc = _GROUPS[t["table_name"]]
+        descriptions.append(
+            {
+                "table_name": f"{t['schema_name']}.{t['table_name']}",
+                "description": desc,
+                "entity_group": group,
+                "suggested_sync_cadence": "6h",
+                "sync_rationale": "seeded",
+            }
+        )
+        groups.setdefault(group, []).append(t["table_name"])
+    return {
+        "table_descriptions": descriptions,
+        "entity_groups": groups,
+        "used_llm": False,
+    }
+
+
 _STEP_TYPES = [
     "cache_schema",
     "text_templates",
@@ -190,62 +305,29 @@ _SAFETY_TESTS = [
     "TRUNCATE",
 ]
 
-_SCHEDULES = [
-    (
-        "peoplesoft-students",
-        "0 * * * *",
-        "peoplesoft",
-        "get-student-enrollment",
-        "delta",
-        "Sync student enrollment every hour",
-        True,
-    ),
-    (
-        "peoplesoft-courses",
-        "0 */6 * * *",
-        "peoplesoft",
-        "get-course-catalog",
-        "delta",
-        "Refresh course catalog every 6 hours",
-        True,
-    ),
-    (
-        "peoplesoft-financial-aid",
-        "0 * * * *",
-        "peoplesoft",
-        "get-financial-aid",
-        "delta",
-        "Sync financial aid awards hourly",
-        True,
-    ),
-    (
-        "canvas-activity",
-        "0 */4 * * *",
-        "canvas",
-        "get-canvas-activity",
-        "delta",
-        "Pull Canvas activity every 4 hours",
-        True,
-    ),
-    (
-        "canvas-submissions",
-        "0 * * * *",
-        "canvas",
-        "get-canvas-submissions",
-        "delta",
-        "Sync submissions hourly",
-        True,
-    ),
-    (
-        "slate-applications",
-        "0 */6 * * *",
-        "slate",
-        "get-applications",
-        "full",
-        "Full refresh of Slate applications every 6 hours",
-        False,
-    ),
-]
+
+def _write_vault(root: Path) -> int:
+    """A small synthetic memory vault: students, courses and enrollments that reference them."""
+    written = 0
+    for domain in ("students", "courses", "enrollment"):
+        (root / domain).mkdir(parents=True, exist_ok=True)
+    for i in range(1, 121):
+        (root / "students" / f"S{i:04d}.md").write_text(
+            f"# Student S{i:04d}\n\n- id: S{i:04d}\n- name: Student {i}\n- email: s{i}@example.edu\n"
+        )
+        written += 1
+    for i in range(1, 41):
+        (root / "courses" / f"C{100 + i}.md").write_text(
+            f"# Course C{100 + i}\n\n- id: C{100 + i}\n- name: Course {i}\n- course_code: DEMO{i:03d}\n"
+        )
+        written += 1
+    for i in range(1, 201):
+        (root / "enrollment" / f"E{i:04d}.md").write_text(
+            f"# Enrollment E{i:04d}\n\n- id: E{i:04d}\n- user_id: S{(i * 7) % 120 + 1:04d}\n"
+            f"- course_id: C{100 + (i * 3) % 40 + 1}\n- role: student\n- enrollment_state: active\n"
+        )
+        written += 1
+    return written
 
 
 class Command(BaseCommand):
@@ -255,6 +337,10 @@ class Command(BaseCommand):
     requires_system_checks: list = []
 
     def handle(self, *args, **options):
+        if settings.ONTOLOGY_DATA_STORE != "local":
+            raise CommandError(
+                "ONTOLOGY_DATA_STORE is not local — the demo seeds the local SQLite cache only."
+            )
         db = settings.DATABASES["default"]
         engine = str(db.get("ENGINE", ""))
         if not engine.endswith("sqlite3"):
@@ -278,6 +364,9 @@ class Command(BaseCommand):
 
         call_command("migrate", run_syncdb=True, verbosity=0)
         counts = self._seed()
+        root = os.environ.get("ONTOLOGY_FILES_ROOT")
+        if root:
+            counts["memories"] = _write_vault(Path(root))
         self.stdout.write(
             self.style.SUCCESS(
                 "Seeded %s — %s"
@@ -306,11 +395,7 @@ class Command(BaseCommand):
                     "user": "iblai_readonly",
                     "password": _SECRET,
                 },
-                llm={
-                    "provider": "anthropic",
-                    "model": "claude-opus-4-8",
-                    "entities": 42,
-                },
+                llm=_analysis("peoplesoft"),
                 last_discovery_at=days(2),
                 last_safety_check_at=hours(20),
                 safety_status="passed",
@@ -330,7 +415,7 @@ class Command(BaseCommand):
                     "base_url": "https://canvas.instructure.com",
                     "api_token": _SECRET,
                 },
-                llm={"provider": "rule-based", "entities": 8},
+                llm=_analysis("canvas"),
                 last_discovery_at=days(5),
                 last_safety_check_at=days(5),
                 safety_status="passed",
@@ -347,7 +432,7 @@ class Command(BaseCommand):
                 status="pending",
                 host="slate.alasu.edu",
                 cfg={"base_url": "https://slate.alasu.edu", "api_key": _SECRET},
-                llm={"provider": "rule-based", "entities": 4},
+                llm=_analysis("slate"),
                 last_discovery_at=days(1),
                 last_safety_check_at=days(1),
                 safety_status="passed",
@@ -369,11 +454,7 @@ class Command(BaseCommand):
                     "password": _SECRET,
                     "warehouse": "ANALYTICS_WH",
                 },
-                llm={
-                    "provider": "anthropic",
-                    "model": "claude-opus-4-8",
-                    "entities": 6,
-                },
+                llm=_analysis("snowflake"),
                 last_discovery_at=days(3),
                 last_safety_check_at=days(3),
                 safety_status="failed",
@@ -394,7 +475,6 @@ class Command(BaseCommand):
                 status=s["status"],
                 host=s["host"],
                 connection_config_encrypted=encrypt_connection_config(s["cfg"]),
-                schema_manifest=_MANIFESTS[s["name"]],
                 llm_analysis=s["llm"],
                 last_discovery_at=s["last_discovery_at"],
                 last_safety_check_at=s["last_safety_check_at"],
@@ -404,6 +484,7 @@ class Command(BaseCommand):
                 tables_synced=s["tables_synced"],
                 rows_synced=s["rows_synced"],
             )
+            save_manifest(by_name[s["name"]], _MANIFESTS[s["name"]])
 
         # Safety reports — one per service, DROP TABLE fails on the unsafe one.
         for s in services:
@@ -444,17 +525,6 @@ class Command(BaseCommand):
         self._make_run(by_name, "canvas", "completed", now)
         self._make_run(by_name, "slate", "failed", now, fail_at=3)
         self._make_run(by_name, "snowflake", "running", now)
-
-        for sched, cron, source, tool, mode, desc, enabled in _SCHEDULES:
-            SyncSchedule.objects.create(
-                name=sched,
-                cron=cron,
-                source=source,
-                tool=tool,
-                mode=mode,
-                description=desc,
-                enabled=enabled,
-            )
 
         runs = [
             (
@@ -560,7 +630,6 @@ class Command(BaseCommand):
             "safety_reports": SafetyReport.objects.count(),
             "provisioning_runs": ProvisioningRun.objects.count(),
             "steps": ProvisioningStep.objects.count(),
-            "sync_schedules": SyncSchedule.objects.count(),
             "sync_runs": SyncRun.objects.count(),
         }
 

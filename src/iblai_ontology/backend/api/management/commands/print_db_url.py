@@ -7,7 +7,7 @@ credential) shown only as a fixed ``*`` mask, never the real value. The fastest
 way to confirm ``ONTOLOGY_SQLITE_PATH`` / ``ONTOLOGY_DB_URL`` point where you
 expect, which is the usual cause of an empty cache or a 500 on ``/services``.
 
-    django-admin print_db_url      # or: ./dev.sh manage print_db_url
+    uv run python -m iblai_ontology.backend.manage print_db_url
 """
 
 from __future__ import annotations

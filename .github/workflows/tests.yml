@@ -11,16 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      # setup-uv publishes no floating major tag.
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          enable-cache: true
+          python-version: "3.13"
 
-      - name: Install package (dev + django extras)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,django]"
+      - name: Install (dev group + django + auto-ontology extras)
+        run: uv sync --locked --extra django --extra auto-ontology
 
       - name: Run tests
-        run: python -m pytest -q
+        run: uv run --locked pytest -q

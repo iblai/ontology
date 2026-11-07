@@ -100,6 +100,9 @@ ONTOLOGY_DB_PASSWORD=change-me
 # Microsoft Entra ID
 ENTRA_TENANT_ID=<university-tenant-id>
 ENTRA_CLIENT_ID=<iblai-ontology-app-client-id>
+
+# Registry encryption key: a Compose secret file (see docs/deployment.md)
+# ONTOLOGY_CREDENTIAL_KEY_FILE=./secrets/ontology_credential_key
 """
 
 _COMPOSE = """\

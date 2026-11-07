@@ -63,7 +63,8 @@ class SyncRunner:
         schedules = [
             s
             for s in ConfigReader().get_sync_schedules()
-            if s.get("source", "").startswith(service) or service in s.get("name", "")
+            if (s.get("source", "").startswith(service) or service in s.get("name", ""))
+            and s.get("enabled", True) is not False
         ]
         if schedule_name:
             schedules = [s for s in schedules if s["name"] == schedule_name]
@@ -79,15 +80,19 @@ class SyncRunner:
         # every configured schedule (Celery beat owns the cron cadence).
         results = []
         for sched in ConfigReader().get_sync_schedules():
+            if sched.get("enabled", True) is False:
+                continue
             results.append(self._run_schedule(sched, force_full=force_full))
         return results
 
     def _run_schedule(self, sched: dict, *, force_full: bool) -> SyncResult:
         from django.utils import timezone
 
+        from iblai_ontology.backend import store
         from iblai_ontology.backend.sync.models import SyncRun
 
-        run = SyncRun.objects.create(
+        run = store.create(
+            SyncRun,
             schedule_name=sched["name"],
             source_system=sched.get("source", ""),
             started_at=timezone.now(),
@@ -112,7 +117,7 @@ class SyncRunner:
         finally:
             run.completed_at = timezone.now()
             run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
-            run.save()
+            store.save(run)
         return SyncResult(
             schedule_name=run.schedule_name,
             source_system=run.source_system,
@@ -142,7 +147,7 @@ class SyncRunner:
         output = sched.get("output", {}) or {}
         cache_table = output.get("structured_cache")
         entity_group = self._entity_group(sched, output)
-        primary_key = detect_primary_key(rows[0])
+        primary_key = output.get("primary_key") or detect_primary_key(rows[0])
 
         indexer = self._indexer()
         with connection.cursor() as cursor:
@@ -181,3 +186,15 @@ class SyncRunner:
         """Pull a bounded sample for one table to validate connectivity."""
         rows = self.pull(f"get-{table.lower()}", {"limit": limit})
         return len(rows)
+
+
+def latest_runs() -> list:
+    """The newest SyncRun of each schedule, newest first: one query per schedule (no DISTINCT)."""
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.sync.models import SyncRun
+
+    runs, after = [], {}
+    while run := store.first(SyncRun, order=("schedule_name", "-started_at"), **after):
+        runs.append(run)
+        after = {"schedule_name__gt": run.schedule_name}
+    return sorted(runs, key=lambda r: r.started_at, reverse=True)

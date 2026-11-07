@@ -8,7 +8,8 @@ from typing import Optional
 import typer
 
 app = typer.Typer(
-    no_args_is_help=True, help="ibl.ai platform integration (MCP server registration)."
+    no_args_is_help=True,
+    help="ibl.ai platform integration (MCP server registration, the DM platform database).",
 )
 
 
@@ -66,3 +67,18 @@ def attach(
 
     result = PlatformClient().attach_to_agent(agent_id=agent_id, server_id=server)
     typer.echo(json.dumps(result, indent=2))
+
+
+@app.command()
+def database() -> None:
+    """Create the DM platform database for ONTOLOGY_DATA_STORE=dm, or add what it lacks."""
+    from iblai_ontology.backend import bootstrap
+
+    bootstrap()
+    from iblai_ontology.backend.store import DATABASE, ensure_schema
+
+    created = ensure_schema()
+    if not created:
+        typer.echo(f"DM database '{DATABASE}' is up to date.")
+    for item in created:
+        typer.echo(f"created {item}")

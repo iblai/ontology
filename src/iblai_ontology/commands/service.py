@@ -23,6 +23,9 @@ class ServiceType(str, Enum):
     generic_postgres = "generic-postgres"
     generic_mysql = "generic-mysql"
     generic_mssql = "generic-mssql"
+    snowflake = "snowflake"
+    generic_trino = "generic-trino"
+    generic_clickhouse = "generic-clickhouse"
 
 
 @app.command()
@@ -44,6 +47,11 @@ def add(
     database: Optional[str] = typer.Option(None, help="Database/SID name."),
     user: Optional[str] = typer.Option(None, help="Database user."),
     password: Optional[str] = typer.Option(None, help="Database password."),
+    option: Optional[list[str]] = typer.Option(
+        None,
+        "--option",
+        help="Extra connection field as KEY=VALUE (warehouse, schema, http_scheme); repeatable.",
+    ),
     llm_discover: bool = typer.Option(
         True, help="Use LLM to analyze schema and generate config."
     ),
@@ -102,8 +110,20 @@ def add(
         )
     if port is None and entry and entry.connection.get("default_port"):
         port = int(entry.connection["default_port"])
+    from iblai_ontology.backend.discovery.adapters import get_adapter
+    from iblai_ontology.backend.discovery.connectors import PORTLESS
+
+    options: dict[str, str] = {}
+    for item in option or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            raise typer.BadParameter(
+                f"expected KEY=VALUE, got {item!r}", param_hint="--option"
+            )
+        options[key] = value
     host = host or typer.prompt("Database host")
-    port = port or int(typer.prompt("Database port"))
+    if not port and get_adapter(service_type.value).DB_TYPE not in PORTLESS:
+        port = int(typer.prompt("Database port"))
     database = database or typer.prompt("Database/SID name")
     user = user or typer.prompt("Database user")
     password = password or typer.prompt("Database password", hide_input=True)
@@ -117,11 +137,12 @@ def add(
         name=name,
         service_type=service_type.value,
         host=host,
-        port=port,
+        port=port or 0,
         database=database,
         user=user,
         password=password,
         use_llm=llm_discover,
+        options=options,
         skip_safety=skip_safety,
     )
 
@@ -132,6 +153,7 @@ def list_services() -> None:
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
+    from iblai_ontology.backend import store
     from iblai_ontology.backend.services.models import Service
     from iblai_ontology.utils.output import print_table
 
@@ -147,7 +169,7 @@ def list_services() -> None:
                 s.last_sync_at or "Never",
                 s.tables_synced,
             ]
-            for s in Service.objects.all()
+            for s in store.filter(Service)
         ],
     )
 
@@ -175,10 +197,11 @@ def schema(
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
+    from iblai_ontology.backend import store
     from iblai_ontology.backend.services.models import Service
 
     try:
-        service = Service.objects.get(name=name)
+        service = store.get(Service, name=name)
     except Service.DoesNotExist:
         typer.echo(
             f"Service '{name}' not found. Run `ontology service discover {name}` first.",
@@ -207,7 +230,7 @@ def schema(
                 t.get("schema_name", ""),
                 t.get("table_name", ""),
                 f"{t.get('row_count', 0):,}",
-                len(t.get("columns", [])),
+                t.get("column_count", len(t.get("columns") or [])),
             ]
             for t in tables[:top]
         ],
@@ -220,11 +243,12 @@ def connection(name: str = typer.Argument(..., help="Service name")) -> None:
     from iblai_ontology.backend import bootstrap
 
     bootstrap()
+    from iblai_ontology.backend import store
     from iblai_ontology.backend.services.encryption import decrypt_connection_config
     from iblai_ontology.backend.services.models import Service
 
     try:
-        service = Service.objects.get(name=name)
+        service = store.get(Service, name=name)
     except Service.DoesNotExist:
         typer.echo(f"Service '{name}' not found.", err=True)
         raise typer.Exit(code=1)
