@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="48" viewBox="0 0 220 48">
+  <g fill="none" fill-rule="evenodd">
+    <circle cx="24" cy="24" r="20" fill="#047857"/>
+    <path d="M24 12c-6 5-8 10-6 16 4-1 8-4 10-8m-4 12c6-5 8-10 6-16-4 1-8 4-10 8" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="52" y="21" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700" fill="#047857">Grace Network</text>
+    <text x="52" y="38" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700" fill="#047857">School</text>
+  </g>
+</svg>

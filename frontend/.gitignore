@@ -1,0 +1,15 @@
+/node_modules
+/.next/
+/out/
+/build
+*.pem
+.env*.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.selfcheck/
+.DS_Store
+# Isolated Next output dirs (NEXT_DIST_DIR) and Playwright artifacts
+/.next-*/
+/test-results
+/playwright-report
