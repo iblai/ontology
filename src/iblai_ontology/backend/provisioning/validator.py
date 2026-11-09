@@ -1,7 +1,8 @@
 """End-to-end provisioning validation (Component 6.6).
 
-Runs a small test sync for a few high-priority tables and confirms rows land in
-the cache. Returns a structured result the pipeline records on the run.
+Pulls a bounded sample of the biggest tables through the service's own
+connection and records the row counts on the run. API services have no tables to
+sample; their first sync is the check.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ class ValidationReport:
 
 
 class ProvisioningValidator:
-    """Validates a freshly provisioned service with a bounded test sync."""
+    """Validates a freshly provisioned service with a bounded sample per table."""
 
     def __init__(
         self, service, *, sample_limit: int = 100, max_tables: int = 3
@@ -37,15 +38,16 @@ class ProvisioningValidator:
         self.max_tables = max_tables
 
     def validate(self) -> ValidationReport:
-        """Run a bounded test sync. Full sync execution lands with Component 2.
-
-        Implemented as a thin wrapper around the sync engine's single-table path;
-        until the sync engine is wired, this reports the planned tables so the
-        pipeline can surface what *would* be validated.
-        """
         from iblai_ontology.backend.sync.engine import SyncRunner
 
         report = ValidationReport()
+        if self.service.service_type == "api":
+            report.results.append(
+                TableValidation(
+                    "*", 0, ok=True, error="api source: checked by the first sync"
+                )
+            )
+            return report
         manifest = self.service.schema_manifest or {}
         tables = sorted(
             manifest.get("tables", []),
@@ -54,18 +56,13 @@ class ProvisioningValidator:
         )[: self.max_tables]
         runner = SyncRunner()
         for t in tables:
-            name = t.get("table_name", "?")
+            schema, name = t.get("schema_name") or "", t.get("table_name", "?")
+            qualified = f"{schema}.{name}" if schema else name
             try:
-                count = runner.test_sync_table(
-                    self.service.name, name, limit=self.sample_limit
+                rows = runner.pull_table(
+                    self.service, qualified, limit=self.sample_limit
                 )
-                report.results.append(TableValidation(name, count, ok=True))
-            except NotImplementedError:
-                report.results.append(
-                    TableValidation(
-                        name, 0, ok=True, error="sync engine pending (Component 2)"
-                    )
-                )
+                report.results.append(TableValidation(name, len(rows), ok=True))
             except Exception as exc:  # pragma: no cover - integration path
                 report.results.append(
                     TableValidation(name, 0, ok=False, error=str(exc)[:200])

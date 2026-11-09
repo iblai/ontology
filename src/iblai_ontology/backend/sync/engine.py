@@ -1,23 +1,29 @@
 """Sync engine (Component 2).
 
-A SyncRunner pulls data from a source (via the inbound MCP layer), transforms it,
-and writes it into the local knowledge store: Markdown text memories, the
-PostgreSQL structured cache, and the vector index. Each run is recorded as a
-SyncRun.
+A SyncRunner pulls rows from a source and writes them into the local knowledge
+store: Markdown text memories, the structured cache, and the vector index. Each
+run is recorded as a SyncRun.
 
-Source pulls go through the MCP Toolbox / custom MCP servers; the actual upsert
-into the cache is source-schema specific and is generated per service, so the
-generic transform here is intentionally a documented seam (NotImplementedError)
-that concrete per-service syncs override.
+A database service is read straight through its own connection (``pull_table``,
+the schedule names ``service`` and ``table``). An API service is read through its
+custom MCP server (``pull``, the schedule names a ``tool`` and a ``<name>-mcp``
+source). The MCP Toolbox serves agent-facing tools only.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass
 
 logger = logging.getLogger("iblai_ontology.sync")
+
+# Bounded samples per dialect; everything else takes LIMIT.
+_LIMIT_SQL = {
+    "oracle": "SELECT * FROM {table} FETCH FIRST {n} ROWS ONLY",
+    "sqlserver": "SELECT TOP {n} * FROM {table}",
+}
 
 
 @dataclass
@@ -39,16 +45,73 @@ class SyncRunner:
         )
 
     # -- source pulls ----------------------------------------------------
-    def pull(self, tool: str, arguments: dict | None = None) -> list[dict]:
-        """Pull rows from a source by invoking an inbound MCP tool.
+    @staticmethod
+    def mcp_url(source: str) -> str | None:
+        """A ``<name>-mcp`` source is a custom MCP server at ``MCP_<NAME>_URL``; others are Toolbox tools."""
+        if not source.endswith("-mcp"):
+            return None
+        var = f"MCP_{source[:-4].upper().replace('-', '_')}_URL"
+        url = os.environ.get(var)
+        if not url:
+            raise RuntimeError(
+                f"{var} is not set: the sync engine cannot reach {source}"
+            )
+        return url
 
-        Uses the shared /mcp Toolbox client (Toolbox 1.5+ disables the legacy
-        /api/tool REST endpoints).
-        """
+    def pull(
+        self, tool: str, arguments: dict | None = None, *, url: str | None = None
+    ) -> list[dict]:
+        """Pull rows by calling an MCP tool on a custom server (``url``) or the Toolbox."""
         from iblai_ontology.backend.mcp_server.toolbox_client import call_tool
 
-        rows = call_tool(self.toolbox_url, tool, arguments, timeout=120)
+        rows = call_tool(url or self.toolbox_url, tool, arguments, timeout=120)
         return rows if isinstance(rows, list) else [rows]
+
+    def pull_table(
+        self, service, table: str, *, limit: int | None = None
+    ) -> list[dict]:
+        """Rows of ``schema.table`` through the service's own connection, JSON-native values."""
+        from iblai_ontology.backend.discovery.engine import create_connection
+        from iblai_ontology.backend.services.encryption import decrypt_connection_config
+
+        config = decrypt_connection_config(service.connection_config_encrypted)
+        # ponytail: unquoted identifiers; quote per dialect when a source has mixed-case names.
+        sql = (
+            _LIMIT_SQL.get(
+                config.get("db_type"), "SELECT * FROM {table} LIMIT {n}"
+            ).format(table=table, n=limit)
+            if limit
+            else f"SELECT * FROM {table}"
+        )
+        conn = create_connection(service.adapter, config)
+        try:
+            cur = conn.cursor()
+            cur.execute(sql)
+            cols = [d[0] for d in cur.description or []]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            cap = getattr(getattr(conn, "connector", None), "_max_rows", None)
+            if cap and len(rows) >= cap:
+                raise RuntimeError(
+                    f"{table}: the connector capped the result at {cap} rows; "
+                    "raise it with --option max_rows=<n>"
+                )
+        finally:
+            conn.close()
+        # Decimal, datetime and numpy scalars become JSON-native so they bind on SQLite and Postgres.
+        return json.loads(json.dumps(rows, default=str))
+
+    def _pull(self, sched: dict) -> list[dict]:
+        if sched.get("table"):
+            from iblai_ontology.backend import store
+            from iblai_ontology.backend.services.models import Service
+
+            service = store.get(Service, name=sched["service"])
+            return self.pull_table(service, sched["table"])
+        if sched.get("tool"):
+            return self.pull(sched["tool"], url=self.mcp_url(sched.get("source") or ""))
+        raise ValueError(
+            f"schedule {sched.get('name')!r} names neither a table nor a tool"
+        )
 
     # -- schedule execution ---------------------------------------------
     def run_service(
@@ -99,18 +162,12 @@ class SyncRunner:
             status=SyncRun.Status.RUNNING,
         )
         try:
-            rows = self.pull(sched["tool"])
+            rows = self._pull(sched)
             written = self._write(sched, rows)
             run.records_processed = len(rows)
             run.records_created = written.get("created", 0)
             run.records_updated = written.get("updated", 0)
             run.status = SyncRun.Status.SUCCESS
-        except NotImplementedError:
-            # Generic transform seam — surfaced, not a hard failure.
-            run.status = SyncRun.Status.SUCCESS
-            run.error_message = (
-                "generic transform seam (per-service sync not configured)"
-            )
         except Exception as exc:  # pragma: no cover - integration path
             run.status = SyncRun.Status.FAILED
             run.error_message = str(exc)[:1000]
@@ -128,15 +185,17 @@ class SyncRunner:
         )
 
     def _write(self, sched: dict, rows: list[dict]) -> dict:
-        """Transform + upsert rows into cache, text memories, and vector index.
+        """Upsert rows into the cache, write text memories, index them.
 
-        Uses the schedule's ``output`` config: ``structured_cache`` names the
-        cache table, ``text_memories`` selects the entity group. The primary key
-        is detected heuristically from the rows (id/emplid/*_id).
+        The schedule's ``output`` drives it: ``structured_cache`` names the cache
+        table, ``text_memories`` the entity folder, ``map`` renames source columns,
+        ``template`` picks the memory template, ``primary_key`` the upsert key
+        (detected from the first row when absent).
         """
         from django.db import connection
 
         from iblai_ontology.backend.sync.writer import (
+            _normalise,
             detect_primary_key,
             write_entities,
         )
@@ -145,9 +204,14 @@ class SyncRunner:
             return {"created": 0, "updated": 0}
 
         output = sched.get("output", {}) or {}
+        mapping = {
+            str(k).lower(): str(v).lower() for k, v in (output.get("map") or {}).items()
+        }
         cache_table = output.get("structured_cache")
         entity_group = self._entity_group(sched, output)
-        primary_key = output.get("primary_key") or detect_primary_key(rows[0])
+        primary_key = output.get("primary_key") or detect_primary_key(
+            _normalise(rows[0], mapping)
+        )
 
         indexer = self._indexer()
         with connection.cursor() as cursor:
@@ -158,6 +222,9 @@ class SyncRunner:
                 primary_key=primary_key,
                 entity_group=entity_group,
                 indexer=indexer,
+                mapping=mapping,
+                template=output.get("template"),
+                create_table=bool(output.get("create_table")),
             )
         return {
             "created": result.created,
@@ -180,12 +247,6 @@ class SyncRunner:
             return VectorSearch()
         except Exception:  # pragma: no cover - optional extra
             return None
-
-    # -- validation helper (used by ProvisioningValidator) --------------
-    def test_sync_table(self, service: str, table: str, *, limit: int = 100) -> int:
-        """Pull a bounded sample for one table to validate connectivity."""
-        rows = self.pull(f"get-{table.lower()}", {"limit": limit})
-        return len(rows)
 
 
 def latest_runs() -> list:

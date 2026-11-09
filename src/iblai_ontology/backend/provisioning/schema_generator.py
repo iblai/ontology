@@ -48,14 +48,40 @@ TYPE_MAPPING = {
 }
 
 
+def cache_name(table_name: str) -> str:
+    """The cache table a source table lands in by default: lowercased, vendor prefixes stripped."""
+    name = table_name.lower()
+    for prefix in ("ps_", "spriden_", "sgbstdn_"):
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name
+
+
 class CacheSchemaGenerator:
-    """Generates PostgreSQL CREATE TABLE statements for the local cache."""
+    """Generates CREATE TABLE statements for the local cache (PostgreSQL types, SQLite-tolerant)."""
 
     def __init__(
-        self, manifest: SchemaManifest, entity_groups: Optional[dict] = None
+        self,
+        manifest: SchemaManifest,
+        entity_groups: Optional[dict] = None,
+        mapping: Optional[dict] = None,
     ) -> None:
         self.manifest = manifest
         self.entity_groups = entity_groups or {}
+        # {qualified table: {entity, fields}} from the analysis (config_generator.table_mapping).
+        self.mapping = mapping or {}
+
+    def _target(self, table: TableInfo) -> tuple[str, dict[str, str]]:
+        """The cache table name and the lowercased column renames for a source table."""
+        m = (
+            self.mapping.get(f"{table.schema_name}.{table.table_name}")
+            or self.mapping.get(table.table_name)
+            or {}
+        )
+        fields = {
+            str(k).lower(): str(v).lower() for k, v in (m.get("fields") or {}).items()
+        }
+        return str(m.get("entity") or cache_name(table.table_name)), fields
 
     def _select_tables(self, tables_to_cache: Optional[list[str]]) -> list[TableInfo]:
         if tables_to_cache:
@@ -77,8 +103,6 @@ class CacheSchemaGenerator:
             f"-- Tables: {len(tables)}",
             "-- ==============================================================",
             "",
-            "CREATE SCHEMA IF NOT EXISTS cache;",
-            "",
         ]
         for table in tables:
             lines.extend(self._generate_table(table))
@@ -89,37 +113,38 @@ class CacheSchemaGenerator:
         return "\n".join(lines)
 
     def _generate_table(self, table: TableInfo) -> list[str]:
-        cache_name = self._to_cache_name(table.table_name)
+        name, fields = self._target(table)
         lines = [
             f"-- Source: {table.schema_name}.{table.table_name} ({table.row_count:,} rows)",
-            f"CREATE TABLE IF NOT EXISTS cache.{cache_name} (",
+            f"CREATE TABLE IF NOT EXISTS {name} (",
         ]
         col_defs = []
         for col in table.columns:
             pg_type = self._map_type(col.data_type)
             nullable = "" if col.nullable else " NOT NULL"
-            col_defs.append(f"    {col.name.lower()} {pg_type}{nullable}")
-        col_defs.append("    _synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()")
+            target = fields.get(col.name.lower(), col.name.lower())
+            col_defs.append(f"    {target} {pg_type}{nullable}")
+        col_defs.append("    _synced_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP")
         col_defs.append("    _source_schema TEXT NOT NULL DEFAULT ''")
         col_defs.append("    _source_table TEXT NOT NULL DEFAULT ''")
         if table.primary_key_columns:
-            pk_cols = ", ".join(c.lower() for c in table.primary_key_columns)
+            pk_cols = ", ".join(
+                fields.get(c.lower(), c.lower()) for c in table.primary_key_columns
+            )
             col_defs.append(f"    PRIMARY KEY ({pk_cols})")
         lines.append(",\n".join(col_defs))
         lines.append(");")
         return lines
 
     def _generate_indexes(self, table: TableInfo) -> list[str]:
-        cache_name = self._to_cache_name(table.table_name)
+        name, fields = self._target(table)
         indexes = [
-            f"CREATE INDEX IF NOT EXISTS idx_{cache_name}_synced_at "
-            f"ON cache.{cache_name} (_synced_at);"
+            f"CREATE INDEX IF NOT EXISTS idx_{name}_synced_at ON {name} (_synced_at);"
         ]
         for fk in table.foreign_keys:
-            col = fk["column"].lower()
+            col = fields.get(fk["column"].lower(), fk["column"].lower())
             indexes.append(
-                f"CREATE INDEX IF NOT EXISTS idx_{cache_name}_{col} "
-                f"ON cache.{cache_name} ({col});"
+                f"CREATE INDEX IF NOT EXISTS idx_{name}_{col} ON {name} ({col});"
             )
         return indexes
 
@@ -135,11 +160,7 @@ class CacheSchemaGenerator:
 
     @staticmethod
     def _to_cache_name(table_name: str) -> str:
-        name = table_name.lower()
-        for prefix in ("ps_", "spriden_", "sgbstdn_"):
-            if name.startswith(prefix):
-                return name[len(prefix) :]
-        return name
+        return cache_name(table_name)
 
     def write_to_file(
         self, output_path: str, tables_to_cache: Optional[list[str]] = None

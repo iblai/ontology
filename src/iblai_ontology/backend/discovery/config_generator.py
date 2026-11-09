@@ -39,7 +39,7 @@ _SOURCE_ENV = {
     "protocol": "PROTOCOL",
 }
 # ponytail: only ClickHouse declares its full Toolbox field set; the others still emit
-# host alone — add each type's fields when one is synced live.
+# host alone — add a type's fields when the Toolbox serves its agent tools.
 _SOURCE_FIELDS = {
     "clickhouse": ("host", "port", "database", "user", "password", "protocol"),
 }
@@ -70,22 +70,6 @@ class ConfigGenerator:
                 **{f: "${%s_DB_%s}" % (prefix, _SOURCE_ENV[f]) for f in fields},
             }
         ]
-        # The tool each sync schedule calls (sync_schedules_yaml names it get-<table>).
-        suggested = {t.name for t in self.analysis.suggested_tools}
-        for table in self.analysis.suggested_sync_schedules:
-            name = f"get-{table.split('.')[-1].lower()}"
-            if name not in suggested:
-                docs.append(
-                    {
-                        "kind": "tool",
-                        "name": name,
-                        "type": f"{self.manifest.db_type}-sql",
-                        "source": f"{self.service_name}-source",
-                        "description": f"Every row of {table}, for the sync engine.",
-                        "parameters": [],
-                        "statement": f"SELECT * FROM {table}",
-                    }
-                )
         toolsets: dict[str, list[str]] = {}
         for tool in self.analysis.suggested_tools:
             docs.append(
@@ -104,6 +88,34 @@ class ConfigGenerator:
             docs.append({"kind": "toolset", "name": name, "tools": tools})
         return yaml.dump_all(docs, default_flow_style=False, sort_keys=False)
 
+    def _map(self, table: str) -> dict:
+        """A table's mapping (entity, lowercased field renames, template), defaults filled."""
+        from iblai_ontology.backend.provisioning.schema_generator import cache_name
+
+        bare = table.split(".")[-1]
+        td = next(
+            (
+                d
+                for d in self.analysis.table_descriptions
+                if d.table_name in (table, bare)
+            ),
+            None,
+        )
+        fields = (td.fields if td else None) or {}
+        return {
+            "entity": td.entity if td and td.entity else cache_name(bare),
+            "fields": {str(k).lower(): str(v).lower() for k, v in fields.items()},
+            "template": td.template if td and td.template else "",
+        }
+
+    def _mappings(self) -> dict[str, dict]:
+        return {
+            f"{t.schema_name}.{t.table_name}": self._map(
+                f"{t.schema_name}.{t.table_name}"
+            )
+            for t in self.manifest.tables
+        }
+
     def sync_schedules_yaml(self) -> str:
         schedules = []
         keys = {
@@ -114,17 +126,25 @@ class ConfigGenerator:
         }
         for table, cadence in self.analysis.suggested_sync_schedules.items():
             short = table.split(".")[-1].lower()
-            output = {"structured_cache": short, "text_memories": f"/ontology/{short}/"}
+            m = self._map(table)
+            output = {
+                "structured_cache": m["entity"],
+                "text_memories": f"/ontology/{m['entity']}/",
+            }
             if keys.get(table):
-                output["primary_key"] = keys[
-                    table
-                ]  # the writer's upsert key, composite included
+                # The writer's upsert key, composite included, after the renames.
+                output["primary_key"] = [m["fields"].get(c, c) for c in keys[table]]
+            if m["fields"]:
+                output["map"] = m["fields"]
+            if m["template"]:
+                output["template"] = m["template"]
             schedules.append(
                 {
                     "name": f"{self.service_name}-{short}",
                     "cron": _CADENCE_CRON.get(cadence, "0 */6 * * *"),
                     "source": f"{self.service_name}-source",
-                    "tool": f"get-{short}",
+                    "service": self.service_name,
+                    "table": table,
                     "output": output,
                     "description": f"Sync {table} every {cadence}",
                 }
@@ -163,7 +183,7 @@ class ConfigGenerator:
         )
 
         return CacheSchemaGenerator(
-            self.manifest, self.analysis.entity_groups
+            self.manifest, self.analysis.entity_groups, mapping=self._mappings()
         ).generate()
 
     # -- orchestration ---------------------------------------------------
@@ -200,17 +220,83 @@ def _bare(name: str) -> str:
     return name.rsplit(".", 1)[-1]
 
 
+def _td_from_dict(td: dict):
+    from iblai_ontology.backend.discovery.llm_analyzer import TableDescription
+
+    return TableDescription(
+        **{k: str(td.get(k, "") or "") for k in _TD_FIELDS},
+        entity=str(td.get("entity") or ""),
+        fields=dict(td.get("fields") or {}),
+        template=str(td.get("template") or ""),
+    )
+
+
+def analysis_from_dict(data: dict) -> LLMAnalysisResult:
+    """Rebuild a stored ``llm_analysis`` (``LLMAnalysisResult.to_dict`` plus console overrides)."""
+    from iblai_ontology.backend.discovery.llm_analyzer import SuggestedTool
+
+    return LLMAnalysisResult(
+        table_descriptions=[
+            _td_from_dict(td) for td in data.get("table_descriptions") or []
+        ],
+        entity_groups=dict(data.get("entity_groups") or {}),
+        suggested_tools=[
+            SuggestedTool(
+                name=str(t.get("name") or ""),
+                description=str(t.get("description") or ""),
+                sql=str(t.get("sql") or ""),
+                parameters=list(t.get("parameters") or []),
+                toolset=str(t.get("toolset") or "default-tools"),
+            )
+            for t in data.get("suggested_tools") or []
+        ],
+        suggested_sync_schedules=dict(data.get("suggested_sync_schedules") or {}),
+        draft_cache_schema_sql=str(data.get("draft_cache_schema_sql") or ""),
+        used_llm=bool(data.get("used_llm", False)),
+    )
+
+
+def api_schedules_yaml(
+    service_name: str, display_name: str, sync_defaults: dict
+) -> str:
+    """Schedules for an API service: one ``list-<entity>`` tool per catalog ``sync_defaults``
+    entry, served by the service's custom MCP server, landing in a table built from the first row."""
+    schedules = [
+        {
+            "name": f"{service_name}-{entity}",
+            "cron": _CADENCE_CRON.get(cadence, "0 */6 * * *"),
+            "source": f"{service_name}-mcp",
+            "tool": f"list-{entity}",
+            "output": {
+                "structured_cache": entity,
+                "text_memories": f"/ontology/{entity}/",
+                "primary_key": ["id"],
+                "create_table": True,
+            },
+            "description": f"Sync {entity} from {display_name} every {cadence}",
+        }
+        for entity, cadence in sync_defaults.items()
+    ]
+    return yaml.dump(
+        {"schedules": schedules}, default_flow_style=False, sort_keys=False
+    )
+
+
 def apply_table_edits(
     analysis: dict,
     tables: list[str],
     *,
     entity_group: str | None = None,
     description: str | None = None,
+    entity: str | None = None,
+    fields: dict | None = None,
+    template: str | None = None,
 ) -> dict:
-    """Set the entity group and/or description of ``SCHEMA.TABLE`` names in place.
+    """Set the entity group, description and mapping of ``SCHEMA.TABLE`` names in place.
 
     ``entity_groups`` keeps bare table names (what the cache generator matches);
     the edit is also recorded under ``overrides`` so a rediscovery re-applies it.
+    ``entity``, ``fields`` and ``template`` are the mapping layer the sync applies.
     """
     tds = analysis.setdefault("table_descriptions", [])
     groups = analysis.setdefault("entity_groups", {})
@@ -235,6 +321,13 @@ def apply_table_edits(
         edit = overrides.setdefault(qualified, {})
         if description is not None:
             td["description"] = edit["description"] = description
+        for key, value in (
+            ("entity", entity),
+            ("fields", fields),
+            ("template", template),
+        ):
+            if value is not None:
+                td[key] = edit[key] = value
         if entity_group is not None:
             td["entity_group"] = edit["entity_group"] = entity_group
             bare = _bare(qualified)
@@ -254,6 +347,9 @@ def apply_overrides(analysis: dict, overrides: dict) -> dict:
             [qualified],
             entity_group=edit.get("entity_group"),
             description=edit.get("description"),
+            entity=edit.get("entity"),
+            fields=edit.get("fields"),
+            template=edit.get("template"),
         )
     return analysis
 
@@ -262,12 +358,9 @@ def rewrite_entity_files(
     service_name: str, analysis: dict, out_dir: str | Path
 ) -> None:
     """Rewrite entity-groups.yaml and table-descriptions.md from a stored analysis dict."""
-    from iblai_ontology.backend.discovery.llm_analyzer import TableDescription
-
     result = LLMAnalysisResult(
         table_descriptions=[
-            TableDescription(**{k: str(td.get(k, "") or "") for k in _TD_FIELDS})
-            for td in analysis.get("table_descriptions") or []
+            _td_from_dict(td) for td in analysis.get("table_descriptions") or []
         ],
         entity_groups=dict(analysis.get("entity_groups") or {}),
     )

@@ -8,12 +8,15 @@ rule-based) → generate reviewable config.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from iblai_ontology.backend.discovery.adapters import get_adapter
 from iblai_ontology.backend.discovery.config_generator import (
     ConfigGenerator,
+    api_schedules_yaml,
     apply_overrides,
+    apply_table_edits,
     rewrite_entity_files,
 )
 from iblai_ontology.backend.discovery.connectors import CONNECTOR_DB_TYPES, connect
@@ -223,6 +226,91 @@ class DiscoveryEngine:
             options=config.get("options"),
         )
 
+    def register_api(
+        self, *, name: str, adapter: str, host: str = "", output_dir: str | None = None
+    ):
+        """Register an API source without database discovery.
+
+        The Service row plus the catalog's ``sync_defaults`` as schedules; the
+        service's custom MCP server (``mcp-servers/``, reached at ``MCP_<NAME>_URL``)
+        does the pulling once approved.
+        """
+        from iblai_ontology.backend import store
+        from iblai_ontology.backend.services.encryption import encrypt_connection_config
+        from iblai_ontology.backend.services.models import Service
+        from iblai_ontology.catalog import list_entries
+
+        entry = next((e for e in list_entries() if adapter in (e.adapter, e.key)), None)
+        display = entry.display_name if entry else adapter
+        host = host or (
+            str(
+                entry.connection.get("base_url")
+                or entry.connection.get("base_url_env")
+                or ""
+            )
+            if entry
+            else ""
+        )
+        service = store.first(Service, name=name) or Service(name=name)
+        defaults = {
+            "display_name": display,
+            "service_type": "api",
+            "adapter": adapter,
+            "host": host,
+            "status": Service.Status.PENDING,
+            "connection_config_encrypted": encrypt_connection_config(
+                {
+                    "db_type": "api",
+                    "host": host,
+                    "env": list(entry.env) if entry else [],
+                }
+            ),
+        }
+        for field, value in defaults.items():
+            setattr(service, field, value)
+        store.save(service, [*defaults, "updated_at"])
+
+        out = Path(output_dir or Path("config/generated") / name)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "sync-schedules.yaml").write_text(
+            api_schedules_yaml(name, display, entry.sync_defaults if entry else {})
+        )
+        return service
+
+    def map(self, name: str, *, sample_rows: int | None = None) -> dict[str, dict]:
+        """Ask the configured LLM how each discovered table maps onto the house entities.
+
+        The answer is recorded as table edits (``overrides``), so it is reviewable in
+        the console and survives a rediscovery; approve regenerates the config from it.
+        """
+        from iblai_ontology.backend import store
+        from iblai_ontology.backend.discovery.llm_analyzer import MappingProposer
+        from iblai_ontology.backend.services.models import Service
+        from iblai_ontology.backend.services.registry import with_tables
+
+        service = with_tables(store.get(Service, name=name))
+        known = {
+            f"{t.get('schema_name')}.{t.get('table_name')}"
+            if t.get("schema_name")
+            else str(t.get("table_name"))
+            for t in (service.schema_manifest or {}).get("tables") or []
+        }
+        proposed = MappingProposer(service, sample_rows=sample_rows).propose()
+        analysis = dict(service.llm_analysis or {})
+        applied: dict[str, dict] = {}
+        for table, m in proposed.items():
+            if table not in known:
+                continue
+            clean = _clean_mapping(m)
+            apply_table_edits(analysis, [table], **clean)
+            applied[table] = {k: v for k, v in clean.items() if v is not None}
+        service.llm_analysis = analysis
+        store.save(service, ["llm_analysis"])
+        out = Path("config/generated") / name
+        if out.is_dir():
+            rewrite_entity_files(name, analysis, out)
+        return applied
+
     @staticmethod
     def _analyze(manifest, adapter, use_llm: bool) -> LLMAnalysisResult:
         if use_llm:
@@ -237,3 +325,27 @@ class DiscoveryEngine:
                     "LLM analysis failed (%s); using rule-based analysis", exc
                 )
         return RuleBasedAnalyzer(adapter).analyze(manifest)
+
+
+_SLUG = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+def _slug(value) -> str | None:
+    value = str(value or "").strip().lower()
+    return value if _SLUG.match(value) else None
+
+
+def _clean_mapping(m: dict) -> dict:
+    """The table-edit kwargs an LLM answer may set, with every name validated as a slug."""
+    fields = {
+        str(k).lower(): _slug(v)
+        for k, v in (m.get("fields") or {}).items()
+        if isinstance(m.get("fields"), dict) and _slug(v)
+    }
+    return {
+        "entity": _slug(m.get("entity")),
+        "fields": fields or None,
+        "template": _slug(m.get("template")),
+        "entity_group": _slug(m.get("entity_group")),
+        "description": str(m.get("description") or "")[:2000] or None,
+    }

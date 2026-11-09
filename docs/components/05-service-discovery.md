@@ -115,24 +115,27 @@ config/manifests/peoplesoft-summary.md
 
 ## BYOK LLM Analysis
 
-When an LLM API key is configured, the engine sends the manifest to the model to produce descriptions and draft configuration. **The key is bring-your-own** — iblai-ontology never ships or requires one.
+When an LLM is configured, the engine sends the manifest to the model to produce descriptions and draft configuration, and `ontology service map` asks it how each table maps onto the house entities. **The key is bring-your-own** — iblai-ontology never ships or requires one — or the deployment uses the DM's OpenAI-compatible endpoint (provider `iblai`) behind the platform credentials the store already holds (`IBLAI_ORG`, `IBLAI_ADMIN_TOKEN`, `IBLAI_AUTH_SCHEME=Api-Token`).
 
 ### Configuration
 
 ```yaml
 # config/ontology.yaml
 llm:
-  provider: null            # "anthropic" | "openai" | null (disabled)
-  api_key: null             # set via: ontology config llm
+  provider: null            # "anthropic" | "openai" | "iblai" | null (disabled)
+  api_key: null             # set via: ontology config llm (not needed for iblai)
   model: null               # see defaults below
+  base_url: null            # iblai: another host for /v1/chat/completions (the hosted DM's ASGI host)
+  sample_rows: 5            # rows per table a mapping probe sends; 0 = names and types only
   max_tokens: 4096
   temperature: 0.2          # low temperature for deterministic config generation
 ```
 
 ```bash
 ontology config llm
-# LLM provider (anthropic/openai): anthropic
+# LLM provider (anthropic/openai/iblai): anthropic
 # API key: ********
+ontology config llm --provider iblai        # the DM's endpoint; no key of its own
 ```
 
 **Default models (as implemented in this repo):**
@@ -141,6 +144,7 @@ ontology config llm
 |---|---|
 | `anthropic` | `claude-opus-4-8` |
 | `openai` | `gpt-4o` |
+| `iblai` | `iblai/iblai-pro` (the platform's router; any `provider/model` from `GET …/v1/models`) |
 
 You can override the model with `ontology config llm --model <name>` or `ontology config set llm.model <name>`.
 
@@ -165,6 +169,12 @@ table-descriptions.md
 ```
 
 You review these, then either approve (`ontology service approve <service>`) or edit and re-generate (`ontology service discover <service>`).
+
+### Mapping rows onto house entities
+
+A discovered table lands in the cache under its own name with its own columns unless it carries a **mapping**: `entity` (the cache table and memory folder it fills, e.g. the hand-curated `students`), `fields` (`{source_column: target_column}` renames), and `template` (the memory template). The mapping sits next to `entity_group` and `description` on the stored analysis, is edited the same way (`PATCH /services/<name>/tables`, the semantic map) and is recorded as an override, so a rediscovery keeps it; approve regenerates the schedules and cache DDL from it.
+
+`ontology service map <name>` (or **Propose mapping** on the service page, `POST /services/<name>/map`) asks the configured LLM to propose the mapping: it sends each table's columns, up to `llm.sample_rows` sample rows read through the service's own connection, and the house entities parsed from the deployment's `sql/schema.sql`, and records the answer as table edits for review. Sample rows leave the host for the model; `--sample-rows 0` sends names and types only.
 
 ### Rule-based fallback (no LLM)
 

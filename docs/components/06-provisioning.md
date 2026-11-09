@@ -29,22 +29,24 @@ Each step can run independently or as part of the full pipeline, and **every ste
 
 A run is tracked by `ProvisioningRun` (status: pending / running / completed / failed / rolled_back) with one `ProvisioningStep` per pipeline step, each carrying its own status, output artifacts, and any error — so a partial failure shows exactly which step stopped.
 
+Before the steps run, approve **regenerates** `sync-schedules.yaml` and `cache-schema.sql` from the stored manifest and analysis, so edits made in the console after discovery — entity group, description, and the mapping (`entity`, `fields`, `template`; see [Component 5](05-service-discovery.md#mapping-rows-onto-house-entities)) — take effect without a rediscovery.
+
 ---
 
 ## Step 1 — Cache Schema Generation
 
-Generates PostgreSQL `CREATE TABLE` statements for the local cache from the discovered manifest. The cache is a **denormalized projection** of the source, optimized for the queries the MCP tools will run — not a faithful clone of the source schema.
+Generates `CREATE TABLE` statements for the local cache from the discovered manifest: one cache table per source table, named after the table's **entity** (its mapping target; by default the source name, lowercased and stripped of vendor prefixes), with the mapping's column renames applied. PostgreSQL types, which SQLite accepts too, so a local backend runs the same DDL.
 
 Highlights of the generator:
 
 - **Type mapping.** Source types are mapped to PostgreSQL: Oracle `VARCHAR2`/`CLOB`→`TEXT`, `NUMBER`→`NUMERIC`, `DATE`→`TIMESTAMP`, `TIMESTAMP(6) WITH TIME ZONE`→`TIMESTAMPTZ`; SQL Server `uniqueidentifier`→`UUID`, `bit`→`BOOLEAN`, `money`→`NUMERIC(19,4)`; MySQL `int`→`INTEGER`, `datetime`→`TIMESTAMP`, etc. Unknown types fall back to `TEXT`.
 - **Table selection.** If you pass explicit tables, those are used; otherwise the LLM's entity groups drive selection; otherwise all tables under ~1M rows are cached.
-- **Cache-friendly names.** Source prefixes are stripped (`PS_`, `SPRIDEN_`, `SGBSTDN_`) and tables land in a dedicated `cache` schema (`cache.<name>`).
+- **Cache-friendly names.** Source prefixes are stripped (`PS_`, `SPRIDEN_`, `SGBSTDN_`) and tables take bare names (`stdnt_car_term`) in the cache database — the names the sync writer, the roles' `cache_tables` and the agents' SQL all use. A table mapped onto a house entity (`students`) lands in that table.
 - **Metadata columns.** Every cache table gets `_synced_at TIMESTAMPTZ`, `_source_schema`, and `_source_table`.
 - **Indexes.** An index on `_synced_at` (freshness queries) plus one per foreign-key column.
 - **Materialized views.** Stubs for entity-level aggregations (e.g. a student summary) are scaffolded as comments to be customized after generation.
 
-Output is written to `config/generated/<service>/cache-schema.sql`. The canonical, hand-curated cache schema for the core domains lives in `sql/schema.sql` and `sql/views.sql`; see [Component 2](02-knowledge-materialization.md).
+Output is written to `config/generated/<service>/cache-schema.sql`, copied to `sql/<service>-cache.sql`, and **applied to the cache database by this step** (every statement is `IF NOT EXISTS`, so re-approving is a no-op). Two limits: a source table without a primary key fails at its first sync, because the upsert needs one; and a generated table named like a hand-curated one in `sql/schema.sql` is a no-op create, so its rows must be mapped onto the existing columns. The canonical, hand-curated cache schema for the core domains lives in `sql/schema.sql` and `sql/views.sql`; see [Component 2](02-knowledge-materialization.md).
 
 ---
 
@@ -62,26 +64,26 @@ Merges the generated `tools.yaml` entries (sources, tools, toolsets) into the ca
 
 ## Step 4 — Sync Schedules
 
-Merges the generated schedule entries into `config/sync-schedules.yaml` ([Component 2](02-knowledge-materialization.md#sync-schedulesyaml)), with cadences suggested by the LLM (or the rule-based heuristics). After this step, `ontology sync schedule` shows the new schedules.
+Merges the generated schedule entries into `config/sync-schedules.yaml` ([Component 2](02-knowledge-materialization.md#sync-schedulesyaml)), with cadences suggested by the LLM (or the rule-based heuristics). A database schedule names its `service` and `table`: the sync engine reads the table through the service's own connection. An API service's schedules name a `tool` on its custom MCP server (`<name>-mcp`, reached at `MCP_<NAME>_URL`). After this step, `ontology sync schedule` shows the new schedules.
 
 ---
 
 ## Step 5 — Docker Compose Update
 
-For API-based sources, generates and wires the new custom MCP-server container (e.g. `mcp-canvas`) into the Compose stack — image/build context, env file, and placement on the internal-only network. Database sources reuse the existing `mcp-toolbox` container (no new service needed).
+For API-based sources, generates and wires the new custom MCP-server container (e.g. `mcp-canvas`) into the Compose stack — image/build context, env file, and placement on the internal-only network. Database sources need no container: the sync engine reads them through their own connection, and the shared `mcp-toolbox` serves their agent-facing tools.
 
 ---
 
 ## Step 6 — End-to-End Validation
 
-Runs a **test sync** for a handful of high-priority tables and confirms records flow all the way through to the cache and the memory files. Example:
+Pulls a **bounded sample** (100 rows) of the three biggest tables through the service's own connection and records the counts on the run; an API service has nothing to sample, so its first sync is the check. Example:
 
 ```
 [6/6] Validation
-  Running test sync for 3 high-priority tables...
-  PS_STDNT_CAR_TERM: 4,287 records synced OK
-  PS_SRVC_IND_DATA:    342 records synced OK
-  PS_STDNT_AWARDS:   8,934 records synced OK
+  Sampling 3 high-priority tables...
+  PS_STDNT_CAR_TERM: 100 rows OK
+  PS_SRVC_IND_DATA:  100 rows OK
+  PS_STDNT_AWARDS:   100 rows OK
   Service 'peoplesoft-main' is ready.
 ```
 

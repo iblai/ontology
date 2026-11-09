@@ -13,7 +13,10 @@ from mcp.types import TextContent
 SLATE_BASE_URL = os.environ["SLATE_BASE_URL"]
 SLATE_API_KEY = os.environ["SLATE_API_KEY"]
 
-server = FastMCP("slate-mcp")
+# Streamable HTTP on :3000, stateless, so the sync engine's bare tools/call POSTs work.
+server = FastMCP(
+    "slate-mcp", host="0.0.0.0", port=3000, stateless_http=True, json_response=True
+)
 
 
 @server.tool()
@@ -61,4 +64,4 @@ async def search_applicants(term: str) -> list[TextContent]:
 
 
 if __name__ == "__main__":
-    server.run()
+    server.run(transport="streamable-http")

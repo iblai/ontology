@@ -308,6 +308,9 @@ class SyncScheduleSerializer(serializers.Serializer):
     cron = serializers.CharField(required=False, allow_blank=True, default="")
     source = serializers.CharField(required=False, allow_blank=True, default="")
     tool = serializers.CharField(required=False, allow_blank=True, default="")
+    # A database schedule pulls `table` through `service`'s own connection; an API one a tool.
+    service = serializers.CharField(required=False, allow_blank=True, default="")
+    table = serializers.CharField(required=False, allow_blank=True, default="")
     mode = serializers.SerializerMethodField()
     description = serializers.CharField(required=False, allow_blank=True, default="")
     enabled = serializers.SerializerMethodField()
@@ -543,10 +546,19 @@ class TableEditSerializer(serializers.Serializer):
     description = serializers.CharField(
         required=False, allow_blank=True, max_length=2000
     )
+    # The mapping layer: the cache table and memory folder, column renames, the template.
+    entity = serializers.RegexField(r"^[a-z][a-z0-9_]{0,63}$", required=False)
+    fields = serializers.DictField(
+        child=serializers.RegexField(r"^[a-z][a-z0-9_]{0,63}$"), required=False
+    )
+    template = serializers.RegexField(r"^[a-z][a-z0-9_]{0,63}$", required=False)
 
     def validate(self, attrs):
-        if "entity_group" not in attrs and "description" not in attrs:
-            raise serializers.ValidationError("entity_group or description is required")
+        editable = ("entity_group", "description", "entity", "fields", "template")
+        if not any(k in attrs for k in editable):
+            raise serializers.ValidationError(
+                f"one of {', '.join(editable)} is required"
+            )
         return attrs
 
 
@@ -554,6 +566,12 @@ class TableEditResultSerializer(serializers.Serializer):
     ok = serializers.BooleanField()
     message = serializers.CharField(allow_blank=True)
     updated = serializers.IntegerField(default=0)
+
+
+class MapResultSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    tables = serializers.DictField(default=dict)
 
 
 # ---------------------------------------------------------------------------

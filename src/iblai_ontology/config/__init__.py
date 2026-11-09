@@ -28,10 +28,12 @@ def config_dir() -> Path:
 
 
 # Default LLM models per provider (BYOK — only the default when a provider is
-# chosen; the user always supplies their own key).
+# chosen; the user supplies their own key). "iblai" is the DM's OpenAI-compatible
+# endpoint behind the platform credentials, no key of its own.
 LLM_DEFAULT_MODELS = {
     "anthropic": "claude-opus-4-8",
     "openai": "gpt-4o",
+    "iblai": "iblai/iblai-pro",
 }
 
 

@@ -160,6 +160,7 @@ def build_graph(
                 schema=schema,
                 row_count=int(t.get("row_count") or 0),
                 column_count=int(t.get("column_count") or len(t.get("columns") or [])),
+                entity=str(td.get("entity") or ""),
             )
             lookup[qualified.lower()] = tid
             lookup[name.lower()] = tid
@@ -297,7 +298,14 @@ def build_graph(
             g.link(sid, nid("source", source), "syncs_from")
         else:
             g.ref(sid, "syncs_from", "service", source)
-        g.ref(sid, "runs", "tool", str(sched.get("tool") or ""))
+        if sched.get("tool"):
+            g.ref(sid, "runs", "tool", str(sched["tool"]))
+        # A database schedule reads one table of its service straight through the connection.
+        table_id = tables_by_service.get(svc_match or "", {}).get(
+            str(sched.get("table") or "").lower()
+        )
+        if table_id:
+            g.link(sid, table_id, "queries")
         d = _domain_of((sched.get("output") or {}).get("text_memories") or "")
         if d:
             g.link(sid, nid("memory_domain", d), "writes")

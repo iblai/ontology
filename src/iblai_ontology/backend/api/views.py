@@ -164,19 +164,26 @@ class ServicesView(ConsoleAPIView):
             self._audit(request, action="service.add", resource=name, allowed=False)
             return _envelope(False, f"Service '{name}' already exists.")
         try:
+            from iblai_ontology.backend.discovery.adapters import get_adapter
             from iblai_ontology.backend.discovery.engine import DiscoveryEngine
 
-            DiscoveryEngine().run(
-                name=name,
-                service_type=v["adapter"],
-                host=v.get("host", ""),
-                port=v.get("port") or 0,
-                database=v.get("database", ""),
-                user=v.get("user", ""),
-                password=v.get("password", ""),
-                use_llm=False,
-                options=v.get("options"),
-            )
+            if get_adapter(v["adapter"]).SERVICE_TYPE == "api":
+                # No database to introspect: the Service row and its catalog schedules.
+                DiscoveryEngine().register_api(
+                    name=name, adapter=v["adapter"], host=v.get("host", "")
+                )
+            else:
+                DiscoveryEngine().run(
+                    name=name,
+                    service_type=v["adapter"],
+                    host=v.get("host", ""),
+                    port=v.get("port") or 0,
+                    database=v.get("database", ""),
+                    user=v.get("user", ""),
+                    password=v.get("password", ""),
+                    use_llm=False,
+                    options=v.get("options"),
+                )
         except Exception as exc:
             self._audit(request, action="service.add", resource=name, allowed=False)
             return _envelope(False, str(exc)[:500])
@@ -327,12 +334,37 @@ class ServiceDiscoverView(ConsoleAPIView):
         return _envelope(True, f"Re-discovery complete for '{name}'.")
 
 
+class ServiceMapView(ConsoleAPIView):
+    def post(self, request, name):
+        from .serializers import MapResultSerializer
+
+        if not store.count(Service, name=name):
+            return _envelope(
+                False, f"Service '{name}' not found.", serializer=MapResultSerializer
+            )
+        try:
+            from iblai_ontology.backend.discovery.engine import DiscoveryEngine
+
+            # ponytail: synchronous, one completion per service; a task if it times out.
+            tables = DiscoveryEngine().map(name)
+        except Exception as exc:
+            return _envelope(False, str(exc)[:500], serializer=MapResultSerializer)
+        self._audit(request, action="service.map", resource=name)
+        return _envelope(
+            True,
+            f"Mapped {len(tables)} table(s); review them, then approve.",
+            extra={"tables": tables},
+            serializer=MapResultSerializer,
+        )
+
+
 class ServiceApproveView(ConsoleAPIView):
     def post(self, request, name):
         service = store.first(Service, name=name)
         if not service:
             return _envelope(False, f"Service '{name}' not found.")
-        if service.safety_status != "passed":
+        # The read-only suite guards database sources; an API source has none to run.
+        if service.service_type != "api" and service.safety_status != "passed":
             return _envelope(
                 False,
                 "Safety suite must pass before approval.",
@@ -682,6 +714,9 @@ class ServiceTablesView(ConsoleAPIView):
             v["tables"],
             entity_group=v.get("entity_group"),
             description=v.get("description"),
+            entity=v.get("entity"),
+            fields=v.get("fields"),
+            template=v.get("template"),
         )
         service.llm_analysis = analysis
         # ponytail: one JSON value under the DM's 2 MiB cap (see the engine's analysis save).

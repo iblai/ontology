@@ -43,6 +43,44 @@ uv run celery -A iblai_ontology.backend.celery:app worker --beat --loglevel=info
 uv run ontology --help
 ```
 
+## Local sync
+
+A sync reads a database source through the service's own connection, so it needs no Toolbox.
+Point the config, registry, cache and memory files at a scratch directory and run the console
+against the backend:
+
+```bash
+export ONTOLOGY_CONFIG_DIR=/var/tmp/ontology-demo/config      # tools.yaml, sync-schedules.yaml, roles.yaml
+export ONTOLOGY_SQLITE_PATH=/var/tmp/ontology-demo/db.sqlite3  # the registry and the cache tables
+export ONTOLOGY_FILES_ROOT=/var/tmp/ontology-demo/files        # one Markdown memory per row
+export ONTOLOGY_CREDENTIAL_KEY=$(uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+export ONTOLOGY_API_DEV_ALLOW_ANON=true                        # the console without ibl.ai SSO
+export ONTOLOGY_CORS_ORIGINS=http://localhost:3300             # where the console runs
+uv run python -m iblai_ontology.backend.manage migrate
+uv run uvicorn iblai_ontology.backend.asgi:application --port 8000
+```
+
+Add the service in the console (or `ontology service add`), approve it (creates the cache tables
+and merges the schedules), then **Sync now**. `MCP_TOOLBOX_URL` matters only for the agent-facing
+tools; `MCP_<NAME>_URL` points a `<name>-mcp` schedule at an API source's MCP server.
+
+## LLM through the DM
+
+Schema analysis (`service discover`, `service add --llm-discover`) and the mapping probe
+(`service map <name>`, **Propose mapping** on the service page) can use the DM's OpenAI-compatible
+endpoint with the platform credentials the store already uses:
+
+```bash
+export IBLAI_BASE_URL=https://<dm-host> IBLAI_ORG=<platform-key> IBLAI_ADMIN_TOKEN=<platform API key> IBLAI_AUTH_SCHEME=Api-Token
+uv run ontology config llm --provider iblai   # model iblai/iblai-pro unless --model <provider/model>
+uv run ontology service map ch-campus         # proposes entity, column renames and template per table
+```
+
+`llm.base_url` (or `IBLAI_INFERENCE_URL`) names another host when the deployment serves completions
+elsewhere (the hosted DM: `https://asgi.data.iblai.app`). The probe sends each table's columns and
+`llm.sample_rows` sample rows (default 5) to the model; `--sample-rows 0` sends names and types only.
+The key's owner must be a platform admin with credits.
+
 ## Dependencies
 
 ```bash

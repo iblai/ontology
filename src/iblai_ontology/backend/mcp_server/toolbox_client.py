@@ -35,16 +35,22 @@ def _parse_message(resp: httpx.Response) -> dict[str, Any]:
 
 
 def _rows_from_result(result: dict[str, Any]) -> list[Any]:
-    """Unwrap an MCP ``tools/call`` result's text content into JSON rows."""
+    """Unwrap an MCP ``tools/call`` result's text content into JSON rows.
+
+    The Toolbox sends one text item per row; the custom MCP servers one item
+    holding a JSON array per call. Both come back as a flat list of rows.
+    """
     rows: list[Any] = []
     for item in result.get("content", []):
         text = item.get("text") if isinstance(item, dict) else None
         if text is None:
             continue
         try:
-            rows.append(json.loads(text))
+            value = json.loads(text)
         except (ValueError, TypeError):
             rows.append(text)
+            continue
+        rows.extend(value) if isinstance(value, list) else rows.append(value)
     return rows
 
 
@@ -79,4 +85,8 @@ def call_tool(
     message = _parse_message(resp)
     if message.get("error"):
         raise ToolboxError(message["error"].get("message", "toolbox error"))
-    return _rows_from_result(message.get("result", {}))
+    result = message.get("result", {})
+    if result.get("isError"):
+        # A tool failure travels as content with isError (Toolbox and FastMCP alike).
+        raise ToolboxError(" ".join(str(r) for r in _rows_from_result(result)))
+    return _rows_from_result(result)

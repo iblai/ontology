@@ -10,6 +10,7 @@ package loads without the extra.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Optional
 
@@ -57,12 +58,20 @@ class _ConnectorCursor:
     def __init__(self, connector) -> None:
         self._connector = connector
         self._rows: list[tuple] = []
+        self.description: list[tuple] | None = None
 
     def execute(self, sql: str) -> None:
         frame = self._connector.execute(sql)
-        self._rows = (
-            [] if frame is None else [tuple(r) for r in frame.itertuples(index=False)]
+        if frame is None:
+            self.description, self._rows = None, []
+            return
+        # JSON-native values (ints, floats, ISO dates, None) so rows bind on any cache DB.
+        records = json.loads(
+            frame.to_json(orient="records", date_format="iso", default_handler=str)
         )
+        columns = [str(c) for c in frame.columns]
+        self.description = [(c, None, None, None, None, None, None) for c in columns]
+        self._rows = [tuple(r.get(c) for c in columns) for r in records]
 
     def fetchone(self):
         return self._rows[0] if self._rows else None

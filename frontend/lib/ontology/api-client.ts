@@ -70,6 +70,8 @@ export const apiClient = {
     status: (name: string): Promise<ServiceHealth | null> => post(`/services/${enc(name)}/status`),
     test: (name: string): Promise<SafetyReport> => post(`/services/${enc(name)}/test`),
     discover: (name: string): Promise<Ok> => post(`/services/${enc(name)}/discover`),
+    map: (name: string): Promise<Ok & { tables: Record<string, Record<string, unknown>> }> =>
+      post(`/services/${enc(name)}/map`),
     approve: (name: string): Promise<Ok & { runId?: string }> =>
       post(`/services/${enc(name)}/approve`),
     sync: (name: string): Promise<Ok> => post(`/services/${enc(name)}/sync`),

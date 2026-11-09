@@ -11,7 +11,10 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
 
-server = FastMCP("navigate-mcp")
+# Streamable HTTP on :3000, stateless, so the sync engine's bare tools/call POSTs work.
+server = FastMCP(
+    "navigate-mcp", host="0.0.0.0", port=3000, stateless_http=True, json_response=True
+)
 
 
 def _base_url() -> str:
@@ -85,4 +88,4 @@ async def get_appointments(student_sis_id: str) -> list[TextContent]:
 
 
 if __name__ == "__main__":
-    server.run()
+    server.run(transport="streamable-http")

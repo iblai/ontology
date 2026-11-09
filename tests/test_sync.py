@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from iblai_ontology.backend.sync import scheduler
 from iblai_ontology.backend.sync.engine import SyncRunner
 
@@ -84,6 +86,35 @@ def test_runner_pull_invokes_toolbox(monkeypatch):
     }
 
 
+def test_pull_raises_when_the_tool_reports_an_error(monkeypatch):
+    """FastMCP and the Toolbox send a failing tool's message as isError content."""
+    from iblai_ontology.backend.mcp_server.toolbox_client import ToolboxError
+
+    class FakeResp:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        text = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "content": [{"type": "text", "text": "Error executing tool: boom"}],
+                    "isError": True,
+                },
+            }
+        )
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        "iblai_ontology.backend.mcp_server.toolbox_client.httpx.post",
+        lambda *a, **k: FakeResp(),
+    )
+    with pytest.raises(ToolboxError, match="Error executing tool: boom"):
+        SyncRunner(toolbox_url="http://toolbox:5000").pull("get-x")
+
+
 def test_detect_primary_key():
     from iblai_ontology.backend.sync.writer import detect_primary_key
 
@@ -114,6 +145,30 @@ def test_write_memories_no_db(tmp_path):
     assert len(files) == 1
     assert (tmp_path / "students" / "001.md").exists()
     assert idx.indexed == ["/ontology/students/001.md"]
+
+
+def test_write_memories_stops_indexing_after_the_first_failure(tmp_path, caplog):
+    from iblai_ontology.backend.sync.writer import write_memories
+
+    class DownIndexer:
+        calls = 0
+
+        def index_file(self, path, text):
+            self.calls += 1
+            raise ConnectionError("vector-store: name or service not known")
+
+    idx = DownIndexer()
+    with caplog.at_level("WARNING", logger="iblai_ontology.sync"):
+        files = write_memories(
+            [{"id": "1"}, {"id": "2"}, {"id": "3"}],
+            entity_group="courses",
+            primary_key="id",
+            files_root=str(tmp_path),
+            indexer=idx,
+        )
+    assert len(files) == 3  # every memory still written
+    assert idx.calls == 1  # one timeout, not one per row
+    assert "vector index unavailable" in caplog.text
 
 
 def test_disabled_schedule_skipped_by_beat_and_run_all_due(tmp_path, monkeypatch):

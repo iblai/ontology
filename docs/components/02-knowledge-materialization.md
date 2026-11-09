@@ -8,7 +8,7 @@ This is the core innovation, and the component the whole product is named after.
 2. **Structured cache** — a local PostgreSQL database for aggregations, joins, and analytics.
 3. **Vector index** — embeddings over the text memories (ChromaDB) for semantic search.
 
-A scheduled **sync engine** keeps all three current by pulling from the Component 1 MCP layer.
+A scheduled **sync engine** keeps all three current: it reads each database source through the service's own connection (the schedule names the service and the table) and each API source through its custom MCP server ([Component 1](01-mcp-inbound.md)).
 
 ---
 

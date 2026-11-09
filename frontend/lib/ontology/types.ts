@@ -151,6 +151,9 @@ export interface SyncSchedule {
   cron: string;
   source: string;
   tool: string;
+  /** A database schedule reads `table` through `service`'s own connection; `tool` is for API sources. */
+  service?: string;
+  table?: string;
   mode: SyncMode;
   description: string;
   enabled: boolean;

@@ -12,7 +12,10 @@ from ldap3.utils.conv import escape_filter_chars
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
 
-server = FastMCP("ldap-mcp")
+# Streamable HTTP on :3000, stateless, so the sync engine's bare tools/call POSTs work.
+server = FastMCP(
+    "ldap-mcp", host="0.0.0.0", port=3000, stateless_http=True, json_response=True
+)
 
 
 def _connect() -> Connection:
@@ -87,4 +90,4 @@ async def get_org_structure(department: str) -> list[TextContent]:
 
 
 if __name__ == "__main__":
-    server.run()
+    server.run(transport="streamable-http")

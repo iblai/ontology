@@ -50,14 +50,24 @@ def set_value(
 
 @app.command()
 def llm(
-    provider: str = typer.Option(..., prompt="LLM provider (anthropic/openai)"),
-    api_key: str = typer.Option(..., prompt="API key", hide_input=True),
+    provider: str = typer.Option(..., prompt="LLM provider (anthropic/openai/iblai)"),
+    api_key: Optional[str] = typer.Option(
+        None, help="API key (anthropic/openai); iblai uses IBLAI_ADMIN_TOKEN."
+    ),
     model: Optional[str] = typer.Option(None, help="Model name override."),
+    base_url: Optional[str] = typer.Option(
+        None,
+        help="iblai: the host serving /v1/chat/completions when not IBLAI_BASE_URL.",
+    ),
 ) -> None:
-    """Configure the BYOK LLM API key for schema analysis."""
+    """Configure the LLM for schema analysis and mapping: your own key, or the DM (iblai)."""
     from iblai_ontology.config.writer import ConfigWriter
 
-    ConfigWriter().set_llm(provider=provider, api_key=api_key, model=model)
+    if provider != "iblai" and api_key is None:
+        api_key = typer.prompt("API key", hide_input=True)
+    ConfigWriter().set_llm(
+        provider=provider, api_key=api_key, model=model, base_url=base_url
+    )
     typer.echo(f"LLM configured: {provider}")
 
 

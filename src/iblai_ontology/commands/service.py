@@ -85,8 +85,8 @@ def add(
         if entry.env:
             console.print(f"  required env: {', '.join(entry.env)}")
 
-    # API sources (catalog or skill) are served via custom MCP servers, not live
-    # DB introspection — show the seed and stop.
+    # API sources (catalog or skill) are served by a custom MCP server, not introspected:
+    # register the service with the catalog's schedules and show the skill's read-only tools.
     if skill or (entry and entry.type == "api"):
         ref = skill or entry.skill.removesuffix(".md")
         from iblai_ontology.commands.skill import import_skill
@@ -95,10 +95,19 @@ def add(
             f"[highlight]API source[/highlight] — discovery seed from skill '{ref}':"
         )
         import_skill(ref)
+        from iblai_ontology.backend import bootstrap
+
+        bootstrap()
+        from iblai_ontology.backend.discovery.engine import DiscoveryEngine
+
+        DiscoveryEngine().register_api(
+            name=name, adapter=entry.adapter if entry else ref
+        )
+        var = f"MCP_{name.upper().replace('-', '_')}_URL"
         console.print()
         console.print(
-            "[dim]Wire this as a custom MCP server (see mcp-servers/) and add a "
-            "sync schedule; API sources are not introspected like databases.[/dim]"
+            f"[dim]Registered '{name}'. Run its MCP server (see mcp-servers/) and point "
+            f"{var} at it, then approve and sync.[/dim]"
         )
         return
 
@@ -339,3 +348,28 @@ def remove(
 
     ProvisioningEngine().teardown(name)
     typer.echo(f"Service '{name}' removed.")
+
+
+@app.command(name="map")
+def map_tables(
+    name: str = typer.Argument(..., help="Service name."),
+    sample_rows: Optional[int] = typer.Option(
+        None,
+        help="Sample rows per table sent to the LLM (default llm.sample_rows; 0 = names and types only).",
+    ),
+) -> None:
+    """Ask the configured LLM how each discovered table maps onto the house entities.
+
+    The answer is recorded as table edits (entity, column renames, memory template,
+    entity group, description): review it in the console, then approve to regenerate.
+    """
+    from iblai_ontology.backend import bootstrap
+
+    bootstrap()
+    from iblai_ontology.backend.discovery.engine import DiscoveryEngine
+
+    mapped = DiscoveryEngine().map(name, sample_rows=sample_rows)
+    for table, m in mapped.items():
+        renames = ", ".join(f"{k}→{v}" for k, v in (m.get("fields") or {}).items())
+        console.print(f"  {table} → {m.get('entity') or '(unchanged)'}  {renames}")
+    console.print(f"[success]Mapped {len(mapped)} table(s) for '{name}'.[/success]")

@@ -62,11 +62,13 @@ class MemoryGenerator:
         )
 
     def _template_source(self, entity_group: str) -> str:
-        if self.templates_dir:
-            candidate = self.templates_dir / f"{entity_group}.md.j2"
-            if candidate.exists():
-                return candidate.read_text()
-        return DEFAULT_TEMPLATES.get(entity_group, DEFAULT_TEMPLATES["generic"])
+        # Folders are plural (students) and templates singular (student): try both.
+        for name in (entity_group, entity_group.rstrip("s")):
+            if self.templates_dir and (self.templates_dir / f"{name}.md.j2").exists():
+                return (self.templates_dir / f"{name}.md.j2").read_text()
+            if name in DEFAULT_TEMPLATES:
+                return DEFAULT_TEMPLATES[name]
+        return DEFAULT_TEMPLATES["generic"]
 
     def render(self, entity_group: str, context: dict[str, Any]) -> str:
         """Render a single entity to Markdown."""

@@ -45,8 +45,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   credentials only as Fernet ciphertext. `ontology platform database` creates the DM database
   and its tables from the Django models and adds whatever a later version needs.
   `IBLAI_AUTH_SCHEME=Api-Token` lets the platform client use a platform API key.
+- A mapping layer on discovered tables: `entity` (the cache table and memory folder a table fills,
+  e.g. the hand-curated `students`), `fields` (source→target column renames) and `template` (the
+  memory template), edited like `entity_group` through `PATCH /services/<name>/tables`, recorded as
+  overrides, and applied by the sync writer and the cache DDL. Approve regenerates the schedules
+  and DDL from the stored manifest and analysis, so console edits take effect without a rediscovery.
+- `ontology service map <name>` / `POST /services/<name>/map` / **Propose mapping** on the service
+  page: the configured LLM proposes the mapping from each table's columns, a few sample rows and
+  the house entities in `sql/schema.sql`. LLM provider `iblai`: the DM's OpenAI-compatible
+  `/v1/chat/completions` behind the platform credentials (`ontology config llm --provider iblai`;
+  `llm.base_url` for another completions host, `llm.sample_rows` for the probe's sample size).
+- API sources register without database discovery (console and `service add --from <catalog>`):
+  the Service row plus one schedule per catalog `sync_defaults` entry, each naming a `list-<entity>`
+  tool on the service's custom MCP server. The sync engine reads a `<name>-mcp` source at
+  `MCP_<NAME>_URL` and creates the cache table from the first row (`output.create_table`).
 
 ### Changed
+- The sync engine reads a database source straight through the service's own connection
+  (`SyncRunner.pull_table`; the generated schedule names `service` and `table`) instead of a
+  Toolbox tool, so "Sync now" works without a Toolbox that knows the source. The Toolbox serves
+  agent-facing tools only. The sync-engine image installs the `auto-ontology` connectors and the
+  compose stack hands it the registry key.
+- Generated cache tables have bare names (no `cache.` schema), portable DDL
+  (`DEFAULT CURRENT_TIMESTAMP`), the mapping's names, and approve applies the DDL to the cache
+  database (`IF NOT EXISTS`); before, nothing created them.
+- Provisioning validation samples 100 rows of the three biggest tables through the service
+  connection (`LIMIT` / `FETCH FIRST` / `TOP` per dialect); an API service passes with a note.
+- The custom MCP servers (`mcp-servers/*`) serve stateless streamable HTTP on port 3000; they ran
+  on stdio, so the compose stack's `MCP_CANVAS_URL` never answered.
 - Discovered tables are one `ServiceTable` row each (a migration moves existing manifests);
   `Service.schema_manifest` keeps per-table summaries. `ProvisioningStep.order` is stored in a
   `position` column. The unused `DiscoveredService` and `SyncSchedule` models are gone.
@@ -70,12 +96,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The safety suite's UPDATE probe uses `ALTER TABLE … UPDATE` on ClickHouse: before 25.7
   ClickHouse has no `UPDATE` statement, so the probe was a syntax error and the suite refused
   every ClickHouse source on those versions.
+- The sync writer upserts on composite primary keys (`output.primary_key` as a list) and binds
+  Decimal, datetime and nested values on SQLite; the `student`/`course` memory templates now apply
+  to the plural `students`/`courses` folders.
 - `ontology mcp validate` / `POST /mcp/validate` report a broken `tools.yaml` (parse error,
   non-mapping document) as compliance errors instead of raising.
 - Safety suite: dropping the probe table after its `CREATE` was denied now counts as denied on
   every engine ("does not exist"), as the Oracle branch already did via ORA-00942 — before, the
   DROP test came back inconclusive on PostgreSQL, MySQL and SQL Server and failed the suite. The
   ALTER probe uses `ADD COLUMN` everywhere but Oracle (Trino and ClickHouse reject the bare form).
+
+### Removed
+- The generated `get-<table>` "every row" Toolbox tools: the sync no longer goes through the
+  Toolbox, and the agent-facing tools are the analysis's suggested ones.
 
 ## [0.2.11] - 2026-07-09
 

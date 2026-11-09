@@ -26,6 +26,7 @@ service_urls = [
     path("services/<str:name>/status", views.ServiceStatusView.as_view()),
     path("services/<str:name>/test", views.ServiceTestView.as_view()),
     path("services/<str:name>/discover", views.ServiceDiscoverView.as_view()),
+    path("services/<str:name>/map", views.ServiceMapView.as_view()),
     path("services/<str:name>/approve", views.ServiceApproveView.as_view()),
     path("services/<str:name>/sync", views.ServiceSyncView.as_view()),
     path("services/<str:name>/tables", views.ServiceTablesView.as_view()),

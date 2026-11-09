@@ -111,7 +111,9 @@ export default function SyncPage() {
     {
       accessorKey: "tool",
       header: sortableHeader(t("schedulesColTool")),
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.tool}</span>,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.table ?? row.original.tool}</span>
+      ),
     },
     {
       accessorKey: "mode",

@@ -62,18 +62,23 @@ class ConfigWriter:
         node[parts[-1]] = value
         self._save(data)
 
-    def set_llm(self, *, provider: str, api_key: str, model: str | None = None) -> None:
-        """Configure the BYOK LLM block, defaulting the model per provider."""
+    def set_llm(
+        self,
+        *,
+        provider: str,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        """Configure the LLM block, defaulting the model per provider (iblai needs no key)."""
         resolved_model = model or LLM_DEFAULT_MODELS.get(provider)
         data = self._load()
         data.setdefault("llm", {})
-        data["llm"].update(
-            {
-                "provider": provider,
-                "api_key": api_key,
-                "model": resolved_model,
-            }
-        )
+        data["llm"].update({"provider": provider, "model": resolved_model})
+        if api_key is not None:
+            data["llm"]["api_key"] = api_key
+        if base_url is not None:
+            data["llm"]["base_url"] = base_url
         data["llm"].setdefault("max_tokens", 4096)
         data["llm"].setdefault("temperature", 0.2)
         self._save(data)

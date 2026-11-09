@@ -13,7 +13,10 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
 
-server = FastMCP("canvas-mcp")
+# Streamable HTTP on :3000, stateless, so the sync engine's bare tools/call POSTs work.
+server = FastMCP(
+    "canvas-mcp", host="0.0.0.0", port=3000, stateless_http=True, json_response=True
+)
 
 _SIS_PREFIXES = ("sis_user_id:", "sis_login_id:")
 
@@ -176,4 +179,4 @@ async def get_student_submissions(
 
 
 if __name__ == "__main__":
-    server.run()
+    server.run(transport="streamable-http")

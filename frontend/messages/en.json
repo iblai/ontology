@@ -143,6 +143,7 @@
     "removedToast": "{name} removed.",
     "approve": "Approve & provision",
     "discover": "Re-run discovery",
+    "proposeMapping": "Propose mapping",
     "syncNow": "Sync now",
     "runStatusProbe": "Run status probe",
     "runSafetySuite": "Run safety suite"
@@ -313,7 +314,7 @@
     "schedulesColName": "Schedule",
     "schedulesColCron": "Cron",
     "schedulesColSource": "Source",
-    "schedulesColTool": "Tool",
+    "schedulesColTool": "Pulls",
     "schedulesColMode": "Mode",
     "schedulesColDescription": "Description",
     "statusColSchedule": "Schedule",
@@ -559,6 +560,7 @@
       "missing": "missing"
     },
     "facts": {
+      "entity": "Entity",
       "kind": "Kind",
       "group": "Group",
       "adapter": "Adapter",

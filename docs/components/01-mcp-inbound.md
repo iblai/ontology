@@ -9,7 +9,9 @@ Provide a *uniform* interface to every source system on campus. Instead of build
 - **Google MCP Toolbox for Databases** — for anything that speaks SQL.
 - **Custom MCP servers** — small Docker containers — for API-based systems (Canvas, Slate, Navigate, LDAP).
 
-Every source system ends up behind the same kind of MCP interface, so the sync engine (Component 2) and the outbound gateway (Component 4) only ever speak MCP.
+Every API source ends up behind the same kind of MCP interface, so the sync engine (Component 2) reads it the way the outbound gateway (Component 4) does: a `tools/call`. Database sources are read by the sync engine through their own connection; the Toolbox serves their agent-facing tools.
+
+A custom MCP server that feeds the sync engine exposes one `list-<entity>` tool per entity in the catalog's `sync_defaults` (`list-contacts`, `list-deals`), returning a JSON array of flat objects that carry an `id`; the sync engine creates the cache table from the first row. The server runs stateless streamable HTTP on port 3000 and is reached at `MCP_<NAME>_URL` (`MCP_CANVAS_URL` in the compose stack).
 
 ---
 

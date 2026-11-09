@@ -90,6 +90,7 @@ export function NodePanel({
   fact("status", meta.status);
   if (typeof meta.row_count === "number") fact("rows", fmtRows(meta.row_count));
   fact("columnsCount", meta.column_count);
+  fact("entity", meta.entity);
   fact("type", meta.type);
   fact("host", meta.host);
   fact("cron", meta.cron);

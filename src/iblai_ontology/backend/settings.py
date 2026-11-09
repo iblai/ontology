@@ -141,6 +141,10 @@ LLM_MODEL = _llm.get("model") or (
 )
 LLM_MAX_TOKENS = _llm.get("max_tokens", 4096)
 LLM_TEMPERATURE = _llm.get("temperature", 0.2)
+# Provider "iblai" (the DM's OpenAI-compatible endpoint): another host for completions when
+# the deployment serves them elsewhere, and the sample rows a mapping probe sends per table.
+LLM_BASE_URL = _llm.get("base_url") or os.environ.get("IBLAI_INFERENCE_URL", "")
+LLM_SAMPLE_ROWS = int(_llm.get("sample_rows", 5))
 
 # Fernet key for the service registry: ONTOLOGY_CREDENTIAL_KEY, or the file named by
 # ONTOLOGY_CREDENTIAL_KEY_FILE (a Compose secret).

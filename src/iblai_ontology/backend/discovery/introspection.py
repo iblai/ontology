@@ -58,6 +58,41 @@ class SchemaManifest:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "SchemaManifest":
+        """Rebuild a manifest from ``to_dict()`` output; tolerant of the thinner seeded shapes."""
+        tables = [
+            TableInfo(
+                schema_name=str(t.get("schema_name") or ""),
+                table_name=str(t.get("table_name") or ""),
+                row_count=int(t.get("row_count") or 0),
+                columns=[
+                    ColumnInfo(
+                        name=str(c.get("name") or ""),
+                        data_type=str(c.get("data_type") or ""),
+                        nullable=bool(c.get("nullable", True)),
+                        is_primary_key=bool(c.get("is_primary_key", False)),
+                        foreign_key_table=c.get("foreign_key_table"),
+                        foreign_key_column=c.get("foreign_key_column"),
+                    )
+                    for c in t.get("columns") or []
+                ],
+                primary_key_columns=list(t.get("primary_key_columns") or []),
+                foreign_keys=list(t.get("foreign_keys") or []),
+            )
+            for t in data.get("tables") or []
+        ]
+        return cls(
+            db_type=str(data.get("db_type") or ""),
+            host=str(data.get("host") or ""),
+            database=str(data.get("database") or ""),
+            schemas=list(data.get("schemas") or []),
+            tables=tables,
+            total_tables=int(data.get("total_tables") or len(tables)),
+            total_columns=int(data.get("total_columns") or 0),
+            total_rows=int(data.get("total_rows") or 0),
+        )
+
     def to_summary_markdown(self) -> str:
         lines = [
             f"# Schema Summary: {self.database}",

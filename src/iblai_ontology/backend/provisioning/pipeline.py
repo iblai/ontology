@@ -45,6 +45,8 @@ class ProvisioningEngine:
             raise FileNotFoundError(
                 f"No generated config for '{name}'. Run `ontology service discover {name}` first."
             )
+        if service.service_type != "api":
+            self._regenerate(service, gen)
 
         run = store.create(
             ProvisioningRun, service=service, status=ProvisioningRun.Status.RUNNING
@@ -85,16 +87,50 @@ class ProvisioningEngine:
             raise
         return run
 
+    @staticmethod
+    def _regenerate(service, gen: Path) -> None:
+        """Rewrite the schedules and cache DDL from the stored manifest and analysis, so the
+        console's table edits (entity, fields, template) take effect without a rediscovery."""
+        from iblai_ontology.backend.discovery.config_generator import (
+            ConfigGenerator,
+            analysis_from_dict,
+        )
+        from iblai_ontology.backend.discovery.introspection import SchemaManifest
+        from iblai_ontology.backend.services.registry import with_tables
+
+        manifest = SchemaManifest.from_dict(with_tables(service).schema_manifest or {})
+        analysis = analysis_from_dict(service.llm_analysis or {})
+        if not manifest.tables or not analysis.suggested_sync_schedules:
+            return  # a seeded registry has nothing to regenerate from
+        generator = ConfigGenerator(service.name, manifest, analysis)
+        (gen / "sync-schedules.yaml").write_text(generator.sync_schedules_yaml())
+        (gen / "cache-schema.sql").write_text(generator.cache_schema_sql())
+
     # -- steps (each idempotent) ----------------------------------------
     def _step_cache_schema(self, service, gen: Path) -> dict:
+        from django.db import connection
+
         sql_path = gen / "cache-schema.sql"
         if not sql_path.exists():
             return {"skipped": "no cache-schema.sql"}
+        sql = sql_path.read_text()
         target = config_dir().parent / "sql" / f"{service.name}-cache.sql"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(sql_path.read_text())
-        # Applying DDL against the live cache happens at deploy time (init SQL).
-        return {"cache_schema": str(target)}
+        target.write_text(sql)
+        # Every statement is IF NOT EXISTS, so re-approving is a no-op on the cache DB.
+        # ponytail: a table without a primary key fails at the first upsert (ON CONFLICT
+        # needs one), and a generated table named like a hand-curated one is a no-op
+        # create: its rows must be mapped onto the existing columns.
+        statements = [
+            s.strip()
+            for s in sql.split(";")
+            if s.strip()
+            and not all(ln.startswith("--") for ln in s.strip().splitlines())
+        ]
+        with connection.cursor() as cur:
+            for statement in statements:
+                cur.execute(statement)
+        return {"cache_schema": str(target), "statements": len(statements)}
 
     def _step_text_templates(self, service, gen: Path) -> dict:
         from iblai_ontology.backend.provisioning.memory_generator import MemoryGenerator

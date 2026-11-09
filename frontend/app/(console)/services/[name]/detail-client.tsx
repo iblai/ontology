@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { notFound, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Play, ShieldCheck, RefreshCw, Database, Trash2 } from "lucide-react";
+import { Play, ShieldCheck, RefreshCw, Database, Sparkles, Trash2 } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
 import type {
   Service,
@@ -110,6 +110,12 @@ function ServiceDetail({ service }: { service: Service }) {
     toast.success(r.message);
   }
 
+  async function proposeMapping() {
+    const r = await apiClient.services.map(service.name);
+    if (r.ok) toast.success(r.message);
+    else toast.error(r.message);
+  }
+
   async function approve() {
     const r = await apiClient.services.approve(service.name);
     if (r.ok) {
@@ -171,6 +177,12 @@ function ServiceDetail({ service }: { service: Service }) {
                 <RefreshCw className="mr-2 size-3.5" />
                 {ts("discover")}
               </Button>
+              {service.service_type === "database" && (
+                <Button size="sm" variant="outline" onClick={proposeMapping}>
+                  <Sparkles className="mr-2 size-3.5" />
+                  {ts("proposeMapping")}
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={syncNow}>
                 <RefreshCw className="mr-2 size-3.5" />
                 {ts("syncNow")}

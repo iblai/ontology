@@ -82,19 +82,49 @@ def test_generate_all_writes_artifacts(tmp_path):
     assert ("tool", "get-student-enrollment") in kinds
     assert ("toolset", "enrollment-tools") in kinds
 
-    # sync schedule maps the 1h cadence to a cron
+    # sync schedule maps the 1h cadence to a cron and names the table it reads
     sched = yaml.safe_load(open(written["sync-schedules.yaml"]))["schedules"]
     assert sched and sched[0]["cron"] == "0 * * * *"
+    assert sched[0]["service"] == "peoplesoft"
+    assert sched[0]["table"] == "SYSADM.PS_STDNT_CAR_TERM"
+    assert "tool" not in sched[0]
+    assert sched[0]["output"] == {
+        "structured_cache": "stdnt_car_term",
+        "text_memories": "/ontology/stdnt_car_term/",
+        "primary_key": ["emplid"],
+    }
+    # no "every row" Toolbox tool: the sync reads the table itself
+    assert ("tool", "get-stdnt_car_term") not in kinds
 
     # entity groups + descriptions
     eg = yaml.safe_load(open(written["entity-groups.yaml"]))["entity_groups"]
     assert "students" in eg
     assert "Student career/term" in open(written["table-descriptions.md"]).read()
 
-    # cache schema falls back to the provisioning generator projection
+    # cache schema falls back to the provisioning generator projection, bare names
     assert (
-        "CREATE TABLE IF NOT EXISTS cache." in open(written["cache-schema.sql"]).read()
+        "CREATE TABLE IF NOT EXISTS stdnt_car_term ("
+        in open(written["cache-schema.sql"]).read()
     )
+
+
+def test_mapping_flows_into_schedules_and_ddl(tmp_path):
+    analysis = _analysis()
+    td = analysis.table_descriptions[0]
+    td.entity, td.fields, td.template = "students", {"EMPLID": "id"}, "student"
+    gen = ConfigGenerator("peoplesoft", _manifest(), analysis)
+    sched = yaml.safe_load(gen.sync_schedules_yaml())["schedules"][0]
+    assert sched["output"] == {
+        "structured_cache": "students",
+        "text_memories": "/ontology/students/",
+        "primary_key": ["id"],
+        "map": {"emplid": "id"},
+        "template": "student",
+    }
+    ddl = gen.cache_schema_sql()
+    assert "CREATE TABLE IF NOT EXISTS students (" in ddl
+    assert "    id TEXT NOT NULL" in ddl and "PRIMARY KEY (id)" in ddl
+    assert "cache." not in ddl and "NOW()" not in ddl
 
 
 # --- console edits on the stored analysis dict --------------------------------

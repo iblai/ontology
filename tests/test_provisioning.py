@@ -36,15 +36,16 @@ def _manifest():
 
 def test_cache_schema_generation_maps_types_and_strips_prefix():
     sql = CacheSchemaGenerator(_manifest()).generate()
-    assert "CREATE SCHEMA IF NOT EXISTS cache;" in sql
+    # Bare names (no schema): the writer upserts into them on SQLite and Postgres alike.
+    assert "CREATE SCHEMA" not in sql and "cache." not in sql
     # PS_ prefix stripped for the cache table name.
-    assert "CREATE TABLE IF NOT EXISTS cache.stdnt_car_term (" in sql
+    assert "CREATE TABLE IF NOT EXISTS stdnt_car_term (" in sql
     # Oracle types mapped to Postgres.
     assert "emplid TEXT NOT NULL" in sql
     assert "cum_gpa NUMERIC" in sql
     assert "PRIMARY KEY (emplid)" in sql
-    assert "_synced_at TIMESTAMPTZ" in sql
-    assert "idx_stdnt_car_term_synced_at" in sql
+    assert "_synced_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP" in sql
+    assert "idx_stdnt_car_term_synced_at ON stdnt_car_term (_synced_at)" in sql
 
 
 def test_type_mapping_fallback_is_text():
