@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from iblai_ontology.config import config_dir
-
 
 def _summary(table: dict) -> dict:
     return {
@@ -74,11 +72,3 @@ def export_services_yaml() -> str:
             }
         )
     return yaml.dump({"services": services}, default_flow_style=False, sort_keys=False)
-
-
-def write_services_yaml() -> str:
-    """Write services.yaml to the active config directory; return the path."""
-    path = config_dir() / "services.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(export_services_yaml())
-    return str(path)

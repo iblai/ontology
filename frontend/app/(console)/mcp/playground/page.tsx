@@ -89,7 +89,7 @@ export default function PlaygroundPage() {
                 <SelectContent>
                   {tools.map((tool) => (
                     <SelectItem key={tool.name} value={tool.name}>
-                      <span className="font-mono text-xs">{tool.name}</span>
+                      <span className="text-xs">{tool.name}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -99,7 +99,7 @@ export default function PlaygroundPage() {
             {tool && (
               <div className="flex flex-col gap-3 rounded-lg border p-4">
                 <div>
-                  <p className="text-foreground font-mono text-sm font-medium">{tool.name}</p>
+                  <p className="text-foreground text-sm font-medium">{tool.name}</p>
                   <p className="text-muted-foreground text-xs">{tool.description}</p>
                 </div>
                 <div className="flex flex-col gap-3">
@@ -109,9 +109,9 @@ export default function PlaygroundPage() {
                   ) : (
                     tool.parameters.map((p) => (
                       <div key={p.name} className="flex flex-col gap-1.5">
-                        <Label className="font-mono text-xs">
+                        <Label className="text-xs">
                           {p.name}
-                          {p.required && <span className="ml-1 text-red-500">*</span>}
+                          {p.required && <span className="text-muted-foreground ml-1">*</span>}
                           <span className="text-muted-foreground ml-2">({p.type})</span>
                         </Label>
                         <Input
@@ -119,14 +119,14 @@ export default function PlaygroundPage() {
                           onChange={(e) =>
                             setParams((prev) => ({ ...prev, [p.name]: e.target.value }))
                           }
-                          className="font-mono text-xs"
+                          className="text-xs"
                           placeholder={p.description}
                         />
                       </div>
                     ))
                   )}
                 </div>
-                <Button size="sm" onClick={run} disabled={running || !toolName}>
+                <Button size="sm" variant="outline" onClick={run} disabled={running || !toolName}>
                   <Play className="mr-2 size-3.5" />
                   {t("run")}
                 </Button>

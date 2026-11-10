@@ -53,7 +53,8 @@ export function UserProfileButton({
       userTenants={userTenants}
       showProfileTab={true}
       showAccountTab={false}
-      showTenantSwitcher={isAdmin}
+      // A member of several platforms may be an admin of another: the switcher gets them there.
+      showTenantSwitcher={isAdmin || userTenants.length > 1}
       showHelpLink={false}
       showLogoutButton={true}
       showLearnerModeSwitch={false}

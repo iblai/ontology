@@ -299,6 +299,67 @@ CREATE TABLE identity_map (
 );
 
 -- ============================================================
+-- CRM (the platform CRM's vocabulary: organizations, persons, deals)
+-- The mapping layer fills these from a CRM source such as Twenty; a source
+-- column with no house equivalent keeps its own name next to them.
+-- ============================================================
+CREATE TABLE organizations (
+    id                TEXT PRIMARY KEY,
+    name              TEXT,
+    website           TEXT,
+    address_street    TEXT,
+    address_city      TEXT,
+    address_state     TEXT,
+    address_zip       TEXT,
+    address_country   TEXT,
+    owner_id          TEXT,
+    created_at        TIMESTAMP WITH TIME ZONE,
+    updated_at        TIMESTAMP WITH TIME ZONE,
+    deleted_at        TIMESTAMP WITH TIME ZONE,
+    last_synced_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE persons (
+    id                TEXT PRIMARY KEY,
+    first_name        TEXT,
+    last_name         TEXT,
+    primary_email     TEXT,
+    emails            JSONB,
+    phone             TEXT,
+    job_title         TEXT,
+    organization_id   TEXT REFERENCES organizations(id),
+    owner_id          TEXT,
+    lifecycle_stage   TEXT,                    -- lead, qualified, opportunity, customer, churned
+    created_at        TIMESTAMP WITH TIME ZONE,
+    updated_at        TIMESTAMP WITH TIME ZONE,
+    deleted_at        TIMESTAMP WITH TIME ZONE,
+    last_synced_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_persons_organization ON persons(organization_id);
+CREATE INDEX idx_persons_email ON persons(primary_email);
+
+CREATE TABLE deals (
+    id                   TEXT PRIMARY KEY,
+    title                TEXT,
+    amount_micros        NUMERIC,              -- amount × 1,000,000 in `currency`
+    currency             TEXT,
+    stage                TEXT,
+    status               TEXT,                 -- open, won, lost
+    expected_close_date  TIMESTAMP WITH TIME ZONE,
+    person_id            TEXT REFERENCES persons(id),
+    organization_id      TEXT REFERENCES organizations(id),
+    owner_id             TEXT,
+    created_at           TIMESTAMP WITH TIME ZONE,
+    updated_at           TIMESTAMP WITH TIME ZONE,
+    deleted_at           TIMESTAMP WITH TIME ZONE,
+    last_synced_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_deals_organization ON deals(organization_id);
+CREATE INDEX idx_deals_stage ON deals(stage);
+
+-- ============================================================
 -- SYNC METADATA
 -- ============================================================
 CREATE TABLE sync_runs (

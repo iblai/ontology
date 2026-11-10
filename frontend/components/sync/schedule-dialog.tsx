@@ -92,12 +92,7 @@ export function ScheduleDialog({
       saving={saving}
     >
       <Field label={t("name")} htmlFor="sched-name" error={errors.name && t("nameHint")}>
-        <Input
-          id="sched-name"
-          {...form.register("name")}
-          disabled={Boolean(initial)}
-          className="font-mono"
-        />
+        <Input id="sched-name" {...form.register("name")} disabled={Boolean(initial)} />
       </Field>
       <Field
         label={t("cron")}
@@ -105,15 +100,10 @@ export function ScheduleDialog({
         error={errors.cron && t("cronHint")}
         hint={t("cronHint")}
       >
-        <Input id="sched-cron" {...form.register("cron")} className="font-mono" />
+        <Input id="sched-cron" {...form.register("cron")} />
       </Field>
       <Field label={t("source")} htmlFor="sched-source" error={errors.source && tc("required")}>
-        <Input
-          id="sched-source"
-          list="sched-sources"
-          {...form.register("source")}
-          className="font-mono"
-        />
+        <Input id="sched-source" list="sched-sources" {...form.register("source")} />
         <datalist id="sched-sources">
           {sources.map((s) => (
             <option key={s} value={s}>
@@ -123,12 +113,7 @@ export function ScheduleDialog({
         </datalist>
       </Field>
       <Field label={t("tool")} htmlFor="sched-tool" error={errors.tool && tc("required")}>
-        <Input
-          id="sched-tool"
-          list="sched-tools"
-          {...form.register("tool")}
-          className="font-mono"
-        />
+        <Input id="sched-tool" list="sched-tools" {...form.register("tool")} />
         <datalist id="sched-tools">
           {tools.map((s) => (
             <option key={s} value={s}>

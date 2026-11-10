@@ -16,6 +16,12 @@
   <img src="https://img.shields.io/badge/identity-Entra%20ID-0078D4.svg" alt="Microsoft Entra ID">
 </p>
 
+<p align="center">
+  <a href="docs/images/ontology-architecture.png"><img src="docs/images/ontology-architecture.png" alt="Runtime connections: the ibl.ai platform, the Ontology Host on-premise, and the customer source systems" width="100%"></a>
+</p>
+
+<p align="center"><em>Runtime connections with <code>ONTOLOGY_DATA_STORE=dm</code>. With the default, <code>local</code>, roles, sync schedules and the service registry stay on the Ontology Host.</em></p>
+
 ---
 
 ## What it is
@@ -26,7 +32,9 @@ The prevailing approach extracts your data through a VPN tunnel into a vendor cl
 
 > **You will have your data, and we may not even have access to it.**
 
-One opt-in exception: with `ONTOLOGY_DATA_STORE=dm` the service registry and run history (schema metadata, safety and sync results, the console audit log) live in your ibl.ai platform's database instead of the backend's own — never source records, and credentials only as ciphertext whose key stays with you ([DEV.md](DEV.md#dm-store-ontology_data_storedm)).
+One opt-in exception: with `ONTOLOGY_DATA_STORE=dm` the roles, the sync schedules and the service registry (schema metadata, safety and health results, provisioning runs) live in your ibl.ai platform instead of on this host — never source records, and credentials only as ciphertext whose key stays with you. Sync runs and the audit log stay on-premise either way ([DEV.md](DEV.md#platform-store-ontology_data_storedm)).
+
+The Ontology Frontend, its admin console, runs beside the backend or once for every platform (`ontology.ibl.ai`). For the hosted one the backend records its public address in your platform (`ontology platform address`), and your platform's admins reach it with their own platform token, the only credential it is sent ([DEV.md](DEV.md#one-ontology-frontend-for-every-platform)).
 
 It is **domain-agnostic**: the same stack serves a university (higher-ed systems) and an enterprise (CRM/ITSM/HCM/data-warehouse), with built-in defaults for both (see [the catalog](#built-in-service-catalog)).
 
@@ -157,8 +165,10 @@ ontology deploy up                          # bring up the stack (compose)
 Then register iblai/ontology as an MCP server in your agent platform (see [docs/platform-integration.md](docs/platform-integration.md)):
 
 ```bash
-ontology platform register --url https://ontology.your-org.edu/mcp
-ontology platform connect  --server 14 --scope user --role FinancialAidCounselor
+ontology platform register --url https://ontology.your-org.edu/mcp --auth-type none --role Executive  # the platform service token
+ontology platform register --url https://ontology.your-org.edu/mcp                                   # per-user Entra ID OAuth
+ontology platform connect  --server 14 --scope user --role FinancialAidCounselor --auth-type oauth2
+ontology platform attach   <agent-id> --server 14
 ```
 
 ## Built-in service catalog
@@ -188,6 +198,7 @@ ontology platform connect  --server 14 --scope user --role FinancialAidCounselor
 | `snowflake` | Snowflake Data Warehouse | database | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/snowflake/SKILL.md) |
 | `salesforce` | Salesforce CRM / Sales Cloud | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/salesforce/SKILL.md) |
 | `hubspot` | HubSpot CRM | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/hubspot/SKILL.md) |
+| `twenty` | Twenty CRM (cloud; self-hosted is a `generic-postgres` source) | api | [SKILL.md](src/iblai_ontology/catalog/skills/twenty.md) |
 | `servicenow-itsm` | ServiceNow ITSM | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/servicenow/SKILL.md) |
 | `jira` | Jira | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/jira/SKILL.md) |
 | `confluence` | Confluence | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/confluence/SKILL.md) |
@@ -230,8 +241,8 @@ Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
 ## Security posture
 
 - **Read-only everywhere.** No source writes in v1. Before touching any data, the safety suite attempts seven write operations and requires **all seven be denied** — otherwise it refuses to proceed and prints remediation SQL.
-- **Data stays on-premise.** Source credentials never leave your network in readable form (with `ONTOLOGY_DATA_STORE=dm` the DM holds only their ciphertext; the key stays in the gateway); the agent runtime queries at runtime, scoped by the authenticated user.
-- **Identity through Entra ID.** Every MCP request carries the user's Entra ID JWT; the gateway validates it and resolves the caller's role against `roles.yaml`. See [docs/identity.md](docs/identity.md).
+- **Data stays on-premise.** Source credentials never leave your network in readable form (with `ONTOLOGY_DATA_STORE=dm` the ibl.ai platform holds only their ciphertext; the key stays in the gateway); the agent runtime queries at runtime, scoped by the authenticated user.
+- **Identity through Entra ID.** Every MCP request carries the user's Entra ID JWT; the gateway validates it and resolves the caller's role against `roles.yaml` (with `ONTOLOGY_DATA_STORE=dm`, against the roles kept in your ibl.ai platform). See [docs/identity.md](docs/identity.md).
 - **Credential isolation & containment.** Each inbound MCP server has its own credential scope; connection secrets are encrypted at rest.
 
 ### Gateway hardening (environment variables)

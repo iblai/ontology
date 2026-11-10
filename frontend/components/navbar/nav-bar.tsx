@@ -32,8 +32,10 @@ interface NavBarProps {
   authURL: string;
   onLogout: () => void;
   onTenantChange: (key: string) => void;
-  /** No `ONTOLOGY_API_URL`: the console serves its mock data. */
+  /** No backend configured: the console serves its mock data. */
   demo: boolean;
+  /** Hosted mode without a backend this member may use: nothing to create or report. */
+  noBackend?: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export function NavBar({
   onLogout,
   onTenantChange,
   demo,
+  noBackend = false,
 }: NavBarProps) {
   const t = useTranslations("shell");
   const router = useRouter();
@@ -88,8 +91,8 @@ export function NavBar({
       <SearchField />
 
       <div className="flex flex-1 items-center justify-end gap-3 lg:gap-4">
-        <NewMenu />
-        <DataSource demo={demo} />
+        {!noBackend && <NewMenu />}
+        {!noBackend && <DataSource demo={demo} />}
         <CreditBalanceWidget />
         <NotificationDropdown
           org={tenantKey}
@@ -192,7 +195,7 @@ function NewMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="hidden gap-1 text-[#646464] md:inline-flex">
+        <Button variant="outline" size="sm" className="hidden gap-1 md:inline-flex">
           <Plus className="size-4" />
           {t("new")}
           <ChevronDown className="size-3.5 opacity-60" />

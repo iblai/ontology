@@ -45,6 +45,22 @@ TYPE_MAPPING = {
     "bit": "BOOLEAN",
     "money": "NUMERIC(19,4)",
     "smallmoney": "NUMERIC(10,4)",
+    # PostgreSQL (information_schema names)
+    "uuid": "UUID",
+    "jsonb": "JSONB",
+    "json": "JSONB",
+    "numeric": "NUMERIC",
+    "double precision": "DOUBLE PRECISION",
+    "real": "REAL",
+    "integer": "INTEGER",
+    "smallint": "SMALLINT",
+    "boolean": "BOOLEAN",
+    "timestamp with time zone": "TIMESTAMPTZ",
+    "timestamp without time zone": "TIMESTAMP",
+    "character varying": "TEXT",
+    "USER-DEFINED": "TEXT",
+    "tsvector": "TEXT",
+    "ARRAY": "TEXT",
 }
 
 

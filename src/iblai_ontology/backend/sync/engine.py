@@ -26,6 +26,24 @@ _LIMIT_SQL = {
 }
 
 
+def _owned_by(sched: dict, service: str) -> bool:
+    """A schedule's service: its ``service`` key or a source named ``<name>``, ``<name>-source`` or ``<name>-mcp`` (no prefix match: ``twenty`` is also a prefix of ``twenty-cloud``)."""
+    source = sched.get("source", "")
+    return sched.get("service") == service or source in (
+        service,
+        f"{service}-source",
+        f"{service}-mcp",
+    )
+
+
+def _qualified(table: str, db_type: str | None) -> str:
+    """``schema.table`` as the dialect's FROM clause wants it."""
+    # ponytail: PostgreSQL folds unquoted names, so camelCase sources need quotes; the other dialects stay unquoted until a mixed-case source arrives.
+    if db_type == "postgresql":
+        return ".".join(f'"{part}"' for part in table.split("."))
+    return table
+
+
 @dataclass
 class SyncResult:
     schedule_name: str
@@ -75,13 +93,13 @@ class SyncRunner:
         from iblai_ontology.backend.services.encryption import decrypt_connection_config
 
         config = decrypt_connection_config(service.connection_config_encrypted)
-        # ponytail: unquoted identifiers; quote per dialect when a source has mixed-case names.
+        name = _qualified(table, config.get("db_type"))
         sql = (
             _LIMIT_SQL.get(
                 config.get("db_type"), "SELECT * FROM {table} LIMIT {n}"
-            ).format(table=table, n=limit)
+            ).format(table=name, n=limit)
             if limit
-            else f"SELECT * FROM {table}"
+            else f"SELECT * FROM {name}"
         )
         conn = create_connection(service.adapter, config)
         try:
@@ -121,13 +139,12 @@ class SyncRunner:
         schedule_name: str | None = None,
         force_full: bool = False,
     ):
-        from iblai_ontology.config.reader import ConfigReader
+        from iblai_ontology.backend.sync import schedules as source
 
         schedules = [
             s
-            for s in ConfigReader().get_sync_schedules()
-            if (s.get("source", "").startswith(service) or service in s.get("name", ""))
-            and s.get("enabled", True) is not False
+            for s in source.all()
+            if _owned_by(s, service) and s.get("enabled", True) is not False
         ]
         if schedule_name:
             schedules = [s for s in schedules if s["name"] == schedule_name]
@@ -137,12 +154,12 @@ class SyncRunner:
         return results
 
     def run_all_due(self, *, force_full: bool = False):
-        from iblai_ontology.config.reader import ConfigReader
+        from iblai_ontology.backend.sync import schedules
 
         # A real deployment consults each schedule's cron + last run; here we run
         # every configured schedule (Celery beat owns the cron cadence).
         results = []
-        for sched in ConfigReader().get_sync_schedules():
+        for sched in schedules.all():
             if sched.get("enabled", True) is False:
                 continue
             results.append(self._run_schedule(sched, force_full=force_full))

@@ -28,7 +28,7 @@ Event-driven sync is a Phase 4 capability; full and delta are the day-one modes.
 
 ### `sync-schedules.yaml`
 
-Schedules are declared in `config/sync-schedules.yaml`. Each entry names a cron expression, the source and tool to call, and where the output goes (`text_memories` path and/or `structured_cache` table).
+Schedules are declared in `config/sync-schedules.yaml`. Each entry names a cron expression, the source and tool to call, and where the output goes (`text_memories` path and/or `structured_cache` table). With `ONTOLOGY_DATA_STORE=dm` the same entries live in the ibl.ai platform, one record per schedule, and `ontology sync import` copies the file in ([DEV.md](../../DEV.md#platform-store-ontology_data_storedm)).
 
 ```yaml
 schedules:

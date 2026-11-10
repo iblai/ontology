@@ -22,14 +22,15 @@ class ScriptedCursor:
             self._rows = [("public",)]
         elif "INFORMATION_SCHEMA.TABLES" in u:
             self._rows = [("students", 4287)]
-        elif "TABLE_CONSTRAINTS" in u:  # primary keys
+        elif "PG_INDEX" in u:  # primary keys, read from pg_catalog
             self._rows = [("id",)]
-        elif "REFERENTIAL_CONSTRAINTS" in u:  # foreign keys
-            self._rows = []
+        elif "PG_CONSTRAINT" in u:  # foreign keys, read from pg_catalog
+            self._rows = [("course_id", "courses", "id")]
         elif "INFORMATION_SCHEMA.COLUMNS" in u:
             self._rows = [
                 ("id", "text", "NO", None, None),
                 ("full_name", "text", "YES", None, None),
+                ("course_id", "uuid", "YES", None, None),
             ]
         elif "CURRENT_DATABASE" in u:
             self._rows = [("ontology",)]
@@ -55,13 +56,22 @@ def test_introspect_builds_manifest():
     table = manifest.tables[0]
     assert table.table_name == "students"
     assert table.row_count == 4287
-    assert table.column_count == 2
+    assert table.column_count == 3
     assert "id" in table.primary_key_columns
     # id is NOT NULL, full_name is nullable
     by_name = {c.name: c for c in table.columns}
     assert by_name["id"].nullable is False
     assert by_name["full_name"].nullable is True
     assert by_name["id"].is_primary_key is True
+    # Keys come from pg_catalog, which a SELECT-only role can read (information_schema hides them).
+    assert by_name["course_id"].foreign_key_table == "courses"
+    assert table.foreign_keys == [
+        {
+            "column": "course_id",
+            "references_table": "courses",
+            "references_column": "id",
+        }
+    ]
 
 
 def test_manifest_summary_markdown():

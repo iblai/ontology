@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from celery import Celery
@@ -19,14 +20,14 @@ app.autodiscover_tasks(
 
 @app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):  # pragma: no cover - wiring
-    """Populate the beat schedule from sync-schedules.yaml at startup."""
+    """Populate the beat schedule from the sync schedules, once, at startup."""
     try:
         from iblai_ontology.backend.sync.scheduler import build_beat_schedule
 
         sender.conf.beat_schedule.update(build_beat_schedule())
     except Exception:
-        # A deployment without sync-schedules.yaml still boots.
-        pass
+        # Still boots, with no schedule: say so instead of running nothing in silence.
+        logging.getLogger(__name__).exception("beat: could not read the sync schedules")
 
 
 @app.task(bind=True)

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { CATALOG } from "@/lib/ontology/catalog";
 import { SectionHeader } from "@/components/console/section-header";
+import { FactRow, Facts } from "@/components/console/facts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeBlock } from "@/components/console/code-block";
@@ -16,11 +17,11 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
     <div className="flex flex-col gap-6">
       <SectionHeader
         title={entry.display_name}
-        subtitle={<span className="font-mono text-xs">{entry.key}</span>}
+        subtitle={<span className="text-xs">{entry.key}</span>}
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" asChild>
+        <Button size="sm" variant="outline" asChild>
           <Link href={`/services/add?from=${entry.key}`}>
             <Plus className="mr-2 size-3.5" />
             Seed new service from this entry
@@ -52,17 +53,16 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Properties</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-            <Row label="Type" value={<span className="font-mono text-xs">{entry.type}</span>} />
-            <Row label="Domain" value={<span className="font-mono text-xs">{entry.domain}</span>} />
-            <Row
-              label="Adapter"
-              value={<span className="font-mono text-xs">{entry.adapter}</span>}
-            />
-            <Row
-              label="Default toolset"
-              value={<span className="font-mono text-xs">{entry.default_toolset}</span>}
-            />
+          <CardContent>
+            <Facts>
+              <FactRow label="Type" value={<span className="text-xs">{entry.type}</span>} />
+              <FactRow label="Domain" value={<span className="text-xs">{entry.domain}</span>} />
+              <FactRow label="Adapter" value={<span className="text-xs">{entry.adapter}</span>} />
+              <FactRow
+                label="Default toolset"
+                value={<span className="text-xs">{entry.default_toolset}</span>}
+              />
+            </Facts>
           </CardContent>
         </Card>
       </div>
@@ -83,7 +83,7 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
           <CardContent>
             <ul className="flex flex-col gap-1">
               {entry.env.map((e) => (
-                <li key={e} className="text-foreground font-mono text-xs">
+                <li key={e} className="text-foreground text-xs">
                   {e}
                 </li>
               ))}
@@ -100,8 +100,8 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
                 <tbody>
                   {Object.entries(entry.sync_defaults).map(([k, v]) => (
                     <tr key={k} className="border-b last:border-b-0">
-                      <td className="text-muted-foreground px-3 py-2 font-mono text-xs">{k}</td>
-                      <td className="text-foreground px-3 py-2 font-mono text-xs">{v}</td>
+                      <td className="text-muted-foreground px-3 py-2 text-xs">{k}</td>
+                      <td className="text-foreground px-3 py-2 text-xs">{v}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -110,15 +110,6 @@ export default async function CatalogDetailPage({ params }: { params: Promise<{ 
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className="text-foreground text-sm">{value}</span>
     </div>
   );
 }

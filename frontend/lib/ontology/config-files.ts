@@ -1,10 +1,9 @@
 /**
- * Server-only reader for the backend's configuration files.
+ * Server-only renderer of the backend's configuration files for the Configuration page.
  *
- * In forwarded mode the console may sit beside the iblai/ontology backend
- * checkout, so its Next server reads the deployment's config files directly.
- * `ONTOLOGY_ROOT` overrides the repo root (defaults to the app's parent
- * directory). Mock mode renders the same files from its state (`configFromTexts`).
+ * A backend sends its files as text (`GET /config`), masked on its own host
+ * (`configFromBackend`); mock mode renders the same files from its state
+ * (`configFromTexts`).
  *
  * Secrets are masked BEFORE anything leaves this module: any value whose key
  * looks credential-like is replaced with a mask unless it is a `${ENV_VAR}`
@@ -12,8 +11,6 @@
  * always masked wholesale.
  */
 
-import { readFileSync, statSync } from "node:fs";
-import path from "node:path";
 import YAML from "yaml";
 import type { BackendConfigFile, BackendConfigSnapshot } from "./types";
 
@@ -21,10 +18,6 @@ const SECRET_KEY_RE =
   /(password|passwd|secret|token|api[_-]?key|client[_-]?secret|private[_-]?key|credential|auth)/i;
 const ENV_REF_RE = /^\s*\$\{[A-Z0-9_]+\}\s*$/;
 const MASK = "••••••••";
-
-export function ontologyRoot(): string {
-  return process.env.ONTOLOGY_ROOT ?? path.resolve(process.cwd(), "..");
-}
 
 /** Mask credential-looking `key: value` / `key=value` lines in raw config text. */
 export function maskSecrets(raw: string): string {
@@ -74,13 +67,6 @@ const summarizers: Record<string, Summarizer> = {
   ontology: (raw) => {
     const doc = yamlKeys(raw);
     return [{ label: "sections", value: Object.keys(doc).join(", ") || "—" }];
-  },
-  services: (raw) => {
-    const list = entryNames(yamlKeys(raw).services);
-    return [
-      { label: "services", value: String(list.length) },
-      { label: "names", value: list.join(", ") || "—" },
-    ];
   },
   schedules: (raw) => {
     const list = entryNames(yamlKeys(raw).schedules);
@@ -142,7 +128,6 @@ interface FileSpec {
 
 const FILES: FileSpec[] = [
   { id: "ontology", path: "config/ontology.yaml", format: "yaml" },
-  { id: "services", path: "config/services.yaml", format: "yaml" },
   { id: "schedules", path: "config/sync-schedules.yaml", format: "yaml" },
   { id: "roles", path: "config/roles.yaml", format: "yaml" },
   { id: "tools", path: "config/tools.yaml", format: "yaml" },
@@ -186,15 +171,6 @@ function describe(spec: FileSpec, raw: string, mtime: Date): BackendConfigFile {
   };
 }
 
-function readOne(root: string, spec: FileSpec): BackendConfigFile {
-  const abs = path.join(root, spec.path);
-  try {
-    return describe(spec, readFileSync(abs, "utf8"), statSync(abs).mtime);
-  } catch {
-    return absent(spec);
-  }
-}
-
 /** A snapshot from texts keyed by file id (the mock); files without a text come back absent. */
 export function configFromTexts(
   root: string,
@@ -211,11 +187,27 @@ export function configFromTexts(
   };
 }
 
-export function readBackendConfig(): BackendConfigSnapshot {
-  const root = ontologyRoot();
+/** A backend's `GET /config`: each file as text it has masked, `null` when the file is absent. */
+export interface BackendConfigPayload {
+  root: string;
+  files: { id: string; content: string | null; modified_at: string | null }[];
+}
+
+/**
+ * A snapshot of what a backend sent, in this page's order and masked a second time.
+ * A file it did not send is left out: the ibl.ai platform holds it (roles and schedules
+ * with `ONTOLOGY_DATA_STORE=dm`), or the host does.
+ */
+export function configFromBackend(sent: BackendConfigPayload): BackendConfigSnapshot {
+  const byId = new Map(sent.files.map((file) => [file.id, file]));
   return {
-    root,
+    root: sent.root,
     generatedAt: new Date().toISOString(),
-    files: FILES.map((spec) => readOne(root, spec)),
+    files: FILES.flatMap((spec) => {
+      const file = byId.get(spec.id);
+      if (!file) return [];
+      if (file.content === null) return [absent(spec)];
+      return [describe(spec, file.content, new Date(file.modified_at ?? Date.now()))];
+    }),
   };
 }

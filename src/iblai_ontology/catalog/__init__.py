@@ -42,6 +42,8 @@ class CatalogEntry:
     connection: dict = field(default_factory=dict)
     default_toolset: str = ""
     sync_defaults: dict = field(default_factory=dict)
+    # Vendor mapping per sync_defaults key: table, entity, fields, template (the house model).
+    mapping: dict = field(default_factory=dict)
     summary: str = ""
     skill: Optional[str] = None  # vendored skill filename
 

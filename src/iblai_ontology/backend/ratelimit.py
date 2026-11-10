@@ -60,7 +60,22 @@ class OntologyRateLimitMiddleware:
     def _subject(self, request):
         resolved = getattr(request, "ontology", None)
         identity = getattr(resolved, "identity", None) if resolved else None
-        return getattr(identity, "user_id", None)
+        subject = getattr(identity, "user_id", None)
+        if subject:
+            return subject
+        # Console requests all come from the Ontology Frontend's one address: count a
+        # DM token the console API has verified by the token, not by that address.
+        # ponytail: a token not yet verified still counts by address; the edge limits floods.
+        scheme, _, token = request.META.get("HTTP_AUTHORIZATION", "").partition(" ")
+        if scheme.lower() == "token" and token.strip():
+            from django.core.cache import cache
+
+            from iblai_ontology.backend.api.auth import verdict_key
+
+            key = verdict_key(token.strip())
+            if cache.get(key) is not None:
+                return key
+        return None
 
     def _is_tools_call(self, request) -> bool:
         if request.method != "POST":

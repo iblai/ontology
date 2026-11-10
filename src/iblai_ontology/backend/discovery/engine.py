@@ -273,15 +273,27 @@ class DiscoveryEngine:
         out = Path(output_dir or Path("config/generated") / name)
         out.mkdir(parents=True, exist_ok=True)
         (out / "sync-schedules.yaml").write_text(
-            api_schedules_yaml(name, display, entry.sync_defaults if entry else {})
+            api_schedules_yaml(
+                name,
+                display,
+                entry.sync_defaults if entry else {},
+                entry.mapping if entry else None,
+            )
         )
         return service
 
-    def map(self, name: str, *, sample_rows: int | None = None) -> dict[str, dict]:
+    def map(
+        self,
+        name: str,
+        *,
+        sample_rows: int | None = None,
+        catalog: str | None = None,
+    ) -> dict[str, dict]:
         """Ask the configured LLM how each discovered table maps onto the house entities.
 
         The answer is recorded as table edits (``overrides``), so it is reviewable in
         the console and survives a rediscovery; approve regenerates the config from it.
+        ``catalog`` applies a catalog entry's vendor mapping (by table name) instead.
         """
         from iblai_ontology.backend import store
         from iblai_ontology.backend.discovery.llm_analyzer import MappingProposer
@@ -295,7 +307,21 @@ class DiscoveryEngine:
             else str(t.get("table_name"))
             for t in (service.schema_manifest or {}).get("tables") or []
         }
-        proposed = MappingProposer(service, sample_rows=sample_rows).propose()
+        if catalog:
+            from iblai_ontology.catalog import get_entry
+
+            by_table = {
+                m["table"]: m
+                for m in get_entry(catalog).mapping.values()
+                if m.get("table")
+            }
+            proposed = {
+                t: by_table[t.split(".")[-1]]
+                for t in known
+                if t.split(".")[-1] in by_table
+            }
+        else:
+            proposed = MappingProposer(service, sample_rows=sample_rows).propose()
         analysis = dict(service.llm_analysis or {})
         applied: dict[str, dict] = {}
         for table, m in proposed.items():

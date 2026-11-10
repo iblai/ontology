@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -103,15 +104,48 @@ def history(
 @app.command()
 def schedule() -> None:
     """Show current sync schedules."""
-    from iblai_ontology.config.reader import ConfigReader
+    from iblai_ontology.backend.sync import schedules
+    from iblai_ontology.config import dm_store
     from iblai_ontology.utils.output import print_table
 
-    schedules = ConfigReader().get_sync_schedules()
+    source = "the ibl.ai platform" if dm_store() else "sync-schedules.yaml"
     print_table(
-        title="Sync Schedules",
-        columns=["Name", "Cron", "Source", "Tool", "Description"],
+        title=f"Sync Schedules ({source})",
+        columns=["Name", "Cron", "Source", "Tool or Table", "Description"],
         rows=[
-            [s["name"], s["cron"], s["source"], s["tool"], s.get("description", "")]
-            for s in schedules
+            # A table schedule has no tool, an event-driven one no cron.
+            [
+                s["name"],
+                s.get("cron", ""),
+                s.get("source", ""),
+                s.get("tool") or s.get("table", ""),
+                s.get("description", ""),
+            ]
+            for s in schedules.all()
         ],
     )
+
+
+@app.command(name="import")
+def import_schedules(
+    path: Optional[Path] = typer.Argument(
+        None, help="A sync-schedules.yaml (default: the config directory's)."
+    ),
+) -> None:
+    """Copy a sync-schedules.yaml into the ibl.ai platform (ONTOLOGY_DATA_STORE=dm)."""
+    import yaml
+
+    from iblai_ontology.backend.sync import schedules
+    from iblai_ontology.config import config_dir, dm_store
+
+    source = path or config_dir() / "sync-schedules.yaml"
+    if not dm_store():
+        typer.echo("Not in dm mode: the file is the store already.", err=True)
+        raise typer.Exit(code=1)
+    if not source.exists():
+        typer.echo(f"{source} not found.", err=True)
+        raise typer.Exit(code=1)
+    # Read raw, so ${VAR} is stored as written.
+    for spec in (yaml.safe_load(source.read_text()) or {}).get("schedules") or []:
+        schedules.upsert(spec)
+        typer.echo(spec["name"])

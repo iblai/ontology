@@ -67,12 +67,7 @@ export function ToolsetDialog({
       saving={saving}
     >
       <Field label={t("name")} htmlFor="toolset-name" error={errors.name && tc("required")}>
-        <Input
-          id="toolset-name"
-          {...form.register("name")}
-          disabled={Boolean(initial)}
-          className="font-mono"
-        />
+        <Input id="toolset-name" {...form.register("name")} disabled={Boolean(initial)} />
       </Field>
       <Field label={t("pick")} error={errors.tools && tc("required")}>
         <Controller
@@ -93,7 +88,7 @@ export function ToolsetDialog({
                         )
                       }
                     />
-                    <span className="font-mono text-xs">{name}</span>
+                    <span className="text-xs">{name}</span>
                   </label>
                 </li>
               ))}

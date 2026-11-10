@@ -54,7 +54,7 @@ export default function RolesPage() {
       accessorKey: "name",
       header: sortableHeader(t("colName")),
       cell: ({ row }) => (
-        <span className="text-foreground font-mono text-xs font-medium">{row.original.name}</span>
+        <span className="text-foreground text-xs font-medium">{row.original.name}</span>
       ),
     },
     {
@@ -66,7 +66,7 @@ export default function RolesPage() {
       accessorKey: "mcp_toolsets",
       header: t("colToolsets"),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">
+        <span className="text-muted-foreground text-xs">
           {row.original.mcp_toolsets.join(", ")}
         </span>
       ),

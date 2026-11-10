@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { degrees, grantPatch, neighbourhood, reach, searchGraph, toggleGrant } from "./graph";
+import {
+  cacheTables,
+  cachesDomain,
+  degrees,
+  grantPatch,
+  neighbourhood,
+  reach,
+  searchGraph,
+  toggleGrant,
+} from "./graph";
 import type { GraphData, GraphLink, GraphNode, Role } from "./types";
 
 const L = (
@@ -114,6 +123,56 @@ describe("grantPatch", () => {
     expect(p.had).toBe(true);
     expect(p.role.memory_paths).toEqual([]);
     expect(edge(p.links, "memory_domain:students")).toBeUndefined();
+  });
+});
+
+describe("a memory domain's cache", () => {
+  const domain = (label: string, tables?: string[]): GraphNode => ({
+    id: `memory_domain:${label}`,
+    kind: "memory_domain",
+    label,
+    group: label,
+    meta: tables ? { cache_tables: tables } : {},
+  });
+  // As a backend reports them: a domain is cached in tables of other names, or in none.
+  const students = domain("students", ["students", "holds"]);
+  const aid = domain("financial-aid", ["financial_aid"]);
+  const hr = domain("hr", []);
+  const data: GraphData = {
+    nodes: [students, aid, hr],
+    links: [L("role:r", "memory_domain:students", "caches")],
+    stats: { hubs: [], orphans: 0, dangling: 0 },
+  };
+  const holding = (...tables: string[]): Role => ({ ...role, cache_tables: tables });
+
+  it("is granted by the tables it is cached in, not by its name", () => {
+    const p = grantPatch(data, holding(), "cache", "financial-aid");
+    expect(p.had).toBe(false);
+    expect(p.role.cache_tables).toEqual(["financial_aid"]);
+    expect(p.links).toContainEqual({
+      source: "role:r",
+      target: "memory_domain:financial-aid",
+      kind: "caches",
+    });
+  });
+  it("reads as granted with one of its tables, and is revoked with all of them", () => {
+    const p = grantPatch(data, holding("holds", "other"), "cache", "students");
+    expect(p.had).toBe(true);
+    expect(p.role.cache_tables).toEqual(["other"]);
+    expect(p.links.some((l) => l.target === "memory_domain:students")).toBe(false);
+  });
+  it("expands * to every domain's tables on the first revoke", () => {
+    const p = grantPatch(data, holding("*"), "cache", "students");
+    expect(p.had).toBe(true);
+    expect(p.role.cache_tables).toEqual(["financial_aid"]);
+  });
+  it("has no table to grant when the backend lists none, and its own name when it lists nothing", () => {
+    expect(cacheTables(hr)).toEqual([]);
+    expect(cachesDomain(holding("*"), hr)).toBe(false);
+    expect(cacheTables(domain("courses"))).toEqual(["courses"]);
+    // A role that holds the domain's name does not hold its table.
+    expect(cachesDomain(holding("financial-aid"), aid)).toBe(false);
+    expect(cachesDomain(holding("*"), aid)).toBe(true);
   });
 });
 

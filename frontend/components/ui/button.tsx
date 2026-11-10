@@ -9,15 +9,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "bg-[linear-gradient(135deg,#00b0ef,#0058cc)] text-white shadow-xs hover:opacity-90",
-        brand: "bg-[linear-gradient(135deg,#00b0ef,#0058cc)] text-white shadow-xs hover:opacity-90",
+        // Solid brand blue: a confirm inside a dialog or wizard step; page actions take `outline`.
+        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
         destructive:
           "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+        // The shell's quiet button (the sidebar's "Add a service", the top bar's "New").
         outline:
-          "border border-[#0058cc] bg-white text-[#0058cc] shadow-xs hover:bg-[#eff6ff] hover:text-[#004499] dark:bg-input/30 dark:border-input dark:text-primary dark:hover:bg-input/50 dark:hover:text-primary",
+          "border border-input bg-background text-[#646464] shadow-xs hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:text-foreground dark:hover:bg-input/50",
         secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        ghost: "hover:bg-muted hover:text-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

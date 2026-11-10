@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { X } from "lucide-react";
 import type { GraphData, GraphKind, GraphLinkKind, GraphNode, Role } from "@/lib/ontology/types";
-import { KIND_COLORS, endId, type ToggleKind } from "@/lib/ontology/graph";
+import {
+  KIND_COLORS,
+  cacheTables,
+  cachesDomain,
+  endId,
+  type ToggleKind,
+} from "@/lib/ontology/graph";
 import { fmtRows } from "@/lib/ontology/format";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -119,7 +125,7 @@ export function NodePanel({
   return (
     <aside className="flex h-full w-full flex-col gap-4 overflow-y-auto rounded-xl border border-white/10 bg-[#0f1526]/80 p-4 shadow-xl backdrop-blur-md">
       <div className="flex items-start justify-between gap-2">
-        <h2 className="text-foreground flex items-center gap-2 font-mono text-sm font-medium break-all">
+        <h2 className="text-foreground flex items-center gap-2 text-sm font-medium break-all">
           <span
             className="inline-block size-2.5 shrink-0 rounded-full"
             style={{ backgroundColor: KIND_COLORS[node.kind] }}
@@ -140,7 +146,7 @@ export function NodePanel({
         {facts.map(([k, v]) => (
           <div key={k} className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">{t(`facts.${k}`)}</dt>
-            <dd className="text-foreground truncate font-mono">{v}</dd>
+            <dd className="text-foreground truncate">{v}</dd>
           </div>
         ))}
       </dl>
@@ -157,7 +163,7 @@ export function NodePanel({
           {fields.map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-2">
               <dt className="text-muted-foreground truncate">{k}</dt>
-              <dd className="text-foreground truncate font-mono">{v}</dd>
+              <dd className="text-foreground truncate">{v}</dd>
             </div>
           ))}
         </dl>
@@ -175,8 +181,19 @@ export function NodePanel({
       {role && (
         <div className="flex flex-col gap-3 border-t pt-4">
           {TOGGLES.map(([toggleKind, nodeKind, linkKind]) => {
-            const names = allOf(nodeKind);
+            // A cache toggle stands for its domain's tables: only a domain that has one,
+            // and granted when the role holds one of them.
+            const domain = (name: string) =>
+              toggleKind === "cache" ? byId.get(`memory_domain:${name}`) : undefined;
+            const names = allOf(nodeKind).filter((name) => {
+              const node = domain(name);
+              return !node || cacheTables(node).length > 0;
+            });
             const have = grantedTo(linkKind);
+            const checked = (name: string) => {
+              const node = domain(name);
+              return node ? cachesDomain(role, node) : have.has(`${nodeKind}:${name}`);
+            };
             if (names.length === 0) return null;
             return (
               <div key={toggleKind} className="flex flex-col gap-1">
@@ -186,11 +203,11 @@ export function NodePanel({
                     <li key={name}>
                       <label className="hover:bg-muted flex items-center gap-2 rounded px-1 py-0.5 text-xs">
                         <Checkbox
-                          checked={have.has(`${nodeKind}:${name}`)}
+                          checked={checked(name)}
                           disabled={saving}
                           onCheckedChange={() => onToggle(role, toggleKind, name)}
                         />
-                        <span className="truncate font-mono">{name}</span>
+                        <span className="truncate">{name}</span>
                       </label>
                     </li>
                   ))}
@@ -221,7 +238,7 @@ export function NodePanel({
                     className="inline-block size-2 shrink-0 rounded-full"
                     style={{ backgroundColor: KIND_COLORS[n.kind] }}
                   />
-                  <span className="truncate font-mono">{n.label}</span>
+                  <span className="truncate">{n.label}</span>
                   {n.health && (
                     <span className="text-muted-foreground ml-auto">{t(`health.${n.health}`)}</span>
                   )}

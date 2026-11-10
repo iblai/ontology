@@ -23,10 +23,11 @@ const STATUS_ICONS: Record<StepStatus, typeof Check> = {
   skipped: MinusCircle,
 };
 
+// Grey throughout; only a failure is coloured, like an error message anywhere else.
 const STATUS_TONES: Record<StepStatus, string> = {
   pending: "text-muted-foreground",
-  running: "text-blue-600",
-  completed: "text-emerald-600",
+  running: "text-muted-foreground",
+  completed: "text-muted-foreground",
   failed: "text-red-600",
   skipped: "text-muted-foreground",
 };
@@ -43,25 +44,9 @@ export function PipelineStepper({ steps }: { steps: ProvisioningStep[] }) {
         return (
           <li key={step.id} className="relative flex gap-3 pb-5 last:pb-0">
             {i < ordered.length - 1 && (
-              <span
-                className={cn(
-                  "absolute top-6 left-[11px] h-[calc(100%-1rem)] w-px",
-                  step.status === "completed" ? "bg-emerald-200" : "bg-border",
-                )}
-              />
+              <span className="bg-border absolute top-6 left-[11px] h-[calc(100%-1rem)] w-px" />
             )}
-            <span
-              className={cn(
-                "z-10 flex size-6 flex-shrink-0 items-center justify-center rounded-full border bg-background",
-                step.status === "completed"
-                  ? "border-emerald-200"
-                  : step.status === "failed"
-                    ? "border-red-200"
-                    : step.status === "running"
-                      ? "border-blue-200"
-                      : "border-border",
-              )}
-            >
+            <span className="border-border bg-background z-10 flex size-6 flex-shrink-0 items-center justify-center rounded-full border">
               <Icon
                 className={cn(
                   "size-3.5",
@@ -74,7 +59,7 @@ export function PipelineStepper({ steps }: { steps: ProvisioningStep[] }) {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-foreground text-sm font-medium">{label}</span>
                 {step.started_at && step.completed_at && (
-                  <span className="text-muted-foreground font-mono text-xs">
+                  <span className="text-muted-foreground text-xs tabular-nums">
                     {fmtDuration(
                       (new Date(step.completed_at).getTime() -
                         new Date(step.started_at).getTime()) /

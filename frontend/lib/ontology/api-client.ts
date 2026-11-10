@@ -26,18 +26,24 @@ const enc = encodeURIComponent;
 type Ok = { ok: boolean; message: string };
 
 /**
- * The ibl.ai SSO flow stores both tokens in localStorage; the route handler
- * forwards them to a real backend as `Authorization: Token <dm_token>` and
- * `X-Edx-Jwt`. Browser-only (SSR has no localStorage); absent tokens send nothing.
+ * The ibl.ai SSO flow stores the DM token in localStorage; the route handler forwards
+ * it to a real backend as `Authorization: Token <dm_token>`, the one credential a
+ * backend is sent. Browser-only (SSR has no localStorage); no token sends nothing.
  */
 function authHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const headers: Record<string, string> = {};
   const dmToken = window.localStorage.getItem("dm_token");
-  const edxJwt = window.localStorage.getItem("edx_jwt_token");
-  if (dmToken) headers["Authorization"] = `Token ${dmToken}`;
-  if (edxJwt) headers["X-Edx-Jwt"] = edxJwt;
-  return headers;
+  return dmToken ? { Authorization: `Token ${dmToken}` } : {};
+}
+
+/** A refused call: its HTTP status, with the server's own words in the message. */
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, text: string) {
+    super(`API ${status}: ${text}`);
+    this.status = status;
+  }
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,7 +52,7 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   return res.json() as Promise<T>;
 }
 
@@ -133,7 +139,7 @@ export const apiClient = {
     remove: (name: string): Promise<Ok> => del(`/roles/${enc(name)}`),
   },
   config: {
-    // Mock mode renders the files from its state; forwarded mode reads the backend checkout on disk.
+    // Mock mode renders the files from its state; a backend sends its own, masked on its host.
     snapshot: (): Promise<BackendConfigSnapshot> => http("/config"),
   },
   counts: (): Promise<QuickCounts> => http("/counts"),

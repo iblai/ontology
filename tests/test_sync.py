@@ -198,3 +198,31 @@ def test_disabled_schedule_skipped_by_beat_and_run_all_due(tmp_path, monkeypatch
     runner.run_all_due()
     runner.run_service("peoplesoft")
     assert ran == ["alpha", "alpha"]
+
+
+def test_run_service_matches_ownership_not_prefix(tmp_path, monkeypatch):
+    # `twenty` is a prefix of `twenty-cloud`: a sync of one must not run the other's schedules.
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "sync-schedules.yaml").write_text(
+        "schedules:\n"
+        "  - name: twenty-person\n"
+        "    cron: '0 * * * *'\n"
+        "    source: twenty-source\n"
+        "    service: twenty\n"
+        "    table: w.person\n"
+        "  - name: twenty-cloud-people\n"
+        "    cron: '0 * * * *'\n"
+        "    source: twenty-cloud-mcp\n"
+        "    tool: list-people\n"
+    )
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
+    ran: list[str] = []
+    runner = SyncRunner()
+    monkeypatch.setattr(
+        runner, "_run_schedule", lambda sched, force_full: ran.append(sched["name"])
+    )
+    runner.run_service("twenty")
+    assert ran == ["twenty-person"]
+    runner.run_service("twenty-cloud")
+    assert ran == ["twenty-person", "twenty-cloud-people"]

@@ -13,42 +13,55 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
-/** The ghost trash button with its confirm dialog, as on the services list. */
+/** The quiet trash button with its confirm dialog: an icon in a table row, icon + `label` on a page. */
 export function ConfirmDelete({
   name,
+  label,
+  title,
+  body,
+  action,
   onConfirm,
 }: {
   name: string;
+  label?: string;
+  /** Dialog copy; the common delete wording unless the page has its own. */
+  title?: string;
+  body?: string;
+  action?: string;
   onConfirm: () => void | Promise<void>;
 }) {
   const tc = useTranslations("common");
+  const heading = title ?? tc("deleteTitle", { name });
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button
-          variant="ghost"
+          variant={label ? "outline" : "ghost"}
           size="sm"
-          className="text-muted-foreground h-8 px-2 hover:text-red-600"
-          aria-label={tc("deleteTitle", { name })}
+          className={
+            label ? "hover:text-red-600" : "text-muted-foreground h-8 px-2 hover:text-red-600"
+          }
+          aria-label={label ? undefined : heading}
           onClick={(e) => e.stopPropagation()}
         >
           <Trash2 className="size-3.5" />
+          {label}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent onClick={(e) => e.stopPropagation()}>
         <AlertDialogHeader>
-          <AlertDialogTitle>{tc("deleteTitle", { name })}</AlertDialogTitle>
-          <AlertDialogDescription>{tc("deleteBody")}</AlertDialogDescription>
+          <AlertDialogTitle>{heading}</AlertDialogTitle>
+          <AlertDialogDescription>{body ?? tc("deleteBody")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{tc("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => onConfirm()}
-            className="bg-destructive hover:bg-destructive/90 text-white"
+            className={buttonVariants({ variant: "destructive" })}
           >
-            {tc("delete")}
+            {action ?? tc("delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

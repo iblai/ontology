@@ -34,13 +34,13 @@ class CombinedPGCursor:
             raise Exception("ERROR: permission denied for relation foo")
         if "INFORMATION_SCHEMA.SCHEMATA" in u:
             self._rows = [("public",)]
-        elif "INFORMATION_SCHEMA.TABLES" in u and "TABLE_TYPE" in u:
+        elif "TABLE_SCHEMA, TABLE_NAME" in u:  # safety: find a probe table
+            self._rows = [("public", "ps_stdnt_car_term")]
+        elif "INFORMATION_SCHEMA.TABLES" in u:
             self._rows = [("ps_stdnt_car_term", 1000)]
-        elif "INFORMATION_SCHEMA.TABLES" in u:  # safety: find a table
-            self._rows = [("ps_stdnt_car_term",)]
-        elif "TABLE_CONSTRAINTS" in u:
+        elif "PG_INDEX" in u:  # primary keys
             self._rows = [("emplid",)]
-        elif "REFERENTIAL_CONSTRAINTS" in u:
+        elif "PG_CONSTRAINT" in u:  # foreign keys
             self._rows = []
         elif "INFORMATION_SCHEMA.COLUMNS" in u:
             self._rows = [("emplid", "text", "NO", None, None)]
@@ -127,7 +127,7 @@ def test_discovery_engine_blocks_on_write_access(django_db, tmp_path, monkeypatc
         def cursor(self):
             cur = CombinedPGCursor()
             # Make writes "succeed" (dangerous) by overriding execute.
-            cur.execute = lambda sql: setattr(cur, "_rows", [("x",)])  # type: ignore
+            cur.execute = lambda sql: setattr(cur, "_rows", [("public", "x")])  # type: ignore
             return cur
 
     monkeypatch.setattr(engine_mod, "create_connection", lambda *a, **k: WritableConn())

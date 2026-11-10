@@ -107,22 +107,48 @@ export const LINK_OF: Record<ToggleKind, GraphLinkKind> = {
   cache: "caches",
 };
 
-/** The role after granting or revoking one target; `*` becomes an explicit list on the first revoke. */
-export function toggleGrant(role: Role, kind: ToggleKind, name: string, all: string[]): Role {
+/**
+ * The tables a memory domain is cached in, which a role's cache grant has to name. A backend
+ * says which (none: nothing to grant); the demo data caches a domain under its own name.
+ */
+export function cacheTables(domain: GraphNode): string[] {
+  const tables = domain.meta.cache_tables;
+  return Array.isArray(tables) ? tables.map(String) : [domain.label];
+}
+
+/** Whether a role may query a memory domain's cache: it holds one of the domain's tables. */
+export function cachesDomain(role: Role, domain: GraphNode): boolean {
+  const held = role.cache_tables;
+  return cacheTables(domain).some((table) => held.includes("*") || held.includes(table));
+}
+
+/**
+ * The role after granting or revoking one target; `*` becomes an explicit list on the first
+ * revoke. A cache toggle names its domain's tables, granted and revoked together.
+ */
+export function toggleGrant(
+  role: Role,
+  kind: ToggleKind,
+  name: string | string[],
+  all: string[],
+): Role {
+  const names = [name].flat();
   if (kind === "memory_domain") {
     const broad = (p: string) => /^\/ontology\/\*\*?\/?$/.test(p);
     const paths = role.memory_paths.some(broad)
       ? all.map((d) => `/ontology/${d}/**`)
       : role.memory_paths.filter((p) => !broad(p));
-    const mine = (p: string) => p.split("/").filter(Boolean)[1] === name;
+    const mine = (p: string) => p.split("/").filter(Boolean)[1] === names[0];
     const next = paths.some(mine)
       ? paths.filter((p) => !mine(p))
-      : [...paths, `/ontology/${name}/**`];
+      : [...paths, `/ontology/${names[0]}/**`];
     return { ...role, memory_paths: next };
   }
   const key = kind === "toolset" ? "mcp_toolsets" : "cache_tables";
   const current = role[key].includes("*") ? all : role[key];
-  const next = current.includes(name) ? current.filter((x) => x !== name) : [...current, name];
+  const next = names.some((n) => current.includes(n))
+    ? current.filter((x) => !names.includes(x))
+    : [...current, ...names];
   return { ...role, [key]: next };
 }
 
@@ -134,13 +160,21 @@ export function grantPatch(
   name: string,
 ): { role: Role; links: GraphLink[]; had: boolean } {
   const nodeKind = kind === "toolset" ? "toolset" : "memory_domain";
-  const all = g.nodes.filter((n) => n.kind === nodeKind).map((n) => n.label);
-  const next = toggleGrant(role, kind, name, all);
+  const targets = g.nodes.filter((n) => n.kind === nodeKind);
   const linkKind = LINK_OF[kind];
   const roleId = `role:${role.name}`;
   const targetId = `${nodeKind}:${name}`;
   const mine = (l: GraphLink) => l.kind === linkKind && endId(l.source) === roleId;
-  const had = g.links.some((l) => mine(l) && endId(l.target) === targetId);
+  const domain = kind === "cache" ? targets.find((n) => n.label === name) : undefined;
+  // A cache grant is read off the role's tables: an edge can stand for a table of another name.
+  const had = domain
+    ? cachesDomain(role, domain)
+    : g.links.some((l) => mine(l) && endId(l.target) === targetId);
+  const labels = targets.map((n) => n.label);
+  const next = domain
+    ? // `*` expands to every table a domain is cached in.
+      toggleGrant(role, kind, cacheTables(domain), [...new Set(targets.flatMap(cacheTables))])
+    : toggleGrant(role, kind, name, labels);
   // A wildcard became explicit: keep its edges, drop the flag; then flip the toggled one.
   const links = g.links
     .map((l) => (mine(l) ? { ...l, wildcard: false } : l))

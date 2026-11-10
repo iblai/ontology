@@ -97,6 +97,34 @@ def test_authenticated_subject_keys_separately_from_ip():
     assert mw(_post(ip="10.0.0.9")) == "OK"
 
 
+def test_a_verified_dm_token_has_its_own_bucket_behind_one_address():
+    """Console requests all arrive from the Ontology Frontend's one address."""
+    pytest.importorskip("rest_framework")
+    from django.core.cache import cache
+    from django.test import RequestFactory
+
+    from iblai_ontology.backend.api.auth import verdict_key
+
+    def get(token):
+        req = RequestFactory().get(
+            "/roles", REMOTE_ADDR="10.0.0.5", HTTP_AUTHORIZATION=f"Token {token}"
+        )
+        req.ontology = None
+        return req
+
+    mw = _mw()
+    for token in ("jane", "john"):  # the console API verified these two
+        cache.set(verdict_key(token), {"admin": True}, 300)
+    for _ in range(3):
+        assert mw(get("jane")) == "OK"
+    assert mw(get("jane")).status_code == 429
+    assert mw(get("john")) == "OK"  # another user, the same address
+    # A token nobody has verified is counted by the address.
+    for _ in range(3):
+        assert mw(get("unverified")) == "OK"
+    assert mw(get("another-unverified")).status_code == 429
+
+
 def test_disabled_bypasses():
     mw = _mw(RATELIMIT_ENABLED=False)
     for _ in range(10):

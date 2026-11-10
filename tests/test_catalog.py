@@ -23,6 +23,7 @@ ENTERPRISE_KEYS = {
     "snowflake",
     "salesforce",
     "hubspot",
+    "twenty",
     "servicenow-itsm",
     "jira",
     "confluence",
@@ -157,3 +158,14 @@ def test_api_entries_have_vendored_skill():
 def test_get_entry_unknown_raises():
     with pytest.raises(KeyError):
         get_entry("nope")
+
+
+def test_twenty_ships_its_mapping():
+    twenty = get_entry("twenty")
+    assert twenty.type == "api"
+    # One mapping per synced object: the workspace table, the house entity, the renames.
+    assert set(twenty.mapping) == set(twenty.sync_defaults)
+    people = twenty.mapping["people"]
+    assert (people["table"], people["entity"]) == ("person", "persons")
+    assert people["fields"]["nameFirstName"] == "first_name"
+    assert all(m["table"] and m["entity"] for m in twenty.mapping.values())

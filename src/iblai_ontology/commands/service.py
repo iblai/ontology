@@ -88,13 +88,14 @@ def add(
     # API sources (catalog or skill) are served by a custom MCP server, not introspected:
     # register the service with the catalog's schedules and show the skill's read-only tools.
     if skill or (entry and entry.type == "api"):
-        ref = skill or entry.skill.removesuffix(".md")
+        ref = skill or (entry.skill or "").removesuffix(".md")
         from iblai_ontology.commands.skill import import_skill
 
-        console.print(
-            f"[highlight]API source[/highlight] — discovery seed from skill '{ref}':"
-        )
-        import_skill(ref)
+        if ref:
+            console.print(
+                f"[highlight]API source[/highlight] — discovery seed from skill '{ref}':"
+            )
+            import_skill(ref)
         from iblai_ontology.backend import bootstrap
 
         bootstrap()
@@ -357,6 +358,11 @@ def map_tables(
         None,
         help="Sample rows per table sent to the LLM (default llm.sample_rows; 0 = names and types only).",
     ),
+    from_catalog: Optional[str] = typer.Option(
+        None,
+        "--from",
+        help="Apply this catalog entry's vendor mapping (e.g. twenty) instead of asking the LLM.",
+    ),
 ) -> None:
     """Ask the configured LLM how each discovered table maps onto the house entities.
 
@@ -368,7 +374,7 @@ def map_tables(
     bootstrap()
     from iblai_ontology.backend.discovery.engine import DiscoveryEngine
 
-    mapped = DiscoveryEngine().map(name, sample_rows=sample_rows)
+    mapped = DiscoveryEngine().map(name, sample_rows=sample_rows, catalog=from_catalog)
     for table, m in mapped.items():
         renames = ", ".join(f"{k}→{v}" for k, v in (m.get("fields") or {}).items())
         console.print(f"  {table} → {m.get('entity') or '(unchanged)'}  {renames}")

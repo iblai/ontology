@@ -97,9 +97,9 @@ def check_mcp_servers() -> dict[str, McpServerHealth]:
 
 def check_sync() -> SyncHealth:
     """Summarise sync engine status from SyncRun history."""
-    from iblai_ontology.config.reader import ConfigReader
+    from iblai_ontology.backend.sync import schedules as source
 
-    schedules = ConfigReader().get_sync_schedules()
+    schedules = source.all()
     try:
         from datetime import timedelta
 
@@ -139,13 +139,30 @@ def check_storage() -> StorageHealth:
 
 
 def check_mcp_gateway() -> GatewayHealth:
-    """Report the MCP outbound gateway status (Component 4)."""
+    """The MCP gateway as seen from its public URL (``ONTOLOGY_GATEWAY_URL``).
+
+    A ``ping`` answered with 200 or 401 means the tunnel and the gateway are up;
+    anything else, or no answer, is down. No URL means a local-only gateway.
+    """
     from iblai_ontology.config.reader import ConfigReader
 
     reader = ConfigReader()
+    url = os.environ.get("ONTOLOGY_GATEWAY_URL", "")
+    running = False
+    if url:
+        import httpx
+
+        try:
+            status = httpx.post(
+                url, json={"jsonrpc": "2.0", "id": 1, "method": "ping"}, timeout=3
+            ).status_code
+            running = status in (200, 401)
+        except httpx.HTTPError:
+            running = False
+    # ponytail: no session store, so active_sessions stays 0.
     return GatewayHealth(
-        running=False,
-        url=os.environ.get("ONTOLOGY_GATEWAY_URL", ""),
+        running=running,
+        url=url,
         tool_count=len(reader.get_tools()),
         toolset_count=len(reader.get_toolsets()),
     )

@@ -115,7 +115,7 @@ function CommandPalette({
               >
                 <Database />
                 <span className="truncate">{s.display_name}</span>
-                <span className="text-muted-foreground ml-auto font-mono text-xs">{s.name}</span>
+                <span className="text-muted-foreground ml-auto text-xs">{s.name}</span>
               </CommandItem>
             ))}
           </CommandGroup>

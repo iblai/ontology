@@ -210,29 +210,9 @@ The last three ride on [NVIDIA auto-ontology](https://github.com/NVIDIA/auto-ont
 
 ## Service Registry
 
-Every integrated service is tracked in `config/services.yaml` and the `services` Django app's `Service` model. Connection details are **encrypted at rest with Fernet** (`services/encryption.py`) — only non-secret metadata appears in `services.yaml`; passwords live encrypted in the database. Each record carries the schema manifest, LLM analysis, last safety check + status, and last sync stats.
+Every integrated service is a row of the `services` Django app's `Service` model, in the backend's database, or with `ONTOLOGY_DATA_STORE=dm` a record in the ibl.ai platform ([DEV.md](../../DEV.md#platform-store-ontology_data_storedm)). Connection details are **encrypted at rest with Fernet** (`services/encryption.py`), and the key stays on the backend: wherever the row lives, it holds ciphertext. Each record carries the schema manifest, LLM analysis, last safety check + status, and last sync stats. `ontology service list` and `ontology service status <name>` show them.
 
-```yaml
-# config/services.yaml (excerpt — maintained by the registry)
-services:
-  - name: peoplesoft
-    display_name: "PeopleSoft (Oracle)"
-    type: database
-    adapter: peoplesoft
-    status: active
-    connection:
-      db_type: oracle
-      host: ps-db.university.edu
-      port: 1521
-      database: CSPRD
-      username: iblai_readonly
-      # password stored encrypted in the database, not here
-    safety:
-      last_check: "2026-06-15T10:28:00Z"
-      status: passed
-      tests_passed: 7
-      tests_failed: 0
-```
+`config/services.yaml` is not the registry: it is an optional list of connected services that `ontology doctor` checks the environment variables of, empty by default and not read in `dm` mode.
 
 ---
 

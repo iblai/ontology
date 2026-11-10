@@ -15,6 +15,6 @@ export default defineConfig({
     url: "http://localhost:3100",
     reuseExistingServer: false,
     timeout: 180_000,
-    env: { ONTOLOGY_API_URL: "", NEXT_DIST_DIR: ".next-e2e" },
+    env: { ONTOLOGY_API_URL: "", ONTOLOGY_MULTI_PLATFORM: "", NEXT_DIST_DIR: ".next-e2e" },
   },
 });

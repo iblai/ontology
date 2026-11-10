@@ -37,16 +37,8 @@ export function fmtDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
-type Palette = "success" | "error" | "warning" | "info" | "neutral" | "neutralMuted";
-
-const PALETTE_CLASSES: Record<Palette, string> = {
-  success: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  error: "bg-red-100 text-red-800 border-red-200",
-  warning: "bg-amber-100 text-amber-800 border-amber-200",
-  info: "bg-blue-100 text-blue-800 border-blue-200",
-  neutral: "bg-gray-100 text-gray-600 border-gray-200",
-  neutralMuted: "bg-gray-100 text-gray-500 border-gray-200",
-};
+/** A status's tone; `StatusPill` paints it as the dot colour. */
+export type Palette = "success" | "error" | "warning" | "info" | "neutral" | "neutralMuted";
 
 const SERVICE_STATUS_PALETTE: Record<ServiceStatus, Palette> = {
   pending: "warning",
@@ -97,34 +89,34 @@ const SAFETY_TEST_PALETTE: Record<SafetyTestResult, Palette> = {
   error: "warning",
 };
 
-function toneFor<T extends string>(map: Record<T, Palette>, value: T): string {
-  return PALETTE_CLASSES[map[value]];
+function toneFor<T extends string>(map: Record<T, Palette>, value: T): Palette {
+  return map[value];
 }
 
-export function statusTone(status: ServiceStatus): string {
+export function statusTone(status: ServiceStatus): Palette {
   return toneFor(SERVICE_STATUS_PALETTE, status);
 }
 
-export function safetyTone(status: SafetyStatus): string {
+export function safetyTone(status: SafetyStatus): Palette {
   return toneFor(SAFETY_STATUS_PALETTE, status);
 }
 
-export function syncTone(status: SyncStatus): string {
+export function syncTone(status: SyncStatus): Palette {
   return toneFor(SYNC_STATUS_PALETTE, status);
 }
 
-export function runTone(status: RunStatus): string {
+export function runTone(status: RunStatus): Palette {
   return toneFor(RUN_PALETTE, status);
 }
 
-export function stepTone(status: StepStatus): string {
+export function stepTone(status: StepStatus): Palette {
   return toneFor(STEP_PALETTE, status);
 }
 
-export function syncRunTone(status: SyncRunStatus): string {
+export function syncRunTone(status: SyncRunStatus): Palette {
   return toneFor(SYNC_RUN_PALETTE, status);
 }
 
-export function safetyTestTone(result: SafetyTestResult): string {
+export function safetyTestTone(result: SafetyTestResult): Palette {
   return toneFor(SAFETY_TEST_PALETTE, result);
 }

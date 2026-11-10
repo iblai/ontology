@@ -54,6 +54,14 @@ def test_type_mapping_fallback_is_text():
     assert gen._map_type("VARCHAR2(50)") == "TEXT"
 
 
+def test_postgres_types_land_typed():
+    gen = CacheSchemaGenerator(_manifest())
+    assert gen._map_type("uuid") == "UUID"
+    assert gen._map_type("timestamp with time zone") == "TIMESTAMPTZ"
+    assert gen._map_type("numeric") == "NUMERIC"
+    assert gen._map_type("USER-DEFINED") == "TEXT"  # enums
+
+
 def test_memory_generator_renders_student():
     jinja2 = pytest.importorskip("jinja2")  # noqa: F841
     from iblai_ontology.backend.provisioning.memory_generator import MemoryGenerator

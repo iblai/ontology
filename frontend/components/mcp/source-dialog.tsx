@@ -96,20 +96,10 @@ export function SourceDialog({
     >
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("name")} htmlFor="source-name" error={errors.name && tc("required")}>
-          <Input
-            id="source-name"
-            {...form.register("name")}
-            disabled={Boolean(initial)}
-            className="font-mono"
-          />
+          <Input id="source-name" {...form.register("name")} disabled={Boolean(initial)} />
         </Field>
         <Field label={t("type")} htmlFor="source-type" error={errors.type && tc("required")}>
-          <Input
-            id="source-type"
-            list="source-types"
-            {...form.register("type")}
-            className="font-mono"
-          />
+          <Input id="source-type" list="source-types" {...form.register("type")} />
           <datalist id="source-types">
             {SOURCE_TYPES.map((x) => (
               <option key={x} value={x}>
@@ -119,16 +109,16 @@ export function SourceDialog({
           </datalist>
         </Field>
         <Field label={t("host")} htmlFor="source-host">
-          <Input id="source-host" {...form.register("host")} className="font-mono" />
+          <Input id="source-host" {...form.register("host")} />
         </Field>
         <Field label={t("port")} htmlFor="source-port" error={errors.port && t("envHint")}>
-          <Input id="source-port" {...form.register("port")} className="font-mono" />
+          <Input id="source-port" {...form.register("port")} />
         </Field>
         <Field label={t("database")} htmlFor="source-database">
-          <Input id="source-database" {...form.register("database")} className="font-mono" />
+          <Input id="source-database" {...form.register("database")} />
         </Field>
         <Field label={t("user")} htmlFor="source-user">
-          <Input id="source-user" {...form.register("user")} className="font-mono" />
+          <Input id="source-user" {...form.register("user")} />
         </Field>
       </div>
       <Field
@@ -137,7 +127,7 @@ export function SourceDialog({
         error={errors.password && t("envHint")}
         hint={t("envHint")}
       >
-        <Input id="source-password" {...form.register("password")} className="font-mono" />
+        <Input id="source-password" {...form.register("password")} />
       </Field>
     </FormDialog>
   );

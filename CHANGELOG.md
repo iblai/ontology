@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Twenty CRM as a source, both ways: a self-hosted Twenty is a `generic-postgres` service (one
+  PostgreSQL schema per workspace, read with a role granted on the CRM tables only); a workspace
+  on Twenty's cloud is the new `twenty` catalog entry, served by `mcp-servers/twenty` (REST,
+  one `list-<object>` tool per synced object, paging `/rest/<plural>`, composite fields
+  flattened to Twenty's own column names so both paths share one mapping).
+- Catalog entries carry a vendor `mapping` (workspace table, house entity and column renames
+  per synced object): API schedules are generated from it, and `ontology service map <name>
+  --from <key>` applies it to a discovered database without an LLM call. The house model
+  (`sql/schema.sql`) gains the platform CRM's vocabulary: `organizations`, `persons`, `deals`.
+- The cache DDL maps PostgreSQL source types (`uuid`, `numeric`, `jsonb`, `timestamp with time
+  zone`, enums) instead of landing every column as TEXT.
 - Relationship graph: `GET /graph` turns the registry and config into one typed graph
   (services, tables, columns, entity groups, MCP sources/tools/toolsets, roles, schedules,
   memory domains; foreign keys, SQL table references, grants, memory and cache reach, sync
@@ -37,14 +48,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the environment. `docker-compose.yml` mounts `secrets/ontology_credential_key` into the
   gateway as a Compose secret — the only container that decrypts the registry, and one that
   received no key at all before. `ontology doctor` reports whether a key is configured.
-- Switchable record store: `ONTOLOGY_DATA_STORE=dm` keeps the registry and run history —
-  services and their discovered tables, safety reports, health checks, provisioning runs and
-  steps, sync runs, the audit log — in the ibl.ai DM's platform database (DM PR #3103) instead
-  of the backend's own; `local`, the default, is unchanged. The student-data cache, memory
-  files, vector index, identity map and YAML config stay local, and the DM holds connection
-  credentials only as Fernet ciphertext. `ontology platform database` creates the DM database
-  and its tables from the Django models and adds whatever a later version needs.
-  `IBLAI_AUTH_SCHEME=Api-Token` lets the platform client use a platform API key.
+- Platform store: `ONTOLOGY_DATA_STORE=dm` keeps the ontology's roles, sync schedules and
+  service registry in the ibl.ai platform instead of on this host; `local`, the default, is
+  unchanged. Roles become the platform's own RBAC roles: a role's grants are the resources of
+  its one policy, `Ontology: <role>`, under the platform's client namespace `/custom/ontology/`
+  (toolsets, cache tables, memory folders and files, the console, every subject), judged by the
+  `Ontology/…` verbs the role holds, and its display name, agents and limits are an ontology
+  record. Sync schedules and the registry (services and their discovered tables, health checks,
+  safety reports, provisioning runs and steps) become ontology records too. Sync runs, the audit
+  log, the student-data cache, memory files, vector index and identity map stay on this host,
+  and the platform holds connection credentials only as Fernet ciphertext.
+  `roles.yaml` is never read in `dm`: a platform with no ontology role gets the four example
+  roles at its first console sign-in, once, and `ontology roles import <file>` copies a named
+  file's roles in; `ontology sync import` copies the schedules. A role that a resource cannot
+  spell is refused with the reason. A backend process keeps the roles it read for
+  `ONTOLOGY_ROLES_TTL` seconds (default 60), and answers the gateway `503`, never with the
+  `default` role, when it has none and the platform does not answer. `GET /counts` gains
+  `data_store`. `IBLAI_AUTH_SCHEME=Api-Token` lets the platform client use a platform API key.
+- One Ontology Frontend for every platform (`ONTOLOGY_MULTI_PLATFORM=true`, as at
+  `ontology.ibl.ai`): each call goes to the backend of the signed-in admin's own platform, whose
+  address the backend records there with the new `ontology platform address --url …` and the
+  frontend reads with that admin's token. The address must be `https` and public; a platform
+  without one, and a member who is not its admin, see one notice instead of the pages.
+- `GET /config`: the backend sends its own configuration files and the catalog as text, secrets
+  masked on its host, so the Configuration page no longer needs the frontend to sit beside the
+  backend's checkout (`ONTOLOGY_ROOT` is gone).
+- The Access page creates a role (**New role**) and edits access by a click on a node as well as
+  on its switch: a role's node picks it, a toolset's or memory domain's node grants or revokes
+  it, a tool's node puts it in or out of the picked toolset.
 - A mapping layer on discovered tables: `entity` (the cache table and memory folder a table fills,
   e.g. the hand-curated `students`), `fields` (source→target column renames) and `template` (the
   memory template), edited like `entity_group` through `PATCH /services/<name>/tables`, recorded as
@@ -59,6 +90,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the Service row plus one schedule per catalog `sync_defaults` entry, each naming a `list-<entity>`
   tool on the service's custom MCP server. The sync engine reads a `<name>-mcp` source at
   `MCP_<NAME>_URL` and creates the cache table from the first row (`output.create_table`).
+- The MCP gateway speaks to a standard client: `initialize`, `ping` and notifications (202),
+  `tools/list` items carry `inputSchema` and include the gateway's own tools (`read-memory`,
+  `query-ontology-cache`, `get-sync-status`) per role, batches are answered in order, GET is
+  405, and every `tools/call` writes an audit row. The ibl.ai platform's `streamable_http`
+  connector (and OpenAI's hosted MCP tool) can now use it through a tunnel such as ngrok.
+- `ONTOLOGY_SERVICE_TOKEN`: the platform calls the gateway as itself with
+  `Authorization: Bearer <token>` and the role in `X-Iblai-Role` (principal `platform-service`),
+  so an agent works without an Entra tenant. `ontology platform register --auth-type none --role
+  <role>` registers the whole thing in one command; `connect --scope mentor --agent <id> --role`
+  gives one agent its own role.
+- `ONTOLOGY_GATEWAY_URL` is probed (`ping`): the console's Live badge and `ontology mcp status`
+  say whether the public URL reaches the gateway instead of always "stopped".
 
 ### Changed
 - The sync engine reads a database source straight through the service's own connection
@@ -90,9 +133,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Dockerfiles expect, and a `.dockerignore` keeps `.env*`, `.venv` and `frontend/` out of
   them.
 - The console moved to its own repository; its CI job left with it.
+- Signing in to the console with an ibl.ai platform token takes that token alone: the backend
+  reads the caller's own memberships from the platform with it. The `X-Edx-Jwt` header,
+  `ONTOLOGY_LMS_URL` and the check that two credentials name one user are gone.
+- `ONTOLOGY_ADMIN_PLATFORMS` defaults to this backend's own platform (`IBLAI_ORG`) in both store
+  modes and names a platform by its key only (it also matched a platform's `org`). A `local`
+  backend with `IBLAI_ORG` set took any platform's admin before; with neither variable set it
+  still does.
+- Console requests whose platform token the backend has verified are rate limited per token, not
+  per client address: behind one frontend every user shared one count.
 
 
 ### Fixed
+- PostgreSQL sources read with a read-only role: the safety suite probed `public` only (a CRM
+  whose `public` is empty made every probe inconclusive), primary and foreign keys came from
+  `information_schema` views that hide them from a SELECT-only role (no PRIMARY KEY in the cache
+  DDL, so the upsert failed, and no edges in the semantic map), `pull_table` sent unquoted
+  camelCase names, and never-analyzed tables showed -1 rows. Keys now come from `pg_catalog`,
+  the probe takes any readable table (quoted, schema-qualified), identifiers are quoted and row
+  counts floor at 0.
+- The platform client matches the DM: connection scopes are `platform | mentor | user` (not
+  `agent`), the connection key is `mentor`, and attaching an agent is `PUT mentors/<id>/settings/`
+  with the `mcp` tool slug, `can_use_tools` and the merged `mcp_servers` (it sent
+  `PATCH agents/…` with `tools: ["mcp-tool"]`, which the DM does not know).
 - The safety suite's UPDATE probe uses `ALTER TABLE … UPDATE` on ClickHouse: before 25.7
   ClickHouse has no `UPDATE` statement, so the probe was a syntax error and the suite refused
   every ClickHouse source on those versions.
@@ -105,8 +168,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   every engine ("does not exist"), as the Oracle branch already did via ORA-00942 — before, the
   DROP test came back inconclusive on PostgreSQL, MySQL and SQL Server and failed the suite. The
   ALTER probe uses `ADD COLUMN` everywhere but Oracle (Trino and ClickHouse reject the bare form).
+- `docker-compose.yml` mounts `./config` at `/app/config` on the gateway (writable, for what the
+  Ontology Frontend saves) and on the sync engine (read-only). The two single-file mounts it had
+  put `roles.yaml` and `sync-schedules.yaml` where neither container read them.
+- `ontology sync schedule` lists a schedule that has no `tool` (a table schedule) or no `cron`
+  (an event-driven one) instead of failing on it.
+- A sync scheduler that cannot read its schedules at start logs the error
+  (`iblai_ontology.backend.celery`); it started with none and said nothing.
+- `ontology doctor` reports a service list it cannot read as a failed line of its own.
+- In forwarded mode the Ontology Frontend's Configuration page shows what the backend sends
+  (`GET /config`), so what the backend refuses (a missing or wrong credential) is relayed; it
+  read files from its own disk and answered without asking.
+- `read-memory` resolved `..` after the role check, so a path could climb from a folder a role
+  may read into another domain (`/ontology/courses/by-dept/../../students/…`). The path is
+  normalised before the check.
+- The cache switch of a memory domain (Access page and Semantic map) granted the domain's name
+  instead of the tables it is cached in, so the grant matched nothing once a table had another
+  name (`financial-aid` is cached in `financial_aid`, `students` in `students` and `holds`).
+  `GET /graph` names each domain's tables and the switch grants and revokes those; a domain
+  cached in no table has no switch.
 
 ### Removed
+- `config/services.yaml` is no longer a sample of two services nobody connected: it ships empty,
+  and the Configuration page no longer shows it. The registry is the database (or the ibl.ai
+  platform), not this file.
 - The generated `get-<table>` "every row" Toolbox tools: the sync no longer goes through the
   Toolbox, and the agent-facing tools are the analysis's suggested ones.
 

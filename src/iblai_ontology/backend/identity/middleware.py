@@ -9,27 +9,37 @@ On each MCP request the gateway:
   5. resolves ``${USER_EMPLID}`` from the identity_map for student self-service,
   6. writes an audit_log row keyed by the token jti.
 
+The ibl.ai platform itself may call with the shared service token
+(``ONTOLOGY_SERVICE_TOKEN``) instead of a user's JWT; it is the trusted party that
+configured the connection, so the role is the ``X-Iblai-Role`` it sends.
+
 ``resolve_request`` is the reusable core; ``OntologyIdentityMiddleware`` adapts
 it to Django's middleware contract.
 """
 
 from __future__ import annotations
 
+import hmac
 import logging
 from dataclasses import dataclass
 from typing import Optional
 
 from iblai_ontology.backend.identity.entra import EntraIdentity, EntraValidator
 from iblai_ontology.backend.identity.roles import (
+    DEFAULT_ROLE,
     Permissions,
     RoleNotPermitted,
     RoleResolver,
+    RolesUnavailable,
     select_active_role,
 )
 
 logger = logging.getLogger("iblai_ontology.audit")
 
 ROLE_HEADER = "X-Iblai-Role"
+ROLES_UNAVAILABLE = "Roles are unavailable: the ibl.ai platform did not answer."
+# The audit subject of calls made with the service token.
+SERVICE_SUBJECT = "platform-service"
 
 
 @dataclass
@@ -79,6 +89,32 @@ def resolve_request(
     role = select_active_role(identity.roles, role_header, resolver)
     permissions = resolver.resolve(role, user_emplid=emplid)
     return ResolvedRequest(identity=identity, permissions=permissions, emplid=emplid)
+
+
+def resolve_service_request(
+    role_header: Optional[str], resolver: Optional[RoleResolver] = None
+) -> ResolvedRequest:
+    """The platform calling with the service token: its header names the role.
+
+    Raises :class:`RoleNotPermitted` for a role ``roles.yaml`` does not define.
+    """
+    resolver = resolver or RoleResolver()
+    role = role_header or DEFAULT_ROLE
+    if role not in resolver.role_names():
+        raise RoleNotPermitted(role)
+    identity = EntraIdentity(
+        user_id=SERVICE_SUBJECT,
+        email="",
+        name="ibl.ai platform",
+        roles=[role],
+        groups=[],
+        token_jti=None,
+        token_exp=None,
+        raw_claims={},
+    )
+    return ResolvedRequest(
+        identity=identity, permissions=resolver.resolve(role), emplid=None
+    )
 
 
 def write_audit(
@@ -132,6 +168,13 @@ class OntologyIdentityMiddleware:
             getattr(settings, "JWT_REPLAY_MODE", "bind"),
             ttl_fallback=getattr(settings, "JWT_REPLAY_TTL_FALLBACK", 3600),
         )
+        token = getattr(settings, "SERVICE_TOKEN", None)
+        if token and len(token) < 32:
+            from django.core.exceptions import ImproperlyConfigured
+
+            raise ImproperlyConfigured(
+                "ONTOLOGY_SERVICE_TOKEN must be at least 32 characters"
+            )
 
     @staticmethod
     def _client_ip(request) -> str:
@@ -140,14 +183,31 @@ class OntologyIdentityMiddleware:
             return forwarded.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "unknown")
 
+    @staticmethod
+    def _is_service_token(token: str) -> bool:
+        from django.conf import settings
+
+        expected = getattr(settings, "SERVICE_TOKEN", None) or ""
+        return bool(expected) and hmac.compare_digest(token, expected)
+
     def __call__(self, request):
         from django.http import JsonResponse
 
         from iblai_ontology.backend.identity.entra import EntraTokenError
 
         auth = request.headers.get("Authorization", "")
-        if auth.lower().startswith("bearer ") and self.validator is not None:
-            token = auth[7:]
+        token = auth[7:] if auth.lower().startswith("bearer ") else ""
+        if token and self._is_service_token(token):
+            try:
+                request.ontology = resolve_service_request(
+                    request.headers.get(ROLE_HEADER), self.resolver
+                )
+            except RoleNotPermitted as exc:
+                return JsonResponse({"error": str(exc)}, status=403)
+            except RolesUnavailable:
+                # The role source logged why; never the default role instead.
+                return JsonResponse({"error": ROLES_UNAVAILABLE}, status=503)
+        elif token and self.validator is not None:
             try:
                 request.ontology = resolve_request(
                     token=token,
@@ -161,6 +221,8 @@ class OntologyIdentityMiddleware:
                 return JsonResponse({"error": str(exc)}, status=401)
             except RoleNotPermitted as exc:
                 return JsonResponse({"error": str(exc)}, status=403)
+            except RolesUnavailable:
+                return JsonResponse({"error": ROLES_UNAVAILABLE}, status=503)
         else:
             request.ontology = None
         return self.get_response(request)

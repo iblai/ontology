@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from iblai_ontology.config import config_dir
+from iblai_ontology.config import config_dir, dm_store
 
 # Keys whose values are secrets and must be redacted when displayed.
 _SECRET_KEY_RE = re.compile(
@@ -19,6 +19,37 @@ _REDACTED = "********"
 
 # ``${VAR}`` interpolation from the environment at load time.
 _ENV_TOKEN_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
+
+# Raw text, as the Configuration page shows a file (the same rules as its config-files.ts).
+_SECRET_LINE_KEY_RE = re.compile(
+    r"(password|passwd|secret|token|api[_-]?key|client[_-]?secret|private[_-]?key"
+    r"|credential|auth)",
+    re.IGNORECASE,
+)
+_KEY_VALUE_RE = re.compile(r"^(\s*-?\s*)([A-Za-z0-9_.-]+)(\s*[:=]\s*)(.+)$")
+_ENV_REF_RE = re.compile(r"^\s*\$\{[A-Z0-9_]+\}\s*$")
+_URL_PASSWORD_RE = re.compile(r"(://[^/\s:@]*:)([^@\s/]+)(@)")
+MASK = "••••••••"
+
+
+def mask_secrets(text: str) -> str:
+    """Raw config text with every credential-looking ``key: value`` / ``key=value`` value
+    and every password inside a URL masked; a ``${VAR}`` reference is not a secret and stays."""
+
+    def url(match: re.Match) -> str:
+        if _ENV_REF_RE.match(match[2]):
+            return match[0]
+        return f"{match[1]}{MASK}{match[3]}"
+
+    lines = []
+    for line in text.split("\n"):
+        found = _KEY_VALUE_RE.match(line)
+        if found and _SECRET_LINE_KEY_RE.search(found[2]):
+            value = found[4].strip()
+            if value and not _ENV_REF_RE.match(value) and value not in ("null", "~"):
+                line = f"{found[1]}{found[2]}{found[3]}{MASK}"
+        lines.append(_URL_PASSWORD_RE.sub(url, line))
+    return "\n".join(lines)
 
 
 def _expand_env(value: Any) -> Any:
@@ -71,13 +102,35 @@ class ConfigReader:
             _redact({section: data}), default_flow_style=False, sort_keys=False
         )
 
+    @staticmethod
+    def _in_platform() -> dict[str, Any]:
+        """What dm mode keeps in the ibl.ai platform, in the shape of the three files."""
+        from iblai_ontology.backend import bootstrap
+
+        bootstrap()
+        from iblai_ontology.backend.identity import role_source
+        from iblai_ontology.backend.services.registry import export_services_yaml
+        from iblai_ontology.backend.sync import schedules
+
+        return {
+            "roles": {"roles": role_source.load_roles()},
+            "sync_schedules": {"schedules": schedules.all()},
+            "services": yaml.safe_load(export_services_yaml()),
+        }
+
     def show_all(self, *, redact: bool = True) -> str:
+        if dm_store():
+            stored = self._in_platform()
+        else:
+            stored = {
+                "roles": self._load("roles.yaml"),
+                "sync_schedules": self._load("sync-schedules.yaml"),
+                "services": self._load("services.yaml"),
+            }
         merged = {
             "ontology": self.main(),
             "tools": self._load_tools_docs(),
-            "roles": self._load("roles.yaml"),
-            "sync_schedules": self._load("sync-schedules.yaml"),
-            "services": self._load("services.yaml"),
+            **stored,
         }
         if redact:
             merged = _redact(merged)

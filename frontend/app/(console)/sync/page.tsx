@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtDateTime } from "@/lib/format";
+import { fmtDuration } from "@/lib/ontology/format";
 import { toast } from "sonner";
 
 export default function SyncPage() {
@@ -94,33 +95,27 @@ export default function SyncPage() {
     {
       accessorKey: "name",
       header: sortableHeader(t("schedulesColName")),
-      cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.name}</span>,
+      cell: ({ row }) => <span className="text-xs font-medium">{row.original.name}</span>,
     },
     {
       accessorKey: "cron",
       header: sortableHeader(t("schedulesColCron")),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.cron}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.cron}</span>,
     },
     {
       accessorKey: "source",
       header: sortableHeader(t("schedulesColSource")),
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.source}</span>,
+      cell: ({ row }) => <span className="text-xs">{row.original.source}</span>,
     },
     {
       accessorKey: "tool",
       header: sortableHeader(t("schedulesColTool")),
-      cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.table ?? row.original.tool}</span>
-      ),
+      cell: ({ row }) => <span className="text-xs">{row.original.table ?? row.original.tool}</span>,
     },
     {
       accessorKey: "mode",
       header: sortableHeader(t("schedulesColMode")),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.mode}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.mode}</span>,
     },
     {
       accessorKey: "description",
@@ -167,14 +162,12 @@ export default function SyncPage() {
     {
       accessorKey: "schedule_name",
       header: sortableHeader(t("statusColSchedule")),
-      cell: ({ row }) => (
-        <span className="font-mono text-xs font-medium">{row.original.schedule_name}</span>
-      ),
+      cell: ({ row }) => <span className="text-xs font-medium">{row.original.schedule_name}</span>,
     },
     {
       accessorKey: "source_system",
       header: sortableHeader(t("statusColSource")),
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.source_system}</span>,
+      cell: ({ row }) => <span className="text-xs">{row.original.source_system}</span>,
     },
     {
       accessorKey: "status",
@@ -194,14 +187,14 @@ export default function SyncPage() {
       accessorKey: "duration_seconds",
       header: sortableHeader(t("statusColDuration")),
       cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.duration_seconds}s</span>
+        <span className="text-xs tabular-nums">{fmtDuration(row.original.duration_seconds)}</span>
       ),
     },
     {
       accessorKey: "records_processed",
       header: sortableHeader(t("statusColRecords")),
       cell: ({ row }) => (
-        <span className="font-mono text-xs tabular-nums">{row.original.records_processed}</span>
+        <span className="text-xs tabular-nums">{row.original.records_processed}</span>
       ),
     },
   ];
@@ -211,15 +204,13 @@ export default function SyncPage() {
       accessorKey: "id",
       header: sortableHeader(t("historyColId")),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">
-          {row.original.id.slice(0, 8)}
-        </span>
+        <span className="text-muted-foreground text-xs">{row.original.id.slice(0, 8)}</span>
       ),
     },
     {
       accessorKey: "schedule_name",
       header: sortableHeader(t("historyColSchedule")),
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.schedule_name}</span>,
+      cell: ({ row }) => <span className="text-xs">{row.original.schedule_name}</span>,
     },
     {
       accessorKey: "status",
@@ -239,21 +230,21 @@ export default function SyncPage() {
       accessorKey: "duration_seconds",
       header: sortableHeader(t("historyColDuration")),
       cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.duration_seconds}s</span>
+        <span className="text-xs tabular-nums">{fmtDuration(row.original.duration_seconds)}</span>
       ),
     },
     {
       accessorKey: "records_created",
       header: sortableHeader(t("historyColCreated")),
       cell: ({ row }) => (
-        <span className="font-mono text-xs tabular-nums">{row.original.records_created}</span>
+        <span className="text-xs tabular-nums">{row.original.records_created}</span>
       ),
     },
     {
       accessorKey: "records_updated",
       header: sortableHeader(t("historyColUpdated")),
       cell: ({ row }) => (
-        <span className="font-mono text-xs tabular-nums">{row.original.records_updated}</span>
+        <span className="text-xs tabular-nums">{row.original.records_updated}</span>
       ),
     },
     {
@@ -274,7 +265,7 @@ export default function SyncPage() {
         title={t("title")}
         subtitle={t("subtitle")}
         actions={
-          <Button size="sm" onClick={runAll}>
+          <Button size="sm" variant="outline" onClick={runAll}>
             <Play className="mr-2 size-3.5" />
             {t("runAllDue")}
           </Button>
@@ -323,7 +314,7 @@ export default function SyncPage() {
                 <SelectItem value="all">{t("filterByService")}: all</SelectItem>
                 {Array.from(new Set((history ?? []).map((r) => r.source_system))).map((s) => (
                   <SelectItem key={s} value={s}>
-                    <span className="font-mono text-xs">{s}</span>
+                    <span className="text-xs">{s}</span>
                   </SelectItem>
                 ))}
               </SelectContent>

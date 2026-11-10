@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from iblai_ontology.config.reader import ConfigReader
+from iblai_ontology.backend.sync import schedules
 
 
 def _parse_cron(expr: str) -> dict[str, str]:
@@ -34,11 +34,11 @@ def infer_mode(cron: str) -> str:
 
 
 def build_beat_schedule() -> dict[str, dict[str, Any]]:
-    """Build a Celery beat schedule dict from sync-schedules.yaml."""
+    """Build a Celery beat schedule dict from the sync schedules."""
     from celery.schedules import crontab
 
     beat: dict[str, dict[str, Any]] = {}
-    for sched in ConfigReader().get_sync_schedules():
+    for sched in schedules.all():
         name = sched["name"]
         cron = sched.get("cron")
         if not cron or sched.get("enabled", True) is False:

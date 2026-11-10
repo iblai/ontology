@@ -20,10 +20,14 @@ class FakeCursor:
         upper = sql.strip().upper()
         # Metadata reads used to locate a table / first column.
         if upper.startswith("SELECT") or upper.startswith("SHOW"):
-            if "TABLE_NAME" in upper or "TABLES" in upper or upper.startswith("SHOW"):
-                self._result = ("SOME_TABLE",) if self.has_table else None
-            elif "COLUMN_NAME" in upper or "SYS.COLUMNS" in upper:
+            if "COLUMN_NAME" in upper or "SYS.COLUMNS" in upper:
                 self._result = ("some_col",)
+            elif (
+                "TABLE_SCHEMA, TABLE_NAME" in upper
+            ):  # PostgreSQL: schema-qualified probe table
+                self._result = ("public", "SOME_TABLE") if self.has_table else None
+            elif "TABLE_NAME" in upper or "TABLES" in upper or upper.startswith("SHOW"):
+                self._result = ("SOME_TABLE",) if self.has_table else None
             else:
                 self._result = ("x",)
             return
@@ -154,10 +158,35 @@ def test_missing_table_excuses_only_the_drop_probe():
 def test_alter_probe_uses_add_column_except_on_oracle():
     pg = RecordingConnection(deny_writes=True)
     SafetyVerifier(pg, db_type="postgresql").run_all_tests()
-    assert any(s.startswith("ALTER TABLE SOME_TABLE ADD COLUMN ") for s in pg.log)
+    assert any(
+        s.startswith('ALTER TABLE "public"."SOME_TABLE" ADD COLUMN ') for s in pg.log
+    )
 
     ora = RecordingConnection(deny_writes=True)
     SafetyVerifier(ora, db_type="oracle").run_all_tests()
     assert any(
         s.startswith("ALTER TABLE SOME_TABLE ADD __iblai_safety_col") for s in ora.log
+    )
+
+
+def test_postgres_probe_targets_any_readable_schema():
+    # A CRM keeps its tables outside public; the probes name them quoted, camelCase intact.
+    class WorkspaceCursor(RecordingCursor):
+        def execute(self, sql: str):
+            if "TABLE_SCHEMA, TABLE_NAME" in sql.upper():
+                self.log.append(sql)
+                self._result = ("workspace_x", "workspaceMember")
+                return
+            super().execute(sql)
+
+    class Conn(RecordingConnection):
+        def cursor(self):
+            return WorkspaceCursor(self.log, deny_writes=True)
+
+    conn = Conn(deny_writes=True)
+    result = SafetyVerifier(conn, db_type="postgresql").run_all_tests()
+    assert result.all_passed
+    assert any(
+        s.startswith('INSERT INTO "workspace_x"."workspaceMember" ("some_col")')
+        for s in conn.log
     )

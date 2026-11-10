@@ -575,9 +575,6 @@ export const mockApi = {
             if (t.entity_group) groups.add(t.entity_group);
         return configFromTexts("mock", {
           ontology: stringify({ entity_groups: [...groups].sort() }),
-          services: stringify({
-            services: db.services.map((s) => ({ ...s, schema_manifest: undefined })),
-          }),
           schedules: stringify({ schedules: db.sync_schedules }),
           roles: stringify({
             roles: Object.fromEntries(db.roles.map(({ name, ...r }) => [name, r])),
@@ -594,6 +591,7 @@ export const mockApi = {
       tools: db.mcp_tools.length,
       toolsets: db.mcp_toolsets.length,
       roles: db.roles.length,
+      data_store: "local" as const,
     }));
   },
 };

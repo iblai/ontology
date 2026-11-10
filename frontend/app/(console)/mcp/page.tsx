@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, XCircle, ShieldCheck, Hammer, Plus, Pencil, Database } from "lucide-react";
+import { ShieldCheck, Hammer, Plus, Pencil, Database } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
 import type {
   GatewayHealth,
@@ -16,6 +16,8 @@ import { DataTable, sortableHeader } from "@/components/shared/data-table";
 import { SectionHeader } from "@/components/console/section-header";
 import { EmptyState } from "@/components/console/empty-state";
 import { ConfirmDelete } from "@/components/console/confirm-delete";
+import { FactRow, Facts } from "@/components/console/facts";
+import { StatusPill } from "@/components/console/status-pill";
 import { Issues } from "@/components/mcp/issues";
 import { ToolDialog } from "@/components/mcp/tool-dialog";
 import { ToolsetDialog } from "@/components/mcp/toolset-dialog";
@@ -33,7 +35,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function McpPage() {
@@ -110,21 +111,19 @@ export default function McpPage() {
       accessorKey: "name",
       header: sortableHeader(t("tools.colName")),
       cell: ({ row }) => (
-        <span className="text-foreground font-mono text-xs font-medium">{row.original.name}</span>
+        <span className="text-foreground text-xs font-medium">{row.original.name}</span>
       ),
     },
     {
       accessorKey: "type",
       header: sortableHeader(t("tools.colType")),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.type}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.type}</span>,
     },
     {
       accessorKey: "source",
       header: sortableHeader(t("tools.colSource")),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.source}</span>
+        <span className="text-muted-foreground text-xs">{row.original.source}</span>
       ),
     },
     {
@@ -151,30 +150,26 @@ export default function McpPage() {
       accessorKey: "name",
       header: sortableHeader(t("sources.colName")),
       cell: ({ row }) => (
-        <span className="text-foreground font-mono text-xs font-medium">{row.original.name}</span>
+        <span className="text-foreground text-xs font-medium">{row.original.name}</span>
       ),
     },
     {
       accessorKey: "type",
       header: sortableHeader(t("sources.colType")),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.type}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.type}</span>,
     },
     {
       accessorKey: "host",
       header: t("sources.colHost"),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.host ?? "—"}</span>
+        <span className="text-muted-foreground text-xs">{row.original.host ?? "—"}</span>
       ),
     },
     {
       accessorKey: "database",
       header: t("sources.colDatabase"),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">
-          {row.original.database ?? "—"}
-        </span>
+        <span className="text-muted-foreground text-xs">{row.original.database ?? "—"}</span>
       ),
     },
     {
@@ -229,38 +224,30 @@ export default function McpPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium">{t("gateway.title")}</CardTitle>
-                  <span
-                    className={cn(
-                      "flex items-center gap-1.5 text-xs font-medium",
-                      gateway.running ? "text-emerald-600" : "text-red-600",
-                    )}
-                  >
-                    {gateway.running ? (
-                      <CheckCircle2 className="size-3.5" />
-                    ) : (
-                      <XCircle className="size-3.5" />
-                    )}
+                  <StatusPill tone={gateway.running ? "success" : "error"}>
                     {gateway.running ? t("gateway.running") : t("gateway.stopped")}
-                  </span>
+                  </StatusPill>
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                <Row
-                  label={t("gateway.url")}
-                  value={<span className="font-mono text-xs">{gateway.url}</span>}
-                />
-                <Row
-                  label={t("gateway.toolCount")}
-                  value={<span className="font-mono">{gateway.tool_count}</span>}
-                />
-                <Row
-                  label={t("gateway.toolsetCount")}
-                  value={<span className="font-mono">{gateway.toolset_count}</span>}
-                />
-                <Row
-                  label={t("gateway.activeSessions")}
-                  value={<span className="font-mono">{gateway.active_sessions}</span>}
-                />
+              <CardContent>
+                <Facts>
+                  <FactRow
+                    label={t("gateway.url")}
+                    value={<span className="text-xs">{gateway.url}</span>}
+                  />
+                  <FactRow
+                    label={t("gateway.toolCount")}
+                    value={<span className="tabular-nums">{gateway.tool_count}</span>}
+                  />
+                  <FactRow
+                    label={t("gateway.toolsetCount")}
+                    value={<span className="tabular-nums">{gateway.toolset_count}</span>}
+                  />
+                  <FactRow
+                    label={t("gateway.activeSessions")}
+                    value={<span className="tabular-nums">{gateway.active_sessions}</span>}
+                  />
+                </Facts>
               </CardContent>
             </Card>
           )}
@@ -284,7 +271,7 @@ export default function McpPage() {
                         <SelectItem value="all">{t("tools.filterByType")}: all</SelectItem>
                         {toolTypes.map((ty) => (
                           <SelectItem key={ty} value={ty}>
-                            <span className="font-mono text-xs">{ty}</span>
+                            <span className="text-xs">{ty}</span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -313,7 +300,7 @@ export default function McpPage() {
                     <Card key={ts.name}>
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
-                          <CardTitle className="font-mono text-sm font-medium">{ts.name}</CardTitle>
+                          <CardTitle className="text-sm font-medium">{ts.name}</CardTitle>
                           <div className="flex items-center">
                             <Button
                               variant="ghost"
@@ -334,7 +321,7 @@ export default function McpPage() {
                       <CardContent>
                         <ul className="flex flex-col gap-1">
                           {ts.tools.map((tool) => (
-                            <li key={tool} className="text-foreground font-mono text-xs">
+                            <li key={tool} className="text-foreground text-xs">
                               {tool}
                             </li>
                           ))}
@@ -383,7 +370,7 @@ export default function McpPage() {
                   <p className="text-muted-foreground text-xs">{t("validate.subtitle")}</p>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
-                  <p className="text-muted-foreground font-mono text-xs">
+                  <p className="text-muted-foreground text-xs">
                     {t("validate.counts", {
                       sources: report.sources,
                       tools: report.tools,
@@ -430,15 +417,6 @@ export default function McpPage() {
         initial={editingSource === "new" ? undefined : (editingSource ?? undefined)}
         onSaved={reload}
       />
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className="text-foreground text-sm">{value}</span>
     </div>
   );
 }

@@ -64,7 +64,7 @@ Merges the generated `tools.yaml` entries (sources, tools, toolsets) into the ca
 
 ## Step 4 — Sync Schedules
 
-Merges the generated schedule entries into `config/sync-schedules.yaml` ([Component 2](02-knowledge-materialization.md#sync-schedulesyaml)), with cadences suggested by the LLM (or the rule-based heuristics). A database schedule names its `service` and `table`: the sync engine reads the table through the service's own connection. An API service's schedules name a `tool` on its custom MCP server (`<name>-mcp`, reached at `MCP_<NAME>_URL`). After this step, `ontology sync schedule` shows the new schedules.
+Merges the generated schedule entries into `config/sync-schedules.yaml` ([Component 2](02-knowledge-materialization.md#sync-schedulesyaml)), or with `ONTOLOGY_DATA_STORE=dm` into the ibl.ai platform's records, with cadences suggested by the LLM (or the rule-based heuristics). A database schedule names its `service` and `table`: the sync engine reads the table through the service's own connection. An API service's schedules name a `tool` on its custom MCP server (`<name>-mcp`, reached at `MCP_<NAME>_URL`). After this step, `ontology sync schedule` shows the new schedules.
 
 ---
 

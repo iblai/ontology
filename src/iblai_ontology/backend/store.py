@@ -1,115 +1,138 @@
-"""Where the registry and run history live: Django's own database or the DM platform database.
+"""Where the service registry lives: Django's own database, or the ibl.ai platform.
 
-``ONTOLOGY_DATA_STORE=local`` (the default) is the ORM. ``dm`` keeps the same models in the
-ibl.ai DM's platform database (Supabase behind the DM's PostgREST proxy, DM PR #3103), reached
-through ``PlatformClient``. Callers pass model classes and get model instances back either way;
-the Django models stay the one schema definition, and ``ensure_schema`` derives the DM's from
-them. Filters are ``field``, ``field__gt|gte|icontains`` or a foreign key by pk — nothing else.
+``ONTOLOGY_DATA_STORE=local`` (the default) is the ORM. ``dm`` keeps the registry (services,
+their tables, health checks, safety reports, provisioning runs and steps) in the ibl.ai
+platform as records, one kind per model, reached through ``PlatformClient``. Sync runs and the
+audit log use the ORM in both modes. Callers pass model classes and get model instances back
+either way. Filters are ``field`` (``None`` for null) or a foreign key by pk; the ORM alone
+also answers ``field__gt|gte|icontains``.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from functools import cache
 
-from django.conf import settings
 from django.db import models
+from django.db.models.deletion import get_candidate_relations_to_delete
 
-DATABASE = "ontology"
+from iblai_ontology.config import dm_store
+
 # Rows read from the DM carry an alias DATABASES lacks, so a missed related lookup raises.
 DM_ALIAS = "dm"
-_BODY_MAX = 2_000_000  # the DM proxy refuses request bodies over 2 MiB
-_LOOKUPS = {"": "eq", "gt": "gt", "gte": "gte", "icontains": "ilike"}
-_TYPES = {
-    "CharField": "TEXT",
-    "TextField": "TEXT",
-    "GenericIPAddressField": "TEXT",
-    "BinaryField": "TEXT",  # Fernet tokens are ASCII
-    "IntegerField": "NUMBER",
-    "BigIntegerField": "NUMBER",
-    "DecimalField": "NUMBER",
-    "BooleanField": "BOOLEAN",
-    "DateTimeField": "DATE_TIME",
-    "JSONField": "RAW_JSON",
-    "UUIDField": "UUID",
-    "ForeignKey": "RELATION",
-}
-_SYSTEM = {"id", "created_at", "updated_at"}  # every DM object has these already
-_ON_DELETE = {models.CASCADE: "cascade", models.SET_NULL: "set_null"}
+_BODY_MAX = 2_000_000  # the DM refuses request bodies over 2 MiB
+_PAGE = 500  # the DM's largest page
+_KEYS = 200  # parents named in one cascading delete
+_LOCAL = {"SyncRun", "AuditLog"}  # the two logs never leave this host
 
 
-def _dm() -> bool:
-    return settings.ONTOLOGY_DATA_STORE == "dm"
+def _dm(model) -> bool:
+    return dm_store() and model.__name__ not in _LOCAL
 
 
 @cache
-def _client():
+def client():
+    """The DM client the registry, the sync schedules and the roles share."""
     from iblai_ontology.backend.platform.client import PlatformClient
 
     return PlatformClient()
 
 
-def _path(model) -> str:
-    return f"{DATABASE}/rest/v1/{model._meta.db_table}"
-
-
-def _json(value) -> bytes:
-    return json.dumps(
-        value, default=lambda o: o.isoformat() if hasattr(o, "isoformat") else str(o)
-    ).encode()
-
-
-def _wire(value) -> str:
-    if isinstance(value, models.Model):
-        value = value.pk
-    if isinstance(value, bool):
-        return "true" if value else "false"
+def _text(value) -> str:
+    if isinstance(value, datetime):
+        # Fixed width, so timestamps order as text whatever the DM's collation.
+        return value.isoformat(timespec="microseconds")
     return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
-def _where(model, where: dict) -> list[tuple[str, str]]:
-    params = []
-    for key, value in where.items():
-        name, _, lookup = key.partition("__")
-        if lookup not in _LOOKUPS:
-            raise ValueError(f"store: unsupported lookup {key!r}")
-        column = model._meta.get_field(name).column
-        if value is None and not lookup:
-            params.append((column, "is.null"))
-        elif lookup == "icontains":
-            # ponytail: % _ * in the value act as wildcards here; the ORM escapes them.
-            params.append((column, f"ilike.*{_wire(value)}*"))
-        else:
-            params.append((column, f"{_LOOKUPS[lookup]}.{_wire(value)}"))
-    return params
+def _json(value) -> bytes:
+    return json.dumps(value, default=_text).encode()
+
+
+# -- records: what the DM stores, whatever model (or none) stands behind a kind -------------
+
+
+def records(
+    kind: str,
+    where: dict | None = None,
+    order: str = "",
+    limit: int | None = None,
+) -> list[dict]:
+    """The DM's records of ``kind`` matching ``where``: every page, or the first ``limit``."""
+    params: dict = {"page_size": min(limit or _PAGE, _PAGE)}
+    if where:
+        params["where"] = _json(where).decode()
+    if order:
+        params["order"] = order
+    found: list[dict] = []
+    page = 1
+    while page and (limit is None or len(found) < limit):
+        body = client().records("GET", kind, params={**params, "page": page}).json()
+        found += body["results"]
+        page = body["next_page"]
+    return found[:limit]
+
+
+def put_record(kind: str, key: str, data: dict, unique_key: str | None = None) -> None:
+    """Create the record or replace it whole."""
+    body = {"data": data, "unique_key": unique_key}
+    # Bytes, not a stream: the DM answers 411 to a chunked body.
+    client().records("PUT", kind, key, content=_json(body))
+
+
+def delete_record(kind: str, key: str) -> bool:
+    """False when the DM holds no such record."""
+    return client().records("DELETE", kind, key, ok=(404,)).status_code != 404
+
+
+# -- models over records ---------------------------------------------------------------------
+
+
+def _where(model, where: dict) -> dict:
+    out = {}
+    for name, value in where.items():
+        if "__" in name:
+            raise ValueError(
+                f"store: {name!r} is not answered for {model.__name__} in the DM"
+            )
+        if isinstance(value, models.Model):
+            value = value.pk
+        # As the DM holds it: a UUID or a timestamp as its text.
+        out[model._meta.get_field(name).column] = json.loads(_json(value))
+    return out
 
 
 def _order(model, order) -> str:
     keys = [order] if isinstance(order, str) else list(order or model._meta.ordering)
-    parts = [
-        f"{model._meta.get_field(k.lstrip('-')).column}."
-        + ("desc" if k.startswith("-") else "asc")
+    return ",".join(
+        ("-" if k.startswith("-") else "") + model._meta.get_field(k.lstrip("-")).column
         for k in keys
-    ]
-    return ",".join([*parts, "id.asc"])
+    )
 
 
-def _total(resp) -> int:
-    return int(resp.headers["content-range"].rsplit("/", 1)[1])
+def _unique(model):
+    """The model's one unique field besides its key, which the DM keeps unique too."""
+    unique = [f for f in model._meta.concrete_fields if f.unique and not f.primary_key]
+    if len(unique) > 1:
+        raise NotImplementedError(
+            f"store: {model.__name__} has more than one unique field"
+        )
+    return unique[0] if unique else None
 
 
-def _instance(model, row: dict):
+def _instance(model, record: dict):
+    row = record["data"]
     fields = model._meta.concrete_fields
     values = []
     for f in fields:
-        v = row.get(f.column)
-        if v is not None:
+        # A field newer than the record reads as its default.
+        v = row[f.column] if f.column in row else f.get_default()
+        if isinstance(f, models.BinaryField) and isinstance(v, str):
             # BinaryField.to_python would base64-decode the token text.
-            v = (
-                v.encode("ascii")
-                if isinstance(f, models.BinaryField)
-                else f.to_python(v)
-            )
+            v = v.encode("ascii")
+        elif v is not None:
+            v = f.to_python(v)
         values.append(v)
     return model.from_db(DM_ALIAS, [f.attname for f in fields], values)
 
@@ -127,40 +150,26 @@ def _row(obj, names, *, add: bool) -> dict:
     return out
 
 
-def _post(model, body: bytes) -> None:
-    # Bytes, not a stream: the DM answers 411 to a chunked body.
-    _client().db(
-        "POST", _path(model), content=body, headers={"Prefer": "return=minimal"}
-    )
+def _record(obj) -> dict:
+    unique = _unique(type(obj))
+    return {
+        "key": str(obj.pk),
+        "unique_key": getattr(obj, unique.attname) if unique else None,
+        "data": _row(obj, (), add=True),
+    }
 
 
 def filter(model, *, order=None, limit: int | None = None, **where) -> list:
     """Rows of ``model`` matching ``where``, in ``order`` (default: the model's ordering)."""
-    if not _dm():
+    if not _dm(model):
         qs = model.objects.filter(**where)
         if order:
             qs = qs.order_by(*([order] if isinstance(order, str) else order))
         return list(qs[:limit])
-    params = [*_where(model, where), ("order", _order(model, order))]
-    if limit is not None:
-        resp = _client().db(
-            "GET", _path(model), params=[*params, ("limit", str(limit))]
-        )
-        return [_instance(model, r) for r in resp.json()]
-    rows: list[dict] = []
-    while (
-        True
-    ):  # page to Content-Range's total, so a server-side row cap can't truncate
-        resp = _client().db(
-            "GET",
-            _path(model),
-            params=[*params, ("offset", str(len(rows)))],
-            headers={"Prefer": "count=exact"},
-        )
-        page = resp.json()
-        rows += page
-        if not page or len(rows) >= _total(resp):
-            return [_instance(model, r) for r in rows]
+    found = records(
+        model._meta.db_table, _where(model, where), _order(model, order), limit
+    )
+    return [_instance(model, r) for r in found]
 
 
 def first(model, *, order=None, **where):
@@ -176,39 +185,33 @@ def get(model, **where):
 
 
 def count(model, **where) -> int:
-    if not _dm():
+    if not _dm(model):
         return model.objects.filter(**where).count()
-    resp = _client().db(
-        "HEAD",
-        _path(model),
-        params=_where(model, where),
-        headers={"Prefer": "count=exact"},
-    )
-    return _total(resp)
+    params: dict = {"page_size": 1}
+    if where:
+        params["where"] = _json(_where(model, where)).decode()
+    return client().records("GET", model._meta.db_table, params=params).json()["count"]
 
 
 def save(obj, fields: list[str] | None = None) -> None:
     """Insert ``obj`` when it is new, else update ``fields`` (every field when None)."""
-    if not _dm():
+    model = type(obj)
+    if not _dm(model):
         obj.save(update_fields=fields)
         return
-    model = type(obj)
+    kind = model._meta.db_table
     if obj._state.adding:
-        _post(model, _json([_row(obj, (), add=True)]))
+        client().records("POST", kind, content=_json(_record(obj)))
         obj._state.adding, obj._state.db = False, DM_ALIAS
         return
     if fields is None:
         fields = [f.name for f in model._meta.concrete_fields if not f.primary_key]
-    resp = _client().db(
-        "PATCH",
-        _path(model),
-        params=[("id", f"eq.{obj.pk}"), ("select", "id")],
-        content=_json(_row(obj, fields, add=False)),
-        headers={"Prefer": "return=representation"},
-    )
-    if (
-        not resp.json()
-    ):  # no row updated, as Django raises on a 0-row update_fields save
+    body = {"data": _row(obj, fields, add=False)}
+    unique = _unique(model)
+    if unique and unique.name in fields:
+        body["unique_key"] = getattr(obj, unique.attname)
+    resp = client().records("PATCH", kind, str(obj.pk), content=_json(body), ok=(404,))
+    if resp.status_code == 404:  # as Django raises on a 0-row update_fields save
         raise model.DoesNotExist(f"{model.__name__} {obj.pk} is gone.")
 
 
@@ -220,114 +223,44 @@ def create(model, **values):
 
 def bulk_create(model, objs: list) -> None:
     """Insert ``objs`` in as few requests as the DM's body cap allows."""
-    if not _dm():
+    if not _dm(model):
         model.objects.bulk_create(objs)
         return
+    kind = model._meta.db_table
     batch: list[bytes] = []
     size = 2
     for obj in objs:
-        row = _json(_row(obj, (), add=True))
+        row = _json(_record(obj))
         if batch and size + len(row) + 1 > _BODY_MAX:
-            _post(model, b"[" + b",".join(batch) + b"]")
+            client().records("POST", kind, content=b"[" + b",".join(batch) + b"]")
             batch, size = [], 2
         batch.append(row)
         size += len(row) + 1
         obj._state.adding, obj._state.db = False, DM_ALIAS
     if batch:
-        _post(model, b"[" + b",".join(batch) + b"]")
+        client().records("POST", kind, content=b"[" + b",".join(batch) + b"]")
 
 
 def delete(model, **where) -> None:
-    """Delete matching rows; the database cascades to related rows in both stores."""
-    if not _dm():
+    """Delete matching rows and every row that points at them, as the database cascades locally."""
+    if not _dm(model):
         model.objects.filter(**where).delete()
         return
-    # An unfiltered delete still sends a filter, for a PostgREST that refuses one without.
-    _client().db(
-        "DELETE", _path(model), params=_where(model, where) or [("id", "not.is.null")]
-    )
+    _delete(model, _where(model, where))
 
 
-# -- DM schema ---------------------------------------------------------------
-
-
-def _models() -> list:
-    """The models the store holds, relation targets before the objects that point at them."""
-    from iblai_ontology.backend.discovery.models import SafetyReport
-    from iblai_ontology.backend.identity.models import AuditLog
-    from iblai_ontology.backend.provisioning.models import (
-        ProvisioningRun,
-        ProvisioningStep,
-    )
-    from iblai_ontology.backend.services.models import (
-        Service,
-        ServiceHealth,
-        ServiceTable,
-    )
-    from iblai_ontology.backend.sync.models import SyncRun
-
-    return [
-        Service,
-        ServiceTable,
-        ServiceHealth,
-        ProvisioningRun,
-        ProvisioningStep,
-        SafetyReport,
-        SyncRun,
-        AuditLog,
-    ]
-
-
-def field_spec(f) -> dict:
-    """A model field as the DM's typed schema API declares it."""
-    spec = {
-        "name": f.column,
-        "type": _TYPES[f.get_internal_type()],  # any other type fails loudly
-        "is_nullable": f.null,
-        "is_unique": f.unique,
-    }
-    if f.is_relation:
-        on_delete = _ON_DELETE.get(f.remote_field.on_delete, "restrict")
-        spec["relation"] = {
-            "target": f.related_model._meta.db_table,
-            "on_delete": on_delete,
-        }
-    elif f.has_default() and not f.null and not f.unique:
-        # The DM needs one when a NOT NULL field joins an object that holds rows.
-        spec["default"] = json.loads(_json(f.get_default()))
-    return spec
-
-
-def ensure_schema() -> list[str]:
-    """Create the DM database, then whatever objects and fields it lacks; never alters or drops."""
-    client = _client()
-    created = []
-    if client.db("GET", f"{DATABASE}/", ok=(404,)).status_code == 404:
-        client.db("POST", "", json={"name": DATABASE})
-        created.append(DATABASE)
-    have: dict[str, set[str]] = {}
-    page = 1
-    while page:
-        body = client.db("GET", f"{DATABASE}/objects/", params={"page": page}).json()
-        have.update(
-            {o["name"]: {f["name"] for f in o["fields"]} for o in body["results"]}
-        )
-        page = body["next_page"]
-    for model in _models():
-        table = model._meta.db_table
-        specs = [
-            field_spec(f)
-            for f in model._meta.concrete_fields
-            if f.column not in _SYSTEM
-        ]
-        if table not in have:
-            client.db(
-                "POST", f"{DATABASE}/objects/", json={"name": table, "fields": specs}
+def _delete(model, where: dict) -> None:
+    # ponytail: several requests, not one transaction; children go first, so a failure
+    # midway leaves parents that a second delete finishes.
+    kind = model._meta.db_table
+    children = list(get_candidate_relations_to_delete(model._meta))
+    keys = [r["key"] for r in records(kind, where)] if children else []
+    for relation in children:
+        if relation.on_delete is not models.CASCADE:
+            raise NotImplementedError(
+                f"store: {relation.related_model.__name__} does not cascade"
             )
-            created.append(table)
-            continue
-        for spec in specs:
-            if spec["name"] not in have[table]:
-                client.db("POST", f"{DATABASE}/objects/{table}/fields/", json=spec)
-                created.append(f"{table}.{spec['name']}")
-    return created
+        for start in range(0, len(keys), _KEYS):
+            parents = {relation.field.column: keys[start : start + _KEYS]}
+            _delete(relation.related_model, parents)
+    client().records("DELETE", kind, content=_json({"where": where}))

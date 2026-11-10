@@ -22,18 +22,9 @@ export function SafetyChecklist({ report }: { report: SafetyReport | undefined }
 
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-md border p-3",
-          passed ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50",
-        )}
-      >
-        {passed ? (
-          <Check className="size-4 text-emerald-600" />
-        ) : (
-          <X className="size-4 text-red-600" />
-        )}
-        <p className={cn("text-sm font-medium", passed ? "text-emerald-800" : "text-red-800")}>
+      <div className="flex items-center gap-3 rounded-md border p-3">
+        <StatusBadge kind="safety" value={report.status} />
+        <p className="text-foreground text-sm">
           {passed ? t("overallPassed") : t("overallFailed")}
         </p>
       </div>
@@ -42,20 +33,19 @@ export function SafetyChecklist({ report }: { report: SafetyReport | undefined }
         {report.details.map((test) => {
           const Icon =
             test.result === "passed" ? Check : test.result === "failed" ? X : AlertTriangle;
-          const tone =
-            test.result === "passed"
-              ? "text-emerald-600"
-              : test.result === "failed"
-                ? "text-red-600"
-                : "text-amber-600";
           return (
             <li
               key={test.test_name}
               className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
             >
               <span className="flex items-center gap-2">
-                <Icon className={cn("size-3.5", tone)} />
-                <span className="text-foreground font-mono text-xs">{test.test_name}</span>
+                <Icon
+                  className={cn(
+                    "size-3.5",
+                    test.result === "failed" ? "text-red-600" : "text-muted-foreground",
+                  )}
+                />
+                <span className="text-foreground text-xs">{test.test_name}</span>
               </span>
               <span className="flex items-center gap-2">
                 <span className="text-muted-foreground text-xs">{test.detail}</span>

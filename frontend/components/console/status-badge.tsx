@@ -1,5 +1,6 @@
-import { cn } from "@/lib/utils";
+import { StatusPill } from "@/components/console/status-pill";
 import {
+  type Palette,
   statusTone,
   safetyTone,
   syncTone,
@@ -21,7 +22,7 @@ import { useTranslations } from "next-intl";
 
 type BadgeKind = "status" | "safety" | "sync" | "run" | "step" | "syncRun" | "safetyTest";
 
-const TONE_FNS: Record<BadgeKind, (s: string) => string> = {
+const TONE_FNS: Record<BadgeKind, (s: string) => Palette> = {
   status: (s) => statusTone(s as ServiceStatus),
   safety: (s) => safetyTone(s as SafetyStatus),
   sync: (s) => syncTone(s as SyncStatus),
@@ -61,18 +62,9 @@ export function StatusBadge({
   className?: string;
 }) {
   const t = useTranslations(NS[kind]);
-  const tone = TONE_FNS[kind](value);
-  const label = t(KEY[kind](value));
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
-        tone,
-        className,
-      )}
-    >
-      <span className="size-1.5 rounded-full bg-current opacity-70" aria-hidden />
-      {label}
-    </span>
+    <StatusPill tone={TONE_FNS[kind](value)} className={className}>
+      {t(KEY[kind](value))}
+    </StatusPill>
   );
 }

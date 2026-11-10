@@ -106,21 +106,11 @@ export function ToolDialog({
       saving={saving}
     >
       <Field label={t("name")} htmlFor="tool-name" error={errors.name && tc("required")}>
-        <Input
-          id="tool-name"
-          {...form.register("name")}
-          disabled={Boolean(initial)}
-          className="font-mono"
-        />
+        <Input id="tool-name" {...form.register("name")} disabled={Boolean(initial)} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("type")} htmlFor="tool-type" error={errors.type && tc("required")}>
-          <Input
-            id="tool-type"
-            list="tool-types"
-            {...form.register("type")}
-            className="font-mono"
-          />
+          <Input id="tool-type" list="tool-types" {...form.register("type")} />
           <datalist id="tool-types">
             {TOOL_TYPES.map((x) => (
               <option key={x} value={x}>
@@ -130,12 +120,7 @@ export function ToolDialog({
           </datalist>
         </Field>
         <Field label={t("source")} htmlFor="tool-source" error={errors.source && tc("required")}>
-          <Input
-            id="tool-source"
-            list="tool-sources"
-            {...form.register("source")}
-            className="font-mono"
-          />
+          <Input id="tool-source" list="tool-sources" {...form.register("source")} />
           <datalist id="tool-sources">
             {sources.map((x) => (
               <option key={x} value={x}>
@@ -170,13 +155,13 @@ export function ToolDialog({
             <Input
               aria-label={t("paramName")}
               placeholder={t("paramName")}
-              className="font-mono text-xs"
+              className="text-xs"
               {...form.register(`parameters.${i}.name`)}
             />
             <Input
               aria-label={t("paramType")}
               placeholder={t("paramType")}
-              className="font-mono text-xs"
+              className="text-xs"
               {...form.register(`parameters.${i}.type`)}
             />
             <Input

@@ -177,7 +177,7 @@ Role assignments are managed through the platform's admin dashboard / API (user-
 |---|---|---|
 | Who is this user? (identity) | Entra ID JWT | University SSO |
 | What role does this user have? (role assignment) | ibl.ai platform (MCP Server Connection `extra_headers`) | Platform admin |
-| What can this role access? (role permissions) | On-premise `roles.yaml` | Ontology deployer |
+| What can this role access? (role permissions) | On-premise `roles.yaml`, or with `ONTOLOGY_DATA_STORE=dm` the ibl.ai platform's roles and their policies under `/custom/ontology/` | Ontology deployer |
 
 ### Entra ID app registration (the minimum)
 
@@ -214,7 +214,7 @@ default:
 
 ## Role-to-Permission Mapping (`roles.yaml`)
 
-`roles.yaml` lives on the on-premise server and defines **what each role can access**. It does *not* define who has a role. Each role grants `memory_paths` (glob patterns over the text-memory tree), `mcp_toolsets`, `cache_tables`, optional `concurrency_limits`, and the `agents` allowed to use it. The six example roles plus `default`:
+`roles.yaml` lives on the on-premise server and defines **what each role can access**. It does *not* define who has a role. With `ONTOLOGY_DATA_STORE=dm` the same roles live in the ibl.ai platform instead and the file is not read: a role is one of the platform's RBAC roles, what it reaches is the resources of its one policy under `/custom/ontology/`, and a platform with none gets the example roles at its first console sign-in ([DEV.md](../DEV.md#roles-in-the-platform)). Each role grants `memory_paths` (glob patterns over the text-memory tree), `mcp_toolsets`, `cache_tables`, optional `concurrency_limits`, and the `agents` allowed to use it. The six example roles plus `default`:
 
 ```yaml
 roles:
@@ -328,6 +328,19 @@ Even if a student somehow learns another student's ID, the role constraint pins 
 - **Tokens carry through the whole chain** — the same JWT that authenticated the user is forwarded to the gateway. No re-authentication.
 - **End-to-end audit** — the JWT's `jti` appears in both the platform's logs and the on-prem `audit_log`, so any access is traceable from login to tool call.
 - **Students see only their own data** — via EMPLID resolution.
+
+---
+
+## The Platform Service Token
+
+Option A also serves calls the platform makes as itself: an agent without a signed-in user, or a
+deployment without an Entra tenant. The gateway holds one shared secret, `ONTOLOGY_SERVICE_TOKEN`
+(32 or more characters); a request carrying it as `Authorization: Bearer <token>` runs as the
+principal `platform-service` with the role named by `X-Iblai-Role`, which must be defined in
+`roles.yaml` (an unknown role is a 403, no header means `default`). No `roles` claim is involved:
+the platform chose the role when it configured the server or connection, and it is the trusted
+party. Audit rows, rate limits and the cleartext-token rule apply exactly as for a JWT. See
+[platform-integration.md](platform-integration.md#the-platform-service-token) for the registration.
 
 ---
 

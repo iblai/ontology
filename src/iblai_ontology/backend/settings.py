@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 
 import yaml
-from corsheaders.defaults import default_headers
 from environs import Env
 
 from iblai_ontology.config import LLM_DEFAULT_MODELS, config_dir, credential_key
@@ -154,6 +153,9 @@ CREDENTIAL_ENCRYPTION_KEY = credential_key()
 ONTOLOGY_FILES_ROOT = os.environ.get("ONTOLOGY_FILES_ROOT", "/ontology")
 ENTRA_TENANT_ID = os.environ.get("ENTRA_TENANT_ID")
 ENTRA_CLIENT_ID = os.environ.get("ENTRA_CLIENT_ID")
+# The shared secret the ibl.ai platform presents as `Authorization: Bearer <token>` on
+# the MCP gateway; the role comes from X-Iblai-Role. 32+ characters (the middleware checks).
+SERVICE_TOKEN = os.environ.get("ONTOLOGY_SERVICE_TOKEN") or None
 
 # --- Celery --------------------------------------------------------------
 CELERY_BROKER_URL = os.environ.get("ONTOLOGY_CELERY_BROKER", "redis://localhost:6379/0")
@@ -217,10 +219,9 @@ JWT_REPLAY_TTL_FALLBACK = int(
 
 # --- REST API for the admin console (DRF) ---------------------------------
 # Two Authorization schemes: `Bearer <entra-jwt>` (resolved by the identity
-# middleware above into request.ontology) and `Token <dm_token>` plus an
-# `X-Edx-Jwt` header (verified against the ibl.ai DM and LMS — see
-# backend/api/auth.py). Leaving the DM/LMS URLs unset disables the Token
-# scheme; the API stays platform-agnostic (any platform's active admin).
+# middleware above into request.ontology) and `Token <dm_token>` (verified
+# against the ibl.ai platform — see backend/api/auth.py). Leaving
+# ONTOLOGY_DM_URL unset disables the Token scheme.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "iblai_ontology.backend.api.auth.DmTokenAuthentication",
@@ -234,20 +235,20 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
 }
 ONTOLOGY_DM_URL = os.environ.get("ONTOLOGY_DM_URL", "").rstrip("/")
-ONTOLOGY_LMS_URL = os.environ.get("ONTOLOGY_LMS_URL", "").rstrip("/")
 ONTOLOGY_DM_VERIFY_TTL = int(os.environ.get("ONTOLOGY_DM_VERIFY_TTL", "300"))
-# Optional allowlist of platform keys/orgs the console trusts. Empty (default)
-# keeps the platform-agnostic behaviour (any platform's active admin qualifies);
-# set it to scope console admin to specific platforms — important when DM/LMS is
-# the shared ibl.ai platform, where an unrelated platform's admin would otherwise
-# gain full control. Matched against each membership's ``key`` or ``org``.
-ONTOLOGY_ADMIN_PLATFORMS = {
-    p.strip()
-    for p in os.environ.get("ONTOLOGY_ADMIN_PLATFORMS", "").split(",")
-    if p.strip()
-}
-# Where the registry and run history live (backend/store.py): this database, or the DM
-# platform database of IBLAI_ORG, reached with IBLAI_BASE_URL / IBLAI_ADMIN_TOKEN.
+
+
+def _admin_platforms(environ=os.environ) -> set[str]:
+    """The platforms, by key, whose admins the console trusts: this backend's own
+    (IBLAI_ORG) unless ONTOLOGY_ADMIN_PLATFORMS lists them. Neither set: any platform's."""
+    listed = environ.get("ONTOLOGY_ADMIN_PLATFORMS") or environ.get("IBLAI_ORG") or ""
+    return {p.strip() for p in listed.split(",") if p.strip()}
+
+
+ONTOLOGY_ADMIN_PLATFORMS = _admin_platforms()
+# Where roles, sync schedules and the service registry live: this host (the YAML files and
+# this database), or with "dm" the ibl.ai platform of IBLAI_ORG, reached with
+# IBLAI_BASE_URL / IBLAI_ADMIN_TOKEN. Sync runs and the audit log stay here either way.
 ONTOLOGY_DATA_STORE = os.environ.get("ONTOLOGY_DATA_STORE") or "local"
 if ONTOLOGY_DATA_STORE not in ("local", "dm"):
     from django.core.exceptions import ImproperlyConfigured
@@ -259,18 +260,17 @@ if ONTOLOGY_DATA_STORE == "dm":
     from iblai_ontology.backend.platform.client import PlatformConfig
 
     # Fails here, not on the first request, when IBLAI_ORG / IBLAI_ADMIN_TOKEN are missing.
-    _platform = PlatformConfig.from_env()
-    # Only the store's own platform's admins drive a console that writes into its database.
-    ONTOLOGY_ADMIN_PLATFORMS = ONTOLOGY_ADMIN_PLATFORMS or {_platform.org}
+    PlatformConfig.from_env()
+# Seconds a process keeps the roles it read from the platform (dm) before asking again.
+ONTOLOGY_ROLES_TTL = int(os.environ.get("ONTOLOGY_ROLES_TTL") or 60)
 # Local dev without Entra/DM: anonymous requests act as a synthetic admin.
 ONTOLOGY_API_DEV_ALLOW_ANON = (
     os.environ.get("ONTOLOGY_API_DEV_ALLOW_ANON", "false").lower() == "true"
 )
 
 # --- CORS (the console SPA calls this API cross-origin from :3000) --------
-# Only browser origins that host the console need listing; the two tokens
-# travel in request headers (no cookies), so credentials stay off. The custom
-# X-Edx-Jwt header must be allowlisted on top of the DRF/CORS defaults.
+# Only browser origins that host the console need listing; the token travels
+# in the Authorization header (no cookies), so credentials stay off.
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get(
@@ -278,4 +278,3 @@ CORS_ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
-CORS_ALLOW_HEADERS = (*default_headers, "x-edx-jwt")

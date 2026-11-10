@@ -7,6 +7,7 @@ import { ArrowRight, BookOpen, FileText, Database, AlertTriangle } from "lucide-
 import { apiClient } from "@/lib/ontology/api-client";
 import { CATALOG } from "@/lib/ontology/catalog";
 import { SectionHeader } from "@/components/console/section-header";
+import { FactRow, Facts } from "@/components/console/facts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -181,7 +182,7 @@ export default function AddServicePage() {
                   <SelectContent>
                     {CATALOG.map((c) => (
                       <SelectItem key={c.key} value={c.key}>
-                        <span className="font-mono">{c.key}</span>
+                        <span>{c.key}</span>
                         <span className="text-muted-foreground ml-2 text-xs">{c.display_name}</span>
                       </SelectItem>
                     ))}
@@ -193,11 +194,7 @@ export default function AddServicePage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t("name")} hint={t("nameHint")}>
-                <Input
-                  value={form.name}
-                  onChange={(e) => update("name", e.target.value)}
-                  className="font-mono"
-                />
+                <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
               </Field>
               {seedPath === "manual" ? (
                 <Field label={t("adapter")} hint={t("adapterHint")}>
@@ -213,7 +210,7 @@ export default function AddServicePage() {
                           className="[&>span:last-child]:flex [&>span:last-child]:flex-1"
                         >
                           <span>{a.label}</span>
-                          <span className="text-muted-foreground ml-auto pl-4 font-mono text-xs">
+                          <span className="text-muted-foreground ml-auto pl-4 text-xs">
                             {a.key}
                           </span>
                         </SelectItem>
@@ -238,39 +235,22 @@ export default function AddServicePage() {
                 </Field>
               )}
               <Field label={t("host")}>
-                <Input
-                  value={form.host}
-                  onChange={(e) => update("host", e.target.value)}
-                  className="font-mono"
-                />
+                <Input value={form.host} onChange={(e) => update("host", e.target.value)} />
               </Field>
               <Field label={t("port")}>
-                <Input
-                  value={form.port}
-                  onChange={(e) => update("port", e.target.value)}
-                  className="font-mono"
-                />
+                <Input value={form.port} onChange={(e) => update("port", e.target.value)} />
               </Field>
               <Field label={t("database")}>
-                <Input
-                  value={form.database}
-                  onChange={(e) => update("database", e.target.value)}
-                  className="font-mono"
-                />
+                <Input value={form.database} onChange={(e) => update("database", e.target.value)} />
               </Field>
               <Field label={t("user")}>
-                <Input
-                  value={form.user}
-                  onChange={(e) => update("user", e.target.value)}
-                  className="font-mono"
-                />
+                <Input value={form.user} onChange={(e) => update("user", e.target.value)} />
               </Field>
               <Field label={t("password")} hint={t("passwordHint")}>
                 <Input
                   type="password"
                   value={form.password}
                   onChange={(e) => update("password", e.target.value)}
-                  className="font-mono"
                 />
               </Field>
             </div>
@@ -307,32 +287,16 @@ export default function AddServicePage() {
         <div className="flex flex-col gap-4">
           <p className="text-muted-foreground text-sm">{t("reviewHint")}</p>
           <Card>
-            <CardContent className="grid gap-x-6 gap-y-2 py-4 sm:grid-cols-2">
-              <ReviewRow label={t("name")} value={<span className="font-mono">{form.name}</span>} />
-              <ReviewRow
-                label={t("serviceType")}
-                value={<span className="font-mono">{form.service_type}</span>}
-              />
-              <ReviewRow
-                label={t("adapter")}
-                value={<span className="font-mono">{form.adapter || "—"}</span>}
-              />
-              <ReviewRow
-                label={t("host")}
-                value={<span className="font-mono">{form.host || "—"}</span>}
-              />
-              <ReviewRow
-                label={t("port")}
-                value={<span className="font-mono">{form.port || "—"}</span>}
-              />
-              <ReviewRow
-                label={t("database")}
-                value={<span className="font-mono">{form.database || "—"}</span>}
-              />
-              <ReviewRow
-                label={t("user")}
-                value={<span className="font-mono">{form.user || "—"}</span>}
-              />
+            <CardContent>
+              <Facts>
+                <FactRow label={t("name")} value={form.name} />
+                <FactRow label={t("serviceType")} value={form.service_type} />
+                <FactRow label={t("adapter")} value={form.adapter || "—"} />
+                <FactRow label={t("host")} value={form.host || "—"} />
+                <FactRow label={t("port")} value={form.port || "—"} />
+                <FactRow label={t("database")} value={form.database || "—"} />
+                <FactRow label={t("user")} value={form.user || "—"} />
+              </Facts>
             </CardContent>
           </Card>
           {form.skipSafety && (
@@ -359,11 +323,9 @@ function StepDot({ active, done, label }: { active: boolean; done: boolean; labe
     <span
       className={cn(
         "flex size-5 items-center justify-center rounded-full border text-xs",
-        active
+        active || done
           ? "border-primary bg-primary text-primary-foreground"
-          : done
-            ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-            : "border-border text-muted-foreground",
+          : "border-border text-muted-foreground",
       )}
     >
       {label}
@@ -390,10 +352,10 @@ function PathCard({
       onClick={onClick}
       className={cn(
         "flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors",
-        active ? "border-primary bg-accent" : "border-border hover:bg-muted/40",
+        active ? "border-border bg-accent" : "border-border hover:bg-muted/40",
       )}
     >
-      <Icon className={cn("size-5", active ? "text-primary" : "text-muted-foreground")} />
+      <Icon className={cn("size-5", active ? "text-foreground" : "text-muted-foreground")} />
       <span className="text-foreground text-sm font-medium">{title}</span>
       <span className="text-muted-foreground text-xs">{hint}</span>
     </button>
@@ -414,15 +376,6 @@ function Field({
       <Label className="text-xs">{label}</Label>
       {children}
       {hint && <p className="text-muted-foreground text-xs">{hint}</p>}
-    </div>
-  );
-}
-
-function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className="text-foreground text-sm">{value}</span>
     </div>
   );
 }

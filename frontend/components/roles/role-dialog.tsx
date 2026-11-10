@@ -51,7 +51,8 @@ export function RoleDialog({
   onOpenChange: (open: boolean) => void;
   initial?: Role;
   toolsets: string[];
-  onSaved: () => void;
+  /** Called with the role as it was saved. */
+  onSaved: (role: Role) => void;
 }) {
   const t = useTranslations("roles");
   const tc = useTranslations("common");
@@ -81,7 +82,7 @@ export function RoleDialog({
         return;
       }
       toast.success(r.message);
-      onSaved();
+      onSaved(role);
       onOpenChange(false);
     } catch {
       toast.error(tc("failed"));
@@ -100,12 +101,7 @@ export function RoleDialog({
       saving={saving}
     >
       <Field label={t("name")} htmlFor="role-name" error={errors.name && t("nameHint")}>
-        <Input
-          id="role-name"
-          {...form.register("name")}
-          disabled={Boolean(initial)}
-          className="font-mono"
-        />
+        <Input id="role-name" {...form.register("name")} disabled={Boolean(initial)} />
       </Field>
       <Field
         label={t("displayName")}
@@ -133,9 +129,7 @@ export function RoleDialog({
                         )
                       }
                     />
-                    <span className="font-mono text-xs">
-                      {name === "*" ? t("allToolsets") : name}
-                    </span>
+                    <span className="text-xs">{name === "*" ? t("allToolsets") : name}</span>
                   </label>
                 </li>
               ))}
@@ -147,25 +141,15 @@ export function RoleDialog({
         <Textarea
           id="role-memory"
           rows={3}
-          className="font-mono text-xs"
+          className="text-xs"
           {...form.register("memory_paths")}
         />
       </Field>
       <Field label={t("cacheTables")} htmlFor="role-cache" hint={t("onePerLine")}>
-        <Textarea
-          id="role-cache"
-          rows={2}
-          className="font-mono text-xs"
-          {...form.register("cache_tables")}
-        />
+        <Textarea id="role-cache" rows={2} className="text-xs" {...form.register("cache_tables")} />
       </Field>
       <Field label={t("agents")} htmlFor="role-agents" hint={t("onePerLine")}>
-        <Textarea
-          id="role-agents"
-          rows={2}
-          className="font-mono text-xs"
-          {...form.register("agents")}
-        />
+        <Textarea id="role-agents" rows={2} className="text-xs" {...form.register("agents")} />
       </Field>
       <Controller
         control={form.control}

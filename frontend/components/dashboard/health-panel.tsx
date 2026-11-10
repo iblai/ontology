@@ -1,6 +1,5 @@
-import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { StatusPill } from "@/components/console/status-pill";
 
 export interface HealthRow {
   label: string;
@@ -27,13 +26,6 @@ export function HealthPanel({
   const allOk = healthy && rows.every((r) => r.value);
   const anyDown = rows.some((r) => !r.value);
   const status = allOk ? "healthy" : anyDown ? "down" : "degraded";
-  const Icon = status === "healthy" ? CheckCircle2 : status === "down" ? XCircle : AlertCircle;
-  const tone =
-    status === "healthy"
-      ? "text-emerald-600"
-      : status === "down"
-        ? "text-red-600"
-        : "text-amber-600";
   const statusLabel =
     status === "healthy" ? healthyLabel : status === "down" ? downLabel : degradedLabel;
 
@@ -42,17 +34,18 @@ export function HealthPanel({
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-foreground text-sm font-medium">{title}</CardTitle>
-          <span className={cn("flex items-center gap-1.5 text-xs font-medium", tone)}>
-            <Icon className="size-3.5" />
+          <StatusPill
+            tone={status === "healthy" ? "success" : status === "down" ? "error" : "warning"}
+          >
             {statusLabel}
-          </span>
+          </StatusPill>
         </div>
       </CardHeader>
       <CardContent className="space-y-1.5 pt-0">
         {rows.map((r, i) => (
           <div key={i} className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">{r.label}</span>
-            <span className={cn("font-mono", r.value ? "text-foreground" : "text-red-600")}>
+            <span className={r.value ? "text-foreground" : "text-red-600"}>
               {r.value ? "ok" : "fail"}
             </span>
           </div>

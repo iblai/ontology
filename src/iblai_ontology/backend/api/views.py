@@ -24,6 +24,7 @@ from rest_framework.views import APIView
 
 from iblai_ontology.backend import store
 from iblai_ontology.backend.services.models import Service, ServiceHealth
+from iblai_ontology.config import dm_store
 from iblai_ontology.config.reader import ConfigReader, _redact
 
 from .serializers import (
@@ -67,6 +68,13 @@ def _json_null():
 
 class ConsoleAPIView(APIView):
     """Base view: auth/permission come from REST_FRAMEWORK defaults; adds audit."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        # Past the admin check: a new platform's first console request gets the example roles.
+        from iblai_ontology.backend.identity import role_source
+
+        role_source.seed_once()
 
     @staticmethod
     def _client_ip(request) -> str:
@@ -421,8 +429,9 @@ class SyncRunAllView(ConsoleAPIView):
 
 class SyncSchedulesView(ConsoleAPIView):
     def get(self, request):
-        schedules = ConfigReader().get_sync_schedules()
-        return Response(SyncScheduleSerializer(schedules, many=True).data)
+        from iblai_ontology.backend.sync import schedules
+
+        return Response(SyncScheduleSerializer(schedules.all(), many=True).data)
 
 
 class SyncStatusView(ConsoleAPIView):
@@ -569,8 +578,57 @@ class CountsView(ConsoleAPIView):
             "tools": len(reader.get_tools()),
             "toolsets": len(reader.get_toolsets()),
             "roles": len(RoleResolver().role_names()),
+            "data_store": "dm" if dm_store() else "local",
         }
         return Response(CountsSerializer(payload).data)
+
+
+# The config directory's files the Configuration page shows, under the page's own ids.
+_CONFIG_FILES = {
+    "ontology": "ontology.yaml",
+    "schedules": "sync-schedules.yaml",
+    "roles": "roles.yaml",
+    "tools": "tools.yaml",
+    "caddyfile": "Caddyfile",
+}
+_IN_PLATFORM = {"schedules", "roles"}  # dm keeps these in the ibl.ai platform
+
+
+class ConfigFilesView(ConsoleAPIView):
+    """The config directory's files and the catalog as text, secrets masked on this host."""
+
+    def get(self, request):
+        from datetime import UTC, datetime
+
+        from iblai_ontology import catalog
+        from iblai_ontology.config import config_dir
+        from iblai_ontology.config.reader import mask_secrets
+
+        from .serializers import ConfigFilesSerializer
+
+        root = config_dir()
+        paths = {
+            file_id: root / name
+            for file_id, name in _CONFIG_FILES.items()
+            if not (dm_store() and file_id in _IN_PLATFORM)
+        }
+        paths["catalog"] = Path(catalog.__file__).with_name("catalog.yaml")
+        files = []
+        for file_id, path in paths.items():
+            try:
+                text, changed = path.read_text(), path.stat().st_mtime
+            except (OSError, ValueError):  # absent or unreadable: the page says so
+                files.append({"id": file_id, "content": None, "modified_at": None})
+                continue
+            files.append(
+                {
+                    "id": file_id,
+                    "content": mask_secrets(text),
+                    "modified_at": datetime.fromtimestamp(changed, UTC),
+                }
+            )
+        payload = {"root": str(root), "files": files}
+        return Response(ConfigFilesSerializer(payload).data)
 
 
 class ResetView(ConsoleAPIView):
@@ -625,8 +683,9 @@ class GraphView(ConsoleAPIView):
     def get(self, request):
         from iblai_ontology.backend.graph.builder import build_graph
         from iblai_ontology.backend.health.checks import check_storage
+        from iblai_ontology.backend.identity.role_source import load_roles
+        from iblai_ontology.backend.sync import schedules
         from iblai_ontology.config.reader import ConfigReader
-        from iblai_ontology.config.writer import load_roles
 
         from .serializers import GraphQuerySerializer, GraphSerializer
 
@@ -638,11 +697,12 @@ class GraphView(ConsoleAPIView):
                 _graph_services(),
                 reader=reader,
                 roles=load_roles(),
-                schedules=reader.get_sync_schedules(),
+                schedules=schedules.all(),
                 by_domain=check_storage().by_domain,
                 columns=query.validated_data["columns"],
             )
-        except (OSError, ValueError, yaml.YAMLError) as exc:
+        # RuntimeError: the platform refused or did not answer (dm mode).
+        except (OSError, ValueError, RuntimeError, yaml.YAMLError) as exc:
             return _envelope(
                 False, str(exc)[:500], extra=_EMPTY_GRAPH, serializer=GraphSerializer
             )
@@ -735,13 +795,16 @@ class ServiceTablesView(ConsoleAPIView):
 
 class RoleDetailView(ConsoleAPIView):
     def put(self, request, name):
-        from iblai_ontology.config import writer
+        from iblai_ontology.backend.identity import role_source
 
         from .serializers import RoleInputSerializer
 
         if not _NAME_RE.match(name):
             return _envelope(False, "Invalid name.")
-        existing = writer.load_roles().get(name)
+        try:
+            existing = role_source.load_roles().get(name)
+        except RuntimeError as exc:  # the platform's own words (dm mode)
+            return _envelope(False, str(exc)[:500])
         form = RoleInputSerializer(data=request.data, partial=existing is not None)
         form.is_valid(raise_exception=True)
         spec = {**(existing or {}), **_plain(form.validated_data)}
@@ -753,19 +816,26 @@ class RoleDetailView(ConsoleAPIView):
         ]
         if bad:
             return _envelope(False, f"Unknown toolsets: {', '.join(bad)}")
-        writer.put_role(name, spec)
+        try:
+            role_source.put_role(name, spec)
+        except RuntimeError as exc:  # the platform's own words (dm mode)
+            return _envelope(False, str(exc)[:500])
         self._audit(request, action="role.upsert", resource=name)
         return _envelope(True, f"Role '{name}' saved.")
 
     def delete(self, request, name):
+        from iblai_ontology.backend.identity import role_source
         from iblai_ontology.backend.identity.roles import DEFAULT_ROLE
-        from iblai_ontology.config import writer
 
         if name == DEFAULT_ROLE:
             return _envelope(
                 False, "The default role is the fallback and cannot be deleted."
             )
-        if not writer.delete_role(name):
+        try:
+            found = role_source.delete_role(name)
+        except RuntimeError as exc:
+            return _envelope(False, str(exc)[:500])
+        if not found:
             return _envelope(False, f"Role '{name}' not found.")
         self._audit(request, action="role.delete", resource=name)
         return _envelope(True, f"Role '{name}' removed.")
@@ -796,9 +866,9 @@ class SyncScheduleDetailView(ConsoleAPIView):
         )
 
     def delete(self, request, name):
-        from iblai_ontology.config import writer
+        from iblai_ontology.backend.sync import schedules
 
-        if not writer.delete_schedule(name):
+        if not schedules.delete(name):
             return _envelope(False, f"Schedule '{name}' not found.")
         self._audit(request, action="schedule.delete", resource=name)
         return _envelope(True, f"Schedule '{name}' removed.")

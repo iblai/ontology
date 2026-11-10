@@ -3,27 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Plus, Trash2, Database } from "lucide-react";
+import { Plus, Database } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
 import type { Service } from "@/lib/ontology/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortableHeader } from "@/components/shared/data-table";
 import { SectionHeader } from "@/components/console/section-header";
 import { EmptyState } from "@/components/console/empty-state";
+import { ConfirmDelete } from "@/components/console/confirm-delete";
 import { StatusBadge } from "@/components/console/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { fmtDate } from "@/lib/format";
 import { fmtRows } from "@/lib/ontology/format";
@@ -55,9 +45,7 @@ export default function ServicesPage() {
     {
       accessorKey: "name",
       header: sortableHeader(t("colName")),
-      cell: ({ row }) => (
-        <span className="text-foreground font-mono font-medium">{row.original.name}</span>
-      ),
+      cell: ({ row }) => <span className="text-foreground font-medium">{row.original.name}</span>,
     },
     {
       accessorKey: "service_type",
@@ -71,9 +59,7 @@ export default function ServicesPage() {
     {
       accessorKey: "host",
       header: sortableHeader(t("colHost")),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.host}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.host}</span>,
     },
     {
       accessorKey: "status",
@@ -93,7 +79,7 @@ export default function ServicesPage() {
       accessorKey: "tables_synced",
       header: sortableHeader(t("colTablesSynced")),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs tabular-nums">
+        <span className="text-muted-foreground text-xs tabular-nums">
           {row.original.tables_synced > 0 ? fmtRows(row.original.tables_synced) : "—"}
         </span>
       ),
@@ -102,35 +88,13 @@ export default function ServicesPage() {
       id: "actions",
       header: () => <span className="sr-only">{tc("actions")}</span>,
       cell: ({ row }) => (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground h-8 px-2 hover:text-red-600"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("removeConfirmTitle", { name: row.original.name })}
-              </AlertDialogTitle>
-              <AlertDialogDescription>{t("removeConfirmBody")}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{tc("cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => remove(row.original.name)}
-                className="bg-destructive hover:bg-destructive/90 text-white"
-              >
-                {t("removeConfirmAction")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDelete
+          name={row.original.name}
+          title={t("removeConfirmTitle", { name: row.original.name })}
+          body={t("removeConfirmBody")}
+          action={t("removeConfirmAction")}
+          onConfirm={() => remove(row.original.name)}
+        />
       ),
     },
   ];
@@ -141,7 +105,7 @@ export default function ServicesPage() {
         title={t("title")}
         subtitle={t("subtitle")}
         actions={
-          <Button size="sm" onClick={() => router.push("/services/add")}>
+          <Button size="sm" variant="outline" onClick={() => router.push("/services/add")}>
             <Plus className="mr-2 size-3.5" />
             {t("addService")}
           </Button>

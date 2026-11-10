@@ -85,18 +85,43 @@ class _FakeResp:
         return self._payload
 
 
-def _install_httpx(monkeypatch, *, dm, lms, counter):
-    """Route httpx.get by path to canned DM-verify / LMS-platform responses."""
+JANE = {"user_id": 7, "username": "jane", "email": "jane@x.edu"}
 
-    def _get(url, headers=None, timeout=None):
-        counter.append(url)
-        if "token/verify" in url:
-            return dm
-        if "manage/platform" in url:
-            return lms
-        raise AssertionError(f"unexpected url {url}")
+
+def _link(**fields):
+    """One of jane's platform memberships, as the DM lists it."""
+    return {
+        "username": "jane",
+        "key": "acme",
+        "org": "acme-org",
+        "active": True,
+        "is_admin": True,
+        **fields,
+    }
+
+
+def _dm_auth(monkeypatch, *, user=None, links=None, admin_platforms=()):
+    """Point the Token scheme at canned DM answers; returns the calls it makes."""
+    from django.conf import settings
+
+    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
+    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", set(admin_platforms))
+    answers = {
+        "/api/core/token/verify/": user or _FakeResp(200, JANE),
+        "/api/core/users/platforms/": links or _FakeResp(200, [_link()]),
+    }
+    calls: list[tuple] = []
+
+    def _get(url, params=None, headers=None, timeout=None):
+        calls.append((url, params, headers))
+        return answers[url.removeprefix("http://dm.test")]
 
     monkeypatch.setattr("iblai_ontology.backend.api.auth.httpx.get", _get)
+    return calls
+
+
+def _token_request(token="dm"):
+    return _drf_request(HTTP_AUTHORIZATION=f"Token {token}")
 
 
 # --- Entra (Bearer) path -------------------------------------------------
@@ -135,70 +160,34 @@ def test_dm_auth_unconfigured_rejects(api, monkeypatch):
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
     monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "")
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
     with pytest.raises(AuthenticationFailed):
-        DmTokenAuthentication().authenticate(req)
+        DmTokenAuthentication().authenticate(_token_request())
 
 
-def test_dm_auth_missing_jwt_header_rejects(api, monkeypatch):
-    from django.conf import settings
-    from rest_framework.exceptions import AuthenticationFailed
-
+def test_dm_auth_takes_the_dm_token_alone(api, monkeypatch):
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm")  # no X-Edx-Jwt
-    with pytest.raises(AuthenticationFailed):
-        DmTokenAuthentication().authenticate(req)
-
-
-def test_dm_auth_admin_membership_grants(api, monkeypatch):
-    from django.conf import settings
-
-    from iblai_ontology.backend.api.auth import DmTokenAuthentication
-
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
-        lms=_FakeResp(
-            200,
-            [{"username": "jane", "org": "acme", "active": True, "is_admin": True}],
-        ),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
-    principal, auth = DmTokenAuthentication().authenticate(req)
-    assert principal.kind == "dm"
-    assert principal.username == "jane"
+    calls = _dm_auth(monkeypatch)
+    principal, auth = DmTokenAuthentication().authenticate(_token_request())
+    assert (principal.kind, principal.username) == ("dm", "jane")
     assert principal.admin is True
     assert auth is None
+    # The token's user, then that user's own memberships: both with the one token.
+    token = {"Authorization": "Token dm"}
+    assert calls == [
+        ("http://dm.test/api/core/token/verify/", {}, token),
+        ("http://dm.test/api/core/users/platforms/", {"username": "jane"}, token),
+    ]
 
 
 def test_dm_auth_non_admin_membership_denies(api, monkeypatch):
-    from django.conf import settings
-
     from iblai_ontology.backend.api.auth import (
         AdminDashboardPermission,
         DmTokenAuthentication,
     )
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_API_DEV_ALLOW_ANON", False)
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
-        lms=_FakeResp(
-            200,
-            [{"username": "jane", "org": "acme", "active": True, "is_admin": False}],
-        ),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
+    _dm_auth(monkeypatch, links=_FakeResp(200, [_link(is_admin=False)]))
+    req = _token_request()
     principal, _ = DmTokenAuthentication().authenticate(req)
     assert principal.admin is False
     # authenticated but not authorized → permission denies
@@ -206,89 +195,58 @@ def test_dm_auth_non_admin_membership_denies(api, monkeypatch):
     assert AdminDashboardPermission().has_permission(req, None) is False
 
 
+def test_dm_auth_counts_only_the_users_own_active_memberships(api, monkeypatch):
+    from iblai_ontology.backend.api.auth import DmTokenAuthentication
+
+    links = [_link(active=False), _link(username="bob")]
+    _dm_auth(monkeypatch, links=_FakeResp(200, links))
+    principal, _ = DmTokenAuthentication().authenticate(_token_request())
+    assert principal.admin is False
+
+
 def test_dm_auth_verify_rejected_raises(api, monkeypatch):
-    from django.conf import settings
     from rest_framework.exceptions import AuthenticationFailed
 
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(401, {"detail": "invalid"}),
-        lms=_FakeResp(200, []),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
+    calls = _dm_auth(monkeypatch, user=_FakeResp(401, {"detail": "invalid"}))
     with pytest.raises(AuthenticationFailed):
-        DmTokenAuthentication().authenticate(req)
+        DmTokenAuthentication().authenticate(_token_request())
+    assert len(calls) == 1  # the memberships are never asked for
 
 
-def test_dm_auth_username_mismatch_raises(api, monkeypatch):
-    from django.conf import settings
+def test_dm_auth_memberships_rejected_raises(api, monkeypatch):
     from rest_framework.exceptions import AuthenticationFailed
 
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
-        lms=_FakeResp(
-            200,
-            [{"username": "bob", "org": "acme", "active": True, "is_admin": True}],
-        ),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
+    _dm_auth(monkeypatch, links=_FakeResp(403, {"detail": "no"}))
     with pytest.raises(AuthenticationFailed):
-        DmTokenAuthentication().authenticate(req)
+        DmTokenAuthentication().authenticate(_token_request())
 
 
 def test_dm_auth_empty_username_rejected(api, monkeypatch):
-    from django.conf import settings
     from rest_framework.exceptions import AuthenticationFailed
 
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "email": "x@x.edu"}),  # DM omits username
-        lms=_FakeResp(200, [{"username": "", "active": True, "is_admin": True}]),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
+    # The DM omits the username.
+    _dm_auth(monkeypatch, user=_FakeResp(200, {"user_id": 7, "email": "x@x.edu"}))
     with pytest.raises(AuthenticationFailed):
-        DmTokenAuthentication().authenticate(req)
+        DmTokenAuthentication().authenticate(_token_request())
 
 
 def test_dm_auth_caches_verdict(api, monkeypatch):
-    from django.conf import settings
-
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    calls: list[str] = []
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
-        lms=_FakeResp(
-            200,
-            [{"username": "jane", "org": "acme", "active": True, "is_admin": True}],
-        ),
-        counter=calls,
-    )
+    calls = _dm_auth(monkeypatch)
     auth = DmTokenAuthentication()
-    r1 = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
-    r2 = _drf_request(HTTP_AUTHORIZATION="Token dm", HTTP_X_EDX_JWT="jwt")
-    auth.authenticate(r1)
-    auth.authenticate(r2)
-    assert len(calls) == 2  # DM + LMS once; second request served from cache
+    auth.authenticate(_token_request())
+    auth.authenticate(_token_request())
+    assert len(calls) == 2  # the two DM calls once; the second request is cached
+    # Another token is another verdict.
+    auth.authenticate(_token_request("another"))
+    assert len(calls) == 4
 
 
 # --- permission ----------------------------------------------------------
@@ -504,8 +462,8 @@ def test_roles_and_counts_shapes(api):
     _make_service("c1")
     counts = _run(CountsView, _dispatch(CountsView, "get", "/counts"))
     assert counts.status_code == 200
-    assert set(counts.data) == {"services", "tools", "toolsets", "roles"}
-    assert counts.data["services"] == 1
+    assert set(counts.data) == {"services", "tools", "toolsets", "roles", "data_store"}
+    assert (counts.data["services"], counts.data["data_store"]) == (1, "local")
 
 
 def test_mcp_sources_tolerate_env_tokens_and_redact(api):
@@ -661,50 +619,29 @@ def test_sync_history_service_filter_matches_either_column(api):
     ]
 
 
-def test_dm_auth_admin_platform_allowlist_grants_listed(api, monkeypatch):
-    """M3: with an allowlist set, an admin on a listed platform still qualifies."""
-    from django.conf import settings
-
+def test_dm_auth_admin_platform_allowlist_is_by_platform_key(api, monkeypatch):
+    """M3: with an allowlist, the admin membership must be on a listed platform."""
     from iblai_ontology.backend.api.auth import DmTokenAuthentication
 
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", {"acme"})
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
-        lms=_FakeResp(
-            200,
-            [{"username": "jane", "org": "acme", "active": True, "is_admin": True}],
-        ),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token allow-yes", HTTP_X_EDX_JWT="jwt")
-    principal, _ = DmTokenAuthentication().authenticate(req)
-    assert principal.admin is True
+    def admin(token, **link):
+        links = _FakeResp(200, [_link(**link)])
+        _dm_auth(monkeypatch, links=links, admin_platforms={"acme"})
+        return DmTokenAuthentication().authenticate(_token_request(token))[0].admin
+
+    assert admin("allow-yes", key="acme") is True
+    assert admin("allow-no", key="other-co") is False
+    # A platform whose org, not its key, is listed does not qualify.
+    assert admin("allow-org", key="other-co", org="acme") is False
 
 
-def test_dm_auth_admin_platform_allowlist_denies_other(api, monkeypatch):
-    """M3: an admin, but on a platform outside the allowlist, is not admin here."""
-    from django.conf import settings
+def test_admin_platforms_default_to_this_backends_own(api):
+    from iblai_ontology.backend.settings import _admin_platforms
 
-    from iblai_ontology.backend.api.auth import DmTokenAuthentication
-
-    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_LMS_URL", "http://lms.test")
-    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", {"acme"})
-    _install_httpx(
-        monkeypatch,
-        dm=_FakeResp(200, {"user_id": 7, "username": "jane", "email": "jane@x.edu"}),
-        lms=_FakeResp(
-            200,
-            [{"username": "jane", "org": "other-co", "active": True, "is_admin": True}],
-        ),
-        counter=[],
-    )
-    req = _drf_request(HTTP_AUTHORIZATION="Token allow-no", HTTP_X_EDX_JWT="jwt")
-    principal, _ = DmTokenAuthentication().authenticate(req)
-    assert principal.admin is False
+    assert _admin_platforms({"IBLAI_ORG": "acme"}) == {"acme"}
+    listed = {"ONTOLOGY_ADMIN_PLATFORMS": "one, two", "IBLAI_ORG": "acme"}
+    assert _admin_platforms(listed) == {"one", "two"}
+    # No platform of its own and none listed: any platform's admin, as before.
+    assert _admin_platforms({}) == set()
 
 
 def test_add_service_without_service_type_is_accepted(api, monkeypatch):
@@ -817,6 +754,14 @@ def test_graph_view_builds_from_registry_and_config(api, cfg):
     assert "column" not in kinds
     assert any(link["kind"] == "grants" for link in body["links"])
     assert {"hubs", "orphans", "dangling"} <= set(body["stats"])
+    # A memory domain names the tables it is cached in, which are not always its own name.
+    cached = {
+        n["label"]: n["meta"]["cache_tables"]
+        for n in body["nodes"]
+        if n["kind"] == "memory_domain"
+    }
+    assert cached["financial-aid"] == ["financial_aid"]
+    assert cached["students"] == ["holds", "students"] and cached["hr"] == []
     with_columns = _run(
         GraphView, _dispatch(GraphView, path="/graph?columns=true")
     ).data
@@ -1100,3 +1045,41 @@ def test_mcp_config_get_masks_and_put_validates(api, cfg, monkeypatch):
     body = _run(McpConfigView, raw).data
     assert body["ok"] is True and body["report"]["tools"] >= 5
     assert (cfg / "tools.yaml").read_text().endswith("# trailing note\n")
+
+
+def test_config_sends_the_config_files_with_secrets_masked(api, cfg):
+    from iblai_ontology.backend.api.views import ConfigFilesView
+
+    (cfg / "ontology.yaml").write_text(
+        "llm:\n"
+        "  api_key: sk-live-123\n"
+        "  token: ${LLM_TOKEN}\n"
+        "cache:\n"
+        "  url: postgres://ro:hunter2@db.edu/x\n"
+        "  replica: postgres://ro:${DB_PASSWORD}@db.edu/x\n"
+    )
+    data = _run(ConfigFilesView, _dispatch(ConfigFilesView, path="/config")).data
+    assert data["root"] == str(cfg)
+    files = {f["id"]: f for f in data["files"]}
+    assert list(files) == [
+        "ontology",
+        "schedules",
+        "roles",
+        "tools",
+        "caddyfile",
+        "catalog",
+    ]
+    # A literal secret never leaves the host; a ${VAR} is configuration and stays.
+    assert files["ontology"]["content"] == (
+        "llm:\n"
+        "  api_key: ••••••••\n"
+        "  token: ${LLM_TOKEN}\n"
+        "cache:\n"
+        "  url: postgres://ro:••••••••@db.edu/x\n"
+        "  replica: postgres://ro:${DB_PASSWORD}@db.edu/x\n"
+    )
+    assert files["roles"]["modified_at"] and "roles:" in files["roles"]["content"]
+    # Absent is said, not skipped; the catalog ships with the package.
+    absent = {"id": "caddyfile", "content": None, "modified_at": None}
+    assert dict(files["caddyfile"]) == absent
+    assert "entries:" in files["catalog"]["content"]

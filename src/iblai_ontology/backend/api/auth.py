@@ -5,16 +5,13 @@ Two Authorization schemes (wired in ``settings.REST_FRAMEWORK``):
 * ``Bearer <entra-jwt>`` — validated by ``OntologyIdentityMiddleware`` before
   DRF runs; :class:`OntologyAuthentication` lifts the middleware's
   ``request.ontology`` into a principal. Access requires the resolved role's
-  ``admin_dashboard`` flag (roles.yaml).
-* ``Token <dm_token>`` + ``X-Edx-Jwt: <edx-jwt>`` — the ibl.ai path.
-  :class:`DmTokenAuthentication` verifies the DM token against
-  ``{ONTOLOGY_DM_URL}/api/core/token/verify/`` and reads the caller's platform
-  memberships from ``{ONTOLOGY_LMS_URL}/api/ibl/users/manage/platform/`` with
-  the edX JWT. Admin = at least one membership with ``active && is_admin`` —
-  platform-agnostic by default (any platform's admin qualifies), or scoped to
-  ``ONTOLOGY_ADMIN_PLATFORMS`` (by ``key``/``org``) when that allowlist is set.
-  The two credentials are
-  bound by username (same user must hold both). Verdicts are cached for
+  ``admin_dashboard`` flag.
+* ``Token <dm_token>`` — the ibl.ai path. :class:`DmTokenAuthentication` verifies
+  the token against ``{ONTOLOGY_DM_URL}/api/core/token/verify/`` and reads the
+  caller's own platform memberships from ``…/api/core/users/platforms/`` with the
+  same token. Admin = a membership with ``active && is_admin`` on a platform in
+  ``ONTOLOGY_ADMIN_PLATFORMS`` (by ``key``; this backend's own ``IBLAI_ORG`` by
+  default), or on any platform when that set is empty. Verdicts are cached for
   ``ONTOLOGY_DM_VERIFY_TTL`` seconds, so an upstream revocation takes effect
   within the TTL.
 
@@ -35,8 +32,13 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
 
 DM_VERIFY_PATH = "/api/core/token/verify/"
-LMS_PLATFORM_PATH = "/api/ibl/users/manage/platform/"
+DM_PLATFORMS_PATH = "/api/core/users/platforms/"
 HTTP_TIMEOUT = 10.0
+
+
+def verdict_key(dm_token: str) -> str:
+    """Where a DM token's verdict is cached; a value there says the token was verified."""
+    return "dmauth:" + hashlib.sha256(dm_token.encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -76,26 +78,21 @@ class OntologyAuthentication(BaseAuthentication):
 
 
 class DmTokenAuthentication(BaseAuthentication):
-    """ibl.ai path — DM API token + edX JWT, verified upstream and cached."""
+    """ibl.ai path — a DM API token, verified upstream and cached."""
 
     def authenticate(self, request):
         header = get_authorization_header(request).split()
         if len(header) != 2 or header[0].lower() != b"token":
             return None
-        if not (settings.ONTOLOGY_DM_URL and settings.ONTOLOGY_LMS_URL):
+        if not settings.ONTOLOGY_DM_URL:
             raise AuthenticationFailed(
-                "Token auth is not configured "
-                "(set ONTOLOGY_DM_URL and ONTOLOGY_LMS_URL)."
+                "Token auth is not configured (set ONTOLOGY_DM_URL)."
             )
         dm_token = header[1].decode()
-        edx_jwt = request.META.get("HTTP_X_EDX_JWT", "")
-        if not edx_jwt:
-            raise AuthenticationFailed("X-Edx-Jwt header is required with Token auth.")
-
-        key = "dmauth:" + hashlib.sha256(f"{dm_token}\n{edx_jwt}".encode()).hexdigest()
+        key = verdict_key(dm_token)
         fields = cache.get(key)
         if fields is None:
-            fields = asdict(self._verify(dm_token, edx_jwt))
+            fields = asdict(self._verify(dm_token))
             cache.set(key, fields, settings.ONTOLOGY_DM_VERIFY_TTL)
         return OntologyPrincipal(**fields), None
 
@@ -103,10 +100,13 @@ class DmTokenAuthentication(BaseAuthentication):
         return "Token"
 
     @staticmethod
-    def _get_json(url: str, authorization: str, what: str):
+    def _get_json(path: str, dm_token: str, what: str, **params):
         try:
             resp = httpx.get(
-                url, headers={"Authorization": authorization}, timeout=HTTP_TIMEOUT
+                settings.ONTOLOGY_DM_URL + path,
+                params=params,
+                headers={"Authorization": f"Token {dm_token}"},
+                timeout=HTTP_TIMEOUT,
             )
         except httpx.HTTPError as exc:
             raise AuthenticationFailed(
@@ -116,35 +116,28 @@ class DmTokenAuthentication(BaseAuthentication):
             raise AuthenticationFailed(f"{what} rejected.")
         return resp.json()
 
-    def _verify(self, dm_token: str, edx_jwt: str) -> OntologyPrincipal:
-        user = self._get_json(
-            settings.ONTOLOGY_DM_URL + DM_VERIFY_PATH, f"Token {dm_token}", "DM token"
-        )
-        memberships = self._get_json(
-            settings.ONTOLOGY_LMS_URL + LMS_PLATFORM_PATH, f"JWT {edx_jwt}", "edX JWT"
-        )
+    def _verify(self, dm_token: str) -> OntologyPrincipal:
+        user = self._get_json(DM_VERIFY_PATH, dm_token, "DM token")
         if not isinstance(user, dict):
             raise AuthenticationFailed("DM token rejected.")
-        if not isinstance(memberships, list):
-            raise AuthenticationFailed("edX JWT rejected.")
-
         username = user.get("username") or ""
         if not username:
             raise AuthenticationFailed("DM token response has no username.")
-        mine = [m for m in memberships if m.get("username") == username]
-        if memberships and not mine:
-            raise AuthenticationFailed(
-                "DM token and edX JWT belong to different users."
-            )
-        # Admin = an active admin membership. When ONTOLOGY_ADMIN_PLATFORMS is
-        # set, that membership must also be on an allowed platform (by key/org);
-        # an empty allowlist keeps the platform-agnostic default.
+        # The DM answers a user about their own memberships with the token alone.
+        memberships = self._get_json(
+            DM_PLATFORMS_PATH, dm_token, "Platform memberships", username=username
+        )
+        if not isinstance(memberships, list):
+            raise AuthenticationFailed("Platform memberships rejected.")
+        # Admin = an active admin membership on an allowed platform, by its key; an
+        # empty allowlist takes any platform's admin.
         allowed = settings.ONTOLOGY_ADMIN_PLATFORMS
         admin = any(
-            m.get("active")
+            m.get("username") == username
+            and m.get("active")
             and m.get("is_admin")
-            and (not allowed or m.get("key") in allowed or m.get("org") in allowed)
-            for m in mine
+            and (not allowed or m.get("key") in allowed)
+            for m in memberships
         )
         return OntologyPrincipal(
             kind="dm",

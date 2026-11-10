@@ -153,6 +153,53 @@ entries:
     sync_defaults: {deals: 6h, contacts: 6h}
     skill: hubspot.md
 
+  twenty:
+    display_name: "Twenty CRM"
+    type: api
+    adapter: twenty_api
+    domain: enterprise
+    connection: {base_url_env: TWENTY_BASE_URL}
+    env: [TWENTY_API_KEY, TWENTY_BASE_URL]
+    default_toolset: admin-analytics-tools
+    sync_defaults: {people: 1h, companies: 6h, opportunities: 1h, workspaceMembers: 24h, notes: 6h, tasks: 1h, noteTargets: 6h, taskTargets: 6h}
+    # Per REST plural: the workspace table (`service map <name> --from twenty` on a self-hosted
+    # database), the house entity and the column renames; the sync lowercases the keys.
+    mapping:
+      people:
+        table: person
+        entity: persons
+        fields: {nameFirstName: first_name, nameLastName: last_name, emailsPrimaryEmail: primary_email, emailsAdditionalEmails: emails, phonesPrimaryPhoneNumber: phone, jobTitle: job_title, companyId: organization_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      companies:
+        table: company
+        entity: organizations
+        fields: {domainNamePrimaryLinkUrl: website, addressAddressStreet1: address_street, addressAddressCity: address_city, addressAddressState: address_state, addressAddressPostcode: address_zip, addressAddressCountry: address_country, accountOwnerId: owner_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      opportunities:
+        table: opportunity
+        entity: deals
+        fields: {name: title, amountAmountMicros: amount_micros, amountCurrencyCode: currency, closeDate: expected_close_date, pointOfContactId: person_id, companyId: organization_id, ownerId: owner_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      workspaceMembers:
+        table: workspaceMember
+        entity: workspace_members
+        fields: {nameFirstName: first_name, nameLastName: last_name, userEmail: email, userId: user_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      notes:
+        table: note
+        entity: notes
+        fields: {bodyV2Markdown: body, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      tasks:
+        table: task
+        entity: tasks
+        fields: {bodyV2Markdown: body, dueAt: due_at, assigneeId: assignee_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      noteTargets:
+        table: noteTarget
+        entity: note_targets
+        fields: {noteId: note_id, targetPersonId: person_id, targetCompanyId: organization_id, targetOpportunityId: deal_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+      taskTargets:
+        table: taskTarget
+        entity: task_targets
+        fields: {taskId: task_id, targetPersonId: person_id, targetCompanyId: organization_id, targetOpportunityId: deal_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+    skill: twenty.md
+    summary: "Open-source CRM — people, companies, opportunities, notes, tasks; self-hosted (one PostgreSQL schema per workspace, read with generic-postgres) or on Twenty's cloud (REST through mcp-servers/twenty)."
+
   servicenow-itsm:
     display_name: "ServiceNow ITSM (enterprise)"
     type: api

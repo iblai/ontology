@@ -69,7 +69,7 @@ services:
     build: ./sync-engine
     volumes:
       - ontology-files:/ontology
-      - ./config/sync-schedules.yaml:/app/config.yaml
+      - ./config:/app/config:ro              # the config directory, read-only
     environment:
       MCP_TOOLBOX_URL: http://mcp-toolbox:5000
       MCP_CANVAS_URL: http://mcp-canvas:3000
@@ -85,7 +85,7 @@ services:
     build: ./gateway
     volumes:
       - ontology-files:/ontology:ro          # read-only mount
-      - ./config/roles.yaml:/app/roles.yaml
+      - ./config:/app/config                 # writable: the Ontology Frontend saves through the gateway
     environment:
       MCP_TOOLBOX_URL: http://mcp-toolbox:5000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
@@ -215,6 +215,17 @@ ENTRA_CLIENT_ID=<iblai-ontology-app-client-id>
 # not an env var — see "Environment File" above.
 # ONTOLOGY_CREDENTIAL_KEY_FILE=./secrets/ontology_credential_key
 ```
+
+### The Ontology Frontend
+
+The Ontology Frontend, the admin console, is not a service of this stack. Run one beside it (its
+`ONTOLOGY_API_URL` naming the gateway), or use the one hosted for every platform at
+`ontology.ibl.ai`: set `ONTOLOGY_DM_URL`, `IBLAI_ORG` and the platform key on the gateway, record
+the gateway's public address in your platform with
+`ontology platform address --url https://ontology.<domain>`, and let the hosted frontend through
+the firewall as you do the ibl.ai platform. Your platform's admins then sign in there. The address
+must be `https` and public, and the frontend sends each admin's platform token and nothing else
+([DEV.md](../DEV.md#one-ontology-frontend-for-every-platform)).
 
 ---
 

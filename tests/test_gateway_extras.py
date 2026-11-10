@@ -259,7 +259,12 @@ def test_platform_attach_to_agent():
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":  # the agent's current settings
+            return httpx.Response(
+                200, json={"tool_slugs": ["web-search"], "mcp_servers": []}
+            )
         captured["method"] = request.method
+        captured["path"] = request.url.path
         captured["body"] = json.loads(request.content)
         return httpx.Response(200, json={"ok": True})
 
@@ -274,8 +279,13 @@ def test_platform_attach_to_agent():
     )
     out = client.attach_to_agent(agent_id="agent-uuid", server_id=14)
     assert out["ok"] is True
-    assert captured["method"] == "PATCH"
-    assert captured["body"]["mcp_servers"] == [14]
+    assert captured["method"] == "PUT"
+    assert captured["path"].endswith("/mentors/agent-uuid/settings/")
+    assert captured["body"] == {
+        "tool_slugs": ["mcp", "web-search"],
+        "can_use_tools": True,
+        "mcp_servers": [14],
+    }
 
 
 def test_platform_config_from_env(monkeypatch):

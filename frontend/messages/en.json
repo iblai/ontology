@@ -477,7 +477,6 @@
     "updated": "updated",
     "parseError": "Could not parse for summary",
     "file_ontology": "Ontology",
-    "file_services": "Services",
     "file_schedules": "Sync schedules",
     "file_roles": "Roles",
     "file_tools": "MCP tools",
@@ -619,9 +618,10 @@
     "subtitle": "What each role may reach, from the systems of record to the agents that act. Flip a switch to change it.",
     "role": "Role",
     "allRoles": "All roles",
-    "hint": "Pick a role to light up its reach and edit its grants; click a toolset to edit its tools.",
-    "hintRole": "Switches grant {role} a toolset, or reading and caching a memory domain.",
-    "hintToolset": "Switches on the tools put them in or out of {name}.",
+    "newRole": "New role",
+    "hint": "Click a role to light up its reach and edit its grants, or a toolset to edit its tools.",
+    "hintRole": "Click a toolset or a memory domain, or flip its switch, to grant it to {role} or take it away.",
+    "hintToolset": "Click a tool, or flip its switch, to put it in or out of {name}.",
     "grant": "Grant {name}",
     "read": "read",
     "cache": "cache",
@@ -669,7 +669,7 @@
     "newRole": "New role",
     "newSchedule": "New schedule",
     "demo": "Demo data",
-    "demoHint": "Mock data served by this console. Set ONTOLOGY_API_URL to forward to a backend.",
+    "demoHint": "Mock data served by this console. Set ONTOLOGY_API_URL to forward to a backend, or ONTOLOGY_MULTI_PLATFORM to find each platform’s own.",
     "live": "Live",
     "checking": "Checking the gateway…",
     "liveSessions": "Live · {n, plural, one {# session} other {# sessions}}",
@@ -677,7 +677,15 @@
     "liveHint": "Gateway {url}: {tools, plural, one {# tool} other {# tools}}, {toolsets, plural, one {# toolset} other {# toolsets}}.",
     "liveLocal": "Live · Local",
     "liveLocalHint": "Local backend: {tools, plural, one {# tool} other {# tools}}, {toolsets, plural, one {# toolset} other {# toolsets}}.",
-    "unreachable": "Backend unreachable"
+    "unreachable": "Backend unreachable",
+    "gate": {
+      "no_backend": "No ontology backend is connected to this platform",
+      "no_backendHint": "The backend records its address in the platform with “ontology platform address”. Switch platform from your profile menu to open another.",
+      "bad_backend": "This platform’s ontology backend cannot be reached from here",
+      "bad_backendHint": "The address it recorded must be a public https address. Its administrator can record another with “ontology platform address”.",
+      "not_admin": "The ontology console is for this platform’s administrators",
+      "not_adminHint": "Ask an administrator of this platform for access, or switch platform from your profile menu."
+    }
   },
   "palette": {
     "title": "Search",

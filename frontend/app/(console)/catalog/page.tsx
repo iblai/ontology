@@ -30,9 +30,7 @@ export default function CatalogPage() {
     {
       accessorKey: "key",
       header: sortableHeader(t("colKey")),
-      cell: ({ row }) => (
-        <span className="text-foreground font-mono font-medium">{row.original.key}</span>
-      ),
+      cell: ({ row }) => <span className="text-foreground font-medium">{row.original.key}</span>,
     },
     {
       accessorKey: "display_name",
@@ -42,24 +40,20 @@ export default function CatalogPage() {
     {
       accessorKey: "type",
       header: sortableHeader(t("colType")),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.type}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.type}</span>,
     },
     {
       accessorKey: "domain",
       header: sortableHeader(t("colDomain")),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.domain}</span>
+        <span className="text-muted-foreground text-xs">{row.original.domain}</span>
       ),
     },
     {
       accessorKey: "default_toolset",
       header: sortableHeader(t("colDefaultToolset")),
       cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">
-          {row.original.default_toolset}
-        </span>
+        <span className="text-muted-foreground text-xs">{row.original.default_toolset}</span>
       ),
     },
     {
@@ -67,7 +61,7 @@ export default function CatalogPage() {
       header: t("colSkill"),
       cell: ({ row }) =>
         row.original.skill ? (
-          <span className="text-muted-foreground font-mono text-xs">{row.original.skill}</span>
+          <span className="text-muted-foreground text-xs">{row.original.skill}</span>
         ) : (
           <span className="text-muted-foreground text-xs">—</span>
         ),
@@ -88,7 +82,7 @@ export default function CatalogPage() {
               <SelectItem value="all">{t("domainAll")}</SelectItem>
               {DOMAINS.map((d) => (
                 <SelectItem key={d} value={d}>
-                  <span className="font-mono text-xs">{d}</span>
+                  <span className="text-xs">{d}</span>
                 </SelectItem>
               ))}
             </SelectContent>

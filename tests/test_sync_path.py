@@ -600,3 +600,72 @@ def test_register_api_creates_the_service_and_catalog_schedules(backend):
     # No tables to sample: the first sync is the check.
     report = ProvisioningValidator(service).validate()
     assert report.ok and report.results[0].error.startswith("api source")
+
+
+def test_pull_table_quotes_postgres_identifiers(backend, monkeypatch):
+    from iblai_ontology.backend.sync.engine import SyncRunner
+
+    log = _fake_connection(monkeypatch, rows=[("1",)], cols=["id"])
+    pg = _make_service(name="twenty", db_type="postgresql")
+    SyncRunner().pull_table(pg, "workspace_x.workspaceMember", limit=5)
+    assert log[-1] == 'SELECT * FROM "workspace_x"."workspaceMember" LIMIT 5'
+    # Other dialects stay as they were.
+    SyncRunner().pull_table(_make_service(), "campus.courses", limit=5)
+    assert log[-1] == "SELECT * FROM campus.courses LIMIT 5"
+
+
+_TWENTY_PEOPLE = {
+    "people": {
+        "table": "person",
+        "entity": "persons",
+        "fields": {"nameFirstName": "first_name", "companyId": "organization_id"},
+    }
+}
+
+
+def test_api_schedules_carry_the_catalog_mapping():
+    from iblai_ontology.backend.discovery.config_generator import api_schedules_yaml
+
+    sched = yaml.safe_load(
+        api_schedules_yaml("crm", "Twenty", {"people": "1h"}, _TWENTY_PEOPLE)
+    )["schedules"][0]
+    assert sched["tool"] == "list-people"
+    assert sched["output"] == {
+        "structured_cache": "persons",
+        "text_memories": "/ontology/persons/",
+        "primary_key": ["id"],
+        "create_table": True,
+        "map": {"namefirstname": "first_name", "companyid": "organization_id"},
+    }
+
+
+def test_map_from_catalog_applies_the_vendor_mapping(backend):
+    from iblai_ontology.backend.discovery.engine import DiscoveryEngine
+
+    person = {
+        "schema_name": "workspace_x",
+        "table_name": "person",
+        "row_count": 2,
+        "columns": [
+            {"name": "id", "data_type": "uuid", "nullable": False},
+            {"name": "nameFirstName", "data_type": "text", "nullable": True},
+            {"name": "companyId", "data_type": "uuid", "nullable": True},
+        ],
+        "primary_key_columns": ["id"],
+    }
+    _make_service(
+        name="twenty",
+        db_type="postgresql",
+        tables=[person, _COURSES],
+        analysis={"table_descriptions": [], "entity_groups": {}},
+    )
+    applied = DiscoveryEngine().map("twenty", catalog="twenty")
+    # Only the tables the vendor mapping names; the renames lowercased, no LLM involved.
+    assert set(applied) == {"workspace_x.person"}
+    assert applied["workspace_x.person"]["entity"] == "persons"
+    assert applied["workspace_x.person"]["fields"]["namefirstname"] == "first_name"
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.services.models import Service
+
+    overrides = store.get(Service, name="twenty").llm_analysis["overrides"]
+    assert overrides["workspace_x.person"]["entity"] == "persons"

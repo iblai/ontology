@@ -214,7 +214,7 @@ class SchemaIntrospector:
                 "ORDER BY table_name"
             ),
             "postgresql": (
-                "SELECT t.table_name, (SELECT reltuples::bigint FROM pg_class c "
+                "SELECT t.table_name, (SELECT GREATEST(c.reltuples, 0)::bigint FROM pg_class c "
                 "JOIN pg_namespace n ON c.relnamespace = n.oid "
                 f"WHERE n.nspname = '{schema}' AND c.relname = t.table_name) AS row_count "
                 "FROM information_schema.tables t "
@@ -297,12 +297,12 @@ class SchemaIntrospector:
                 f"WHERE c.owner = '{schema}' AND c.table_name = '{table}' "
                 "AND c.constraint_type = 'P' ORDER BY cc.position"
             ),
+            # pg_catalog, not information_schema: a SELECT-only role sees no constraints there.
             "postgresql": (
-                "SELECT kcu.column_name FROM information_schema.table_constraints tc "
-                "JOIN information_schema.key_column_usage kcu "
-                "ON tc.constraint_name = kcu.constraint_name "
-                f"WHERE tc.table_schema = '{schema}' AND tc.table_name = '{table}' "
-                "AND tc.constraint_type = 'PRIMARY KEY'"
+                "SELECT a.attname FROM pg_index i "
+                "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+                f'WHERE i.indrelid = \'"{schema}"."{table}"\'::regclass AND i.indisprimary '
+                "ORDER BY array_position(i.indkey::int2[], a.attnum)"
             ),
             "mysql": (
                 "SELECT column_name FROM information_schema.key_column_usage "
@@ -332,13 +332,12 @@ class SchemaIntrospector:
                 "AND ac.constraint_type = 'R'"
             ),
             "postgresql": (
-                "SELECT kcu.column_name, ccu.table_name, ccu.column_name "
-                "FROM information_schema.referential_constraints rc "
-                "JOIN information_schema.key_column_usage kcu "
-                "ON rc.constraint_name = kcu.constraint_name "
-                "JOIN information_schema.constraint_column_usage ccu "
-                "ON rc.unique_constraint_name = ccu.constraint_name "
-                f"WHERE kcu.table_schema = '{schema}' AND kcu.table_name = '{table}'"
+                "SELECT a.attname, rc.relname, ra.attname FROM pg_constraint c "
+                "JOIN pg_class rc ON rc.oid = c.confrelid "
+                "JOIN LATERAL unnest(c.conkey, c.confkey) AS k(attnum, refnum) ON true "
+                "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum "
+                "JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = k.refnum "
+                f"WHERE c.contype = 'f' AND c.conrelid = '\"{schema}\".\"{table}\"'::regclass"
             ),
             "mysql": (
                 "SELECT column_name, referenced_table_name, referenced_column_name "

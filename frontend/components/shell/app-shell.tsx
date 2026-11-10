@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { NavBar } from "@/components/navbar/nav-bar";
+import { BackendNotice, useBackendGate } from "@/components/shell/backend-gate";
 import { PlatformAppSidebar } from "@/components/shell/platform-app-sidebar";
 import { CommandPaletteProvider } from "@/components/shell/command-palette";
 import { SidebarInset, SidebarProvider } from "@iblai/iblai-js/web-containers/next";
@@ -15,15 +16,19 @@ import { cn } from "@/lib/utils";
 export function AppShell({
   defaultSidebarOpen,
   demo,
+  hosted,
   children,
 }: {
   defaultSidebarOpen: boolean;
-  /** No `ONTOLOGY_API_URL`: the console serves its mock data. */
+  /** No backend configured: the console serves its mock data. */
   demo: boolean;
+  /** `ONTOLOGY_MULTI_PLATFORM`: each platform's own backend, found per signed-in admin. */
+  hosted: boolean;
   children: React.ReactNode;
 }) {
   // The semantic map page's content is dark below the navbar; every other page is light.
   const dark = usePathname() === "/map";
+  const gate = useBackendGate(hosted);
   const [mounted, setMounted] = useState(false);
   const [tenantKey, setTenantKey] = useState("");
   const [username, setUsername] = useState("");
@@ -83,6 +88,7 @@ export function AppShell({
         <SidebarInset className="flex h-dvh min-h-0 flex-col overflow-hidden bg-white">
           <NavBar
             demo={demo}
+            noBackend={gate !== "open"}
             tenantKey={tenantKey}
             username={username}
             isAdmin={isAdmin}
@@ -104,7 +110,7 @@ export function AppShell({
               dark && "dark overflow-hidden bg-background p-0 text-foreground md:p-0",
             )}
           >
-            {children}
+            {gate === "open" ? children : gate !== "checking" && <BackendNotice gate={gate} />}
           </main>
         </SidebarInset>
       </SidebarProvider>

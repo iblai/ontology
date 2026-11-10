@@ -86,6 +86,16 @@ MISSING_TABLE_INDICATORS = (
 )
 
 
+def _pg_quoted(schema: str, table: str) -> str:
+    """PostgreSQL probe target: schema-qualified and quoted, since camelCase names fold otherwise."""
+    return f'"{schema}"."{table}"'
+
+
+def _pg_split(quoted: str) -> tuple[str, str]:
+    schema, _, table = quoted.partition('"."')
+    return schema.strip('"'), table.strip('"')
+
+
 class SafetyVerifier:
     """Verifies that DB credentials are read-only by attempting writes."""
 
@@ -129,16 +139,20 @@ class SafetyVerifier:
         cursor = self.connection.cursor()
         queries = {
             "oracle": "SELECT table_name FROM user_tables WHERE ROWNUM = 1",
+            # Any readable base table, not only public: a CRM keeps its data in its own schemas.
             "postgresql": (
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema = 'public' LIMIT 1"
+                "SELECT table_schema, table_name FROM information_schema.tables "
+                "WHERE table_type = 'BASE TABLE' AND table_schema NOT IN "
+                "('pg_catalog', 'information_schema') ORDER BY table_schema, table_name LIMIT 1"
             ),
             "mysql": "SHOW TABLES",
             "sqlserver": "SELECT TOP 1 name FROM sys.tables",
         }
         cursor.execute(queries[self.db_type])
         row = cursor.fetchone()
-        return row[0] if row else None
+        if not row:
+            return None
+        return _pg_quoted(*row) if self.db_type == "postgresql" else row[0]
 
     def _get_first_column(self, table_name: str) -> str:
         connector = getattr(self.connection, "connector", None)
@@ -146,6 +160,7 @@ class SafetyVerifier:
             target = self._connector_probe_target(connector)
             return target[1] if target else "id"
         cursor = self.connection.cursor()
+        schema, table = _pg_split(table_name)
         queries = {
             "oracle": (
                 "SELECT column_name FROM user_tab_columns "
@@ -153,7 +168,8 @@ class SafetyVerifier:
             ),
             "postgresql": (
                 "SELECT column_name FROM information_schema.columns "
-                f"WHERE table_name = '{table_name}' LIMIT 1"
+                f"WHERE table_schema = '{schema}' AND table_name = '{table}' "
+                "ORDER BY ordinal_position LIMIT 1"
             ),
             "mysql": (
                 "SELECT column_name FROM information_schema.columns "
@@ -166,7 +182,9 @@ class SafetyVerifier:
         }
         cursor.execute(queries[self.db_type])
         row = cursor.fetchone()
-        return row[0] if row else "id"
+        if not row:
+            return "id"
+        return f'"{row[0]}"' if self.db_type == "postgresql" else row[0]
 
     def _connector_probe_target(self, connector) -> Optional[tuple[str, str]]:
         """One metadata round-trip: the quoted table and column the write probes target."""
@@ -307,12 +325,12 @@ END;
 /
 """,
     "postgresql": """\
--- PostgreSQL: create a read-only role (run as superuser/owner)
+-- PostgreSQL: create a read-only role (run as superuser/owner); what it can SELECT is what discovery sees
 CREATE ROLE iblai_readonly WITH LOGIN PASSWORD '<STRONG_PASSWORD_HERE>';
 GRANT CONNECT ON DATABASE your_database TO iblai_readonly;
-GRANT USAGE ON SCHEMA public TO iblai_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO iblai_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO iblai_readonly;
+GRANT USAGE ON SCHEMA your_schema TO iblai_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA your_schema TO iblai_readonly;  -- or a list of tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA your_schema GRANT SELECT ON TABLES TO iblai_readonly;
 """,
     "mysql": """\
 -- MySQL: create a read-only user

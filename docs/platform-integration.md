@@ -23,7 +23,7 @@ Two fields on the MCP Server answer different questions:
 | Field | Answers | Values |
 |---|---|---|
 | `auth_type` | How is the call authenticated? | `none` / `token` / `oauth2` |
-| `auth_scope` | Whose credentials are used? | `platform` / `agent` / `user` |
+| `auth_scope` | Whose credentials are used? | `platform` / `mentor` (one agent) / `user` |
 
 Registration endpoints live under:
 
@@ -103,13 +103,13 @@ This is where RFC 9728 / RFC 7591 come in: `discover_and_register_mcp_oauth_serv
 ### Step 3 — Attach the server to agents
 
 ```bash
-curl -X PATCH "https://base.manager.iblai.app/api/ai-agent/orgs/alasu/users/admin/agents/$FINAID_AGENT_ID/settings/" \
+curl -X PUT "https://base.manager.iblai.app/api/ai-agent/orgs/alasu/users/admin/mentors/$FINAID_AGENT_ID/settings/" \
   -H "Authorization: Token $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "tools": ["mcp-tool"], "mcp_servers": [14] }'
+  -d '{ "tool_slugs": ["mcp"], "can_use_tools": true, "mcp_servers": [14] }'
 ```
 
-Repeat for the Advising Agent, Registrar Agent, Student Self-Service Agent, etc. Once the MCP tool is enabled and the server attached, the agent discovers iblai-ontology's tools and calls them in its responses.
+`ontology platform attach <agent-id> --server 14` does the same and keeps the agent's other tool slugs. The tool slug is `mcp`; the platform saves `mcp_servers` before it rejects an unknown slug, so a typo leaves a half-attached agent. Repeat for the Advising Agent, Registrar Agent, Student Self-Service Agent, etc. Once the MCP tool is enabled and the server attached, the agent discovers iblai-ontology's tools and calls them in its responses.
 
 ---
 
@@ -129,8 +129,8 @@ curl -X POST ".../mcp-server-connections/" -H "Authorization: Token $ADMIN_TOKEN
 # Agent-scoped default role (used when no user-specific connection exists)
 curl -X POST ".../mcp-server-connections/" -H "Authorization: Token $ADMIN_TOKEN" \
   -H "Content-Type: application/json" -d '{
-    "server": 14, "scope": "agent", "auth_type": "oauth2",
-    "agent": "<finaid-agent-uuid>", "connected_service": 80,
+    "server": 14, "scope": "mentor", "auth_type": "oauth2",
+    "mentor": "<finaid-agent-id>", "connected_service": 80,
     "extra_headers": { "X-Iblai-Role": "FinancialAidCounselor" }
   }'
 ```
@@ -206,42 +206,47 @@ For OAuth connections, the linked `ConnectedService` is transparently refreshed 
 
 ---
 
-## Platform-Scoped (Service Account) Connections
+## The Platform Service Token
 
-For agents needing broad, non-user-specific access (e.g. a nightly analytics agent), register a *second* MCP server entry with a static/client-credentials token:
+For agents needing broad, non-user-specific access (a nightly analytics agent, a demo without an
+Entra tenant), the platform calls as itself. The gateway holds one shared secret,
+`ONTOLOGY_SERVICE_TOKEN` (32+ characters); a call carrying it as `Authorization: Bearer <token>`
+runs as the principal `platform-service` with the role named by `X-Iblai-Role`, which must exist in
+`roles.yaml`. The platform is the trusted party here: it chose the role when it configured the
+server or connection (Option A in [identity.md](identity.md)). The simplest registration needs no
+connection record, because a server with `auth_type: "none"` sends its stored `credentials` value
+verbatim as the authorization header, with its `extra_headers`:
 
 ```bash
-# Service-account server entry
+ontology platform register --url https://ontology.alasu.edu/mcp --auth-type none --role Executive
+# equivalent to
 curl -X POST ".../mcp-servers/" -H "Authorization: Token $ADMIN_TOKEN" \
   -H "Content-Type: application/json" -d '{
-    "name": "iblai-ontology (Service)", "url": "https://ontology.alasu.edu/mcp",
-    "transport": "streamable_http", "auth_type": "token", "auth_scope": "platform",
-    "is_enabled": true }'
-# -> { "id": 15, ... }
-
-# Platform-scoped connection with a service-account token
-curl -X POST ".../mcp-server-connections/" -H "Authorization: Token $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" -d '{
-    "server": 15, "scope": "platform", "auth_type": "token",
-    "credentials": "<entra-id-client-credentials-token>",
-    "authorization_scheme": "Bearer" }'
+    "name": "iblai-ontology", "url": "https://ontology.alasu.edu/mcp",
+    "transport": "streamable_http", "auth_type": "none", "auth_scope": "platform",
+    "credentials": "Bearer <ONTOLOGY_SERVICE_TOKEN>",
+    "extra_headers": { "X-Iblai-Role": "Executive" }, "is_enabled": true }'
 ```
 
-The gateway recognizes client-credentials tokens (Entra application permissions) and maps them to a service role with appropriate scope limits.
+With OpenAI and Azure models whose tool matrix grants MCP, the model provider's servers make the
+call and always send the stored credentials as `Bearer`, which is why the token is a bearer value.
 
 ---
 
 ## Agent-Scoped Connections
 
-Different agents can have different access to the same ontology, via agent-scoped connections:
+Different agents can have different access to the same ontology: register the server with
+`auth_type: "token"` and give each agent a `mentor`-scoped connection with its own role:
 
 ```bash
+ontology platform connect --server 15 --scope mentor --agent <finance-agent-id> --role DataAnalyst --auth-type token
+# equivalent to
 curl -X POST ".../mcp-server-connections/" -H "Authorization: Token $ADMIN_TOKEN" \
   -H "Content-Type: application/json" -d '{
-    "server": 15, "scope": "agent", "auth_type": "token",
-    "agent": "<finance-agent-uuid>",
-    "credentials": "<finance-service-account-token>",
-    "authorization_scheme": "Bearer" }'
+    "server": 15, "scope": "mentor", "auth_type": "token",
+    "mentor": "<finance-agent-id>",
+    "credentials": "<ONTOLOGY_SERVICE_TOKEN>", "authorization_scheme": "Bearer",
+    "extra_headers": { "X-Iblai-Role": "DataAnalyst" } }'
 ```
 
 ---

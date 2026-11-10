@@ -5,7 +5,8 @@ Role *assignment* is authoritative in the validated Entra JWT: the token's
 ``X-Iblai-Role`` header is only a selector for which granted role is active on a
 request (see :func:`permitted_roles`); it cannot grant a role the token lacks.
 This module answers "given a role, what can the user access?" by resolving it
-against ``roles.yaml``. Django-free.
+against the role specs: ``roles.yaml``, or the ibl.ai platform's roles in dm mode
+(``role_source``). Django-free.
 """
 
 from __future__ import annotations
@@ -25,6 +26,10 @@ class RoleNotPermitted(Exception):
     def __init__(self, requested: str):
         super().__init__(f"role '{requested}' is not granted to this identity")
         self.requested = requested
+
+
+class RolesUnavailable(Exception):
+    """Raised when the roles cannot be read: the caller is refused, never given the default role."""
 
 
 @dataclass
@@ -56,13 +61,17 @@ class RoleResolver:
     """Resolves a role name to a concrete :class:`Permissions`."""
 
     def __init__(self, reader: Optional[ConfigReader] = None) -> None:
-        self.reader = reader or ConfigReader()
+        if reader is None:
+            from iblai_ontology.backend.identity import role_source
+
+            reader = role_source.reader()
+        self.reader = reader
 
     def _roles(self) -> dict:
         return self.reader.get_roles()
 
     def role_names(self) -> list[str]:
-        """Return the internal role names defined in ``roles.yaml``."""
+        """Return the internal role names the reader defines."""
         return list(self._roles().keys())
 
     def resolve(

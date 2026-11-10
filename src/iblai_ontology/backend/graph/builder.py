@@ -220,6 +220,8 @@ def build_graph(
             label=d,
             group=d,
             files=int((by_domain.get(d) or {}).get("files", 0)),
+            # The tables it is cached in: what a role's cache grant has to name.
+            cache_tables=sorted(t for t, of in cache_domain.items() if of == d),
         )
 
     # MCP sources, tools, toolsets.

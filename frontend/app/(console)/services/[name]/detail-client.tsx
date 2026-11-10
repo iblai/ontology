@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { notFound, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Play, ShieldCheck, RefreshCw, Database, Sparkles, Trash2 } from "lucide-react";
+import { Play, ShieldCheck, RefreshCw, Database, Sparkles } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
 import type {
   Service,
@@ -13,27 +13,28 @@ import type {
   SyncRun,
 } from "@/lib/ontology/types";
 import { StatusBadge } from "@/components/console/status-badge";
+import { StatusPill } from "@/components/console/status-pill";
+import { SectionHeader } from "@/components/console/section-header";
+import { ConfirmDelete } from "@/components/console/confirm-delete";
 import { EmptyState } from "@/components/console/empty-state";
+import { FactRow, Facts } from "@/components/console/facts";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PipelineStepper } from "@/components/services/pipeline-stepper";
 import { SafetyChecklist } from "@/components/services/safety-checklist";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { fmtDateTime } from "@/lib/format";
-import { fmtRows, redactConnectionConfig } from "@/lib/ontology/format";
+import { fmtDuration, fmtRows, redactConnectionConfig } from "@/lib/ontology/format";
 
 /** Loads the service by name; a missing one is a 404, a failed load says so. */
 export function ServiceDetailClient({ name }: { name: string }) {
@@ -145,10 +146,11 @@ function ServiceDetail({ service }: { service: Service }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
-        <h1 className="text-foreground font-mono text-lg font-semibold">{service.name}</h1>
-        <StatusBadge kind="status" value={service.status} />
-      </div>
+      <SectionHeader
+        title={service.name}
+        badge={<StatusBadge kind="status" value={service.status} />}
+        subtitle={service.display_name}
+      />
 
       <Tabs defaultValue="overview">
         <TabsList>
@@ -164,7 +166,7 @@ function ServiceDetail({ service }: { service: Service }) {
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap gap-2">
               {service.status === "pending" && (
-                <Button size="sm" onClick={approve}>
+                <Button size="sm" variant="outline" onClick={approve}>
                   <Play className="mr-2 size-3.5" />
                   {ts("approve")}
                 </Button>
@@ -190,48 +192,50 @@ function ServiceDetail({ service }: { service: Service }) {
             </div>
 
             <Card>
-              <CardContent className="grid gap-x-6 gap-y-2 py-4 sm:grid-cols-2">
-                <DetailRow
-                  label={t("overview.status")}
-                  value={<StatusBadge kind="status" value={service.status} />}
-                />
-                <DetailRow label={t("overview.displayName")} value={service.display_name} />
-                <DetailRow
-                  label={t("overview.adapter")}
-                  value={<span className="font-mono text-xs">{service.adapter}</span>}
-                />
-                <DetailRow
-                  label={t("overview.host")}
-                  value={<span className="font-mono text-xs">{service.host}</span>}
-                />
-                <DetailRow
-                  label={t("overview.lastDiscovery")}
-                  value={fmtDateTime(service.last_discovery_at)}
-                />
-                <DetailRow
-                  label={t("overview.safetyStatus")}
-                  value={<StatusBadge kind="safety" value={service.safety_status} />}
-                />
-                <DetailRow
-                  label={t("overview.lastSafetyCheck")}
-                  value={fmtDateTime(service.last_safety_check_at)}
-                />
-                <DetailRow
-                  label={t("overview.lastSync")}
-                  value={service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")}
-                />
-                <DetailRow
-                  label={t("overview.syncStatus")}
-                  value={<StatusBadge kind="sync" value={service.sync_status} />}
-                />
-                <DetailRow
-                  label={t("overview.tablesSynced")}
-                  value={<span className="font-mono">{fmtRows(service.tables_synced)}</span>}
-                />
-                <DetailRow
-                  label={t("overview.rowsSynced")}
-                  value={<span className="font-mono">{fmtRows(service.rows_synced)}</span>}
-                />
+              <CardContent>
+                <Facts>
+                  <FactRow
+                    label={t("overview.status")}
+                    value={<StatusBadge kind="status" value={service.status} />}
+                  />
+                  <FactRow label={t("overview.displayName")} value={service.display_name} />
+                  <FactRow
+                    label={t("overview.adapter")}
+                    value={<span className="text-xs">{service.adapter}</span>}
+                  />
+                  <FactRow
+                    label={t("overview.host")}
+                    value={<span className="text-xs">{service.host}</span>}
+                  />
+                  <FactRow
+                    label={t("overview.lastDiscovery")}
+                    value={fmtDateTime(service.last_discovery_at)}
+                  />
+                  <FactRow
+                    label={t("overview.safetyStatus")}
+                    value={<StatusBadge kind="safety" value={service.safety_status} />}
+                  />
+                  <FactRow
+                    label={t("overview.lastSafetyCheck")}
+                    value={fmtDateTime(service.last_safety_check_at)}
+                  />
+                  <FactRow
+                    label={t("overview.lastSync")}
+                    value={service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")}
+                  />
+                  <FactRow
+                    label={t("overview.syncStatus")}
+                    value={<StatusBadge kind="sync" value={service.sync_status} />}
+                  />
+                  <FactRow
+                    label={t("overview.tablesSynced")}
+                    value={<span className="tabular-nums">{fmtRows(service.tables_synced)}</span>}
+                  />
+                  <FactRow
+                    label={t("overview.rowsSynced")}
+                    value={<span className="tabular-nums">{fmtRows(service.rows_synced)}</span>}
+                  />
+                </Facts>
               </CardContent>
             </Card>
 
@@ -240,31 +244,33 @@ function ServiceDetail({ service }: { service: Service }) {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium">{t("overview.probe")}</CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                  <DetailRow
-                    label={t("overview.probeConnected")}
-                    value={
-                      <span className={probe.connected ? "text-emerald-600" : "text-red-600"}>
-                        {probe.connected
-                          ? t("overview.probeConnected")
-                          : t("overview.probeNotConnected")}
-                      </span>
-                    }
-                  />
-                  <DetailRow
-                    label={t("overview.probeReadOnly")}
-                    value={
-                      <span className={probe.read_only ? "text-emerald-600" : "text-red-600"}>
-                        {probe.read_only
-                          ? t("overview.probeReadOnly")
-                          : t("overview.probeReadWrite")}
-                      </span>
-                    }
-                  />
-                  <DetailRow
-                    label={t("overview.probeLatency")}
-                    value={<span className="font-mono">{probe.latency_ms} ms</span>}
-                  />
+                <CardContent>
+                  <Facts>
+                    <FactRow
+                      label={t("overview.probeConnected")}
+                      value={
+                        <StatusPill tone={probe.connected ? "success" : "error"}>
+                          {probe.connected
+                            ? t("overview.probeConnected")
+                            : t("overview.probeNotConnected")}
+                        </StatusPill>
+                      }
+                    />
+                    <FactRow
+                      label={t("overview.probeReadOnly")}
+                      value={
+                        <StatusPill tone={probe.read_only ? "success" : "error"}>
+                          {probe.read_only
+                            ? t("overview.probeReadOnly")
+                            : t("overview.probeReadWrite")}
+                        </StatusPill>
+                      }
+                    />
+                    <FactRow
+                      label={t("overview.probeLatency")}
+                      value={<span className="tabular-nums">{probe.latency_ms} ms</span>}
+                    />
+                  </Facts>
                 </CardContent>
               </Card>
             )}
@@ -279,18 +285,18 @@ function ServiceDetail({ service }: { service: Service }) {
             </CardHeader>
             <CardContent>
               <div className="overflow-hidden rounded-md border">
-                <table className="w-full text-sm">
-                  <tbody>
+                <Table>
+                  <TableBody>
                     {connectionRows.map(([k, v]) => (
-                      <tr key={k} className="border-b last:border-b-0">
-                        <td className="bg-muted/40 text-muted-foreground px-3 py-2 font-mono text-xs">
+                      <TableRow key={k}>
+                        <TableCell className="bg-muted/40 text-muted-foreground py-2 text-xs">
                           {k}
-                        </td>
-                        <td className="text-foreground px-3 py-2 font-mono text-xs">{v}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="text-foreground py-2 text-xs">{v}</TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
               <p className="text-muted-foreground mt-2 text-xs">{t("connection.redacted")}</p>
             </CardContent>
@@ -301,18 +307,19 @@ function ServiceDetail({ service }: { service: Service }) {
           {service.schema_manifest ? (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-3 gap-3">
-                <Stat
-                  label={t("schema.dbType")}
-                  value={<span className="font-mono">{service.schema_manifest.db_type}</span>}
-                />
+                <Stat label={t("schema.dbType")} value={service.schema_manifest.db_type} />
                 <Stat
                   label={t("schema.totalTables")}
-                  value={<span className="font-mono">{service.schema_manifest.total_tables}</span>}
+                  value={
+                    <span className="tabular-nums">{service.schema_manifest.total_tables}</span>
+                  }
                 />
                 <Stat
                   label={t("schema.totalRows")}
                   value={
-                    <span className="font-mono">{fmtRows(service.schema_manifest.total_rows)}</span>
+                    <span className="tabular-nums">
+                      {fmtRows(service.schema_manifest.total_rows)}
+                    </span>
                   }
                 />
               </div>
@@ -322,45 +329,38 @@ function ServiceDetail({ service }: { service: Service }) {
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-muted-foreground border-b text-xs">
-                          <th className="px-3 py-2 text-left font-medium">
-                            {t("schema.colSchema")}
-                          </th>
-                          <th className="px-3 py-2 text-left font-medium">
-                            {t("schema.colTable")}
-                          </th>
-                          <th className="px-3 py-2 text-right font-medium">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">{t("schema.colSchema")}</TableHead>
+                          <TableHead className="text-xs">{t("schema.colTable")}</TableHead>
+                          <TableHead className="text-right text-xs">
                             {t("schema.colRows")}
-                          </th>
-                          <th className="px-3 py-2 text-right font-medium">
+                          </TableHead>
+                          <TableHead className="text-right text-xs">
                             {t("schema.colColumns")}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {service.schema_manifest.tables.map((tbl) => (
-                          <tr
-                            key={`${tbl.schema_name}.${tbl.table_name}`}
-                            className="border-b last:border-b-0"
-                          >
-                            <td className="text-muted-foreground px-3 py-2 font-mono text-xs">
+                          <TableRow key={`${tbl.schema_name}.${tbl.table_name}`}>
+                            <TableCell className="text-muted-foreground py-2 text-xs">
                               {tbl.schema_name}
-                            </td>
-                            <td className="text-foreground px-3 py-2 font-mono text-xs">
+                            </TableCell>
+                            <TableCell className="text-foreground py-2 text-xs">
                               {tbl.table_name}
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
+                            </TableCell>
+                            <TableCell className="py-2 text-right text-xs tabular-nums">
                               {fmtRows(tbl.row_count)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
+                            </TableCell>
+                            <TableCell className="py-2 text-right text-xs tabular-nums">
                               {tbl.column_count}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 </CardContent>
               </Card>
@@ -387,7 +387,7 @@ function ServiceDetail({ service }: { service: Service }) {
         <TabsContent value="pipeline" className="mt-4">
           <div className="flex flex-col gap-4">
             {service.status === "pending" && (
-              <Button size="sm" className="w-fit" onClick={approve}>
+              <Button size="sm" variant="outline" className="w-fit" onClick={approve}>
                 <Play className="mr-2 size-3.5" />
                 {ts("approve")}
               </Button>
@@ -400,7 +400,7 @@ function ServiceDetail({ service }: { service: Service }) {
                   <Card key={run.id}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-muted-foreground font-mono text-xs font-medium">
+                        <CardTitle className="text-muted-foreground text-xs font-medium">
                           {run.id}
                         </CardTitle>
                         <StatusBadge kind="run" value={run.status} />
@@ -434,25 +434,33 @@ function ServiceDetail({ service }: { service: Service }) {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium">{t("sync.latestRun")}</CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                  <DetailRow
-                    label={t("sync.duration")}
-                    value={<span className="font-mono">{latestSync.duration_seconds}s</span>}
-                  />
-                  <DetailRow
-                    label={t("overview.status")}
-                    value={<StatusBadge kind="syncRun" value={latestSync.status} />}
-                  />
-                  <DetailRow
-                    label={t("sync.records")}
-                    value={
-                      <span className="font-mono">{fmtRows(latestSync.records_processed)}</span>
-                    }
-                  />
-                  <DetailRow
-                    label={t("overview.lastSync")}
-                    value={fmtDateTime(latestSync.started_at)}
-                  />
+                <CardContent>
+                  <Facts>
+                    <FactRow
+                      label={t("sync.duration")}
+                      value={
+                        <span className="tabular-nums">
+                          {fmtDuration(latestSync.duration_seconds)}
+                        </span>
+                      }
+                    />
+                    <FactRow
+                      label={t("overview.status")}
+                      value={<StatusBadge kind="syncRun" value={latestSync.status} />}
+                    />
+                    <FactRow
+                      label={t("sync.records")}
+                      value={
+                        <span className="tabular-nums">
+                          {fmtRows(latestSync.records_processed)}
+                        </span>
+                      }
+                    />
+                    <FactRow
+                      label={t("overview.lastSync")}
+                      value={fmtDateTime(latestSync.started_at)}
+                    />
+                  </Facts>
                 </CardContent>
               </Card>
             ) : (
@@ -463,41 +471,15 @@ function ServiceDetail({ service }: { service: Service }) {
       </Tabs>
 
       <div className="mt-2 border-t pt-4">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="sm">
-              <Trash2 className="mr-2 size-3.5" />
-              {ts("removeService")}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {ts("removeConfirmTitle", { name: service.name })}
-              </AlertDialogTitle>
-              <AlertDialogDescription>{ts("removeConfirmBody")}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{tc("cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={remove}
-                className="bg-destructive hover:bg-destructive/90 text-white"
-              >
-                {ts("removeConfirmAction")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDelete
+          name={service.name}
+          label={ts("removeService")}
+          title={ts("removeConfirmTitle", { name: service.name })}
+          body={ts("removeConfirmBody")}
+          action={ts("removeConfirmAction")}
+          onConfirm={remove}
+        />
       </div>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className="text-foreground text-sm">{value}</span>
     </div>
   );
 }

@@ -3,20 +3,22 @@
 Implements the MCP JSON-RPC surface exposed by the outbound gateway, scoped by
 the caller's resolved role:
 
-    tools/list        list the tools the caller may use
-    tools/call        execute a tool (MCP Toolbox proxy / cache query / memory read)
-    read-memory       read a text-memory file (role-scoped path)
-    query-cache       run a read-only SELECT against the cache
-    get-sync-status   admin-only sync status
+    initialize / ping  the handshake a standard MCP client opens with
+    tools/list         list the tools the caller may use (with their inputSchema)
+    tools/call         execute a tool (MCP Toolbox proxy / cache query / memory read)
+    read-memory        read a text-memory file (role-scoped path)
+    query-cache        run a read-only SELECT against the cache
+    get-sync-status    admin-only sync status
 
-The transport (ASGI streamable_http) lives in :mod:`.server`; these handlers are
-transport-agnostic and unit-testable.
+The transport (stateless streamable HTTP) lives in :mod:`.server`; these handlers
+are transport-agnostic and unit-testable.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import posixpath
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -26,6 +28,82 @@ from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
 # Argument names that carry a subject (person) identifier. For a self-service
 # role these must equal the caller's own subject id (see _require_subject_ownership).
 SUBJECT_ARG_KEYS = ("student_id", "student", "student_sis_id", "emplid")
+
+# The MCP revision answered to `initialize` when the client names none.
+PROTOCOL_VERSION = "2025-03-26"
+
+# DSL parameter types -> JSON Schema types (anything else is a string).
+_JSON_TYPES = {
+    "string": "string",
+    "integer": "integer",
+    "int": "integer",
+    "float": "number",
+    "number": "number",
+    "boolean": "boolean",
+    "bool": "boolean",
+    "array": "array",
+}
+
+# The gateway's own tools, in the DSL shape tools.yaml uses.
+BUILTIN_TOOLS = {
+    "read-memory": {
+        "name": "read-memory",
+        "description": "Read one text memory (Markdown) by its /ontology/... path.",
+        "parameters": [
+            {
+                "name": "path",
+                "type": "string",
+                "description": "Logical path, e.g. /ontology/students/S1.md",
+            }
+        ],
+    },
+    "query-ontology-cache": {
+        "name": "query-ontology-cache",
+        "description": "Run one read-only SELECT against the ontology cache tables.",
+        "parameters": [
+            {
+                "name": "sql",
+                "type": "string",
+                "description": "A single SELECT statement",
+            },
+            {
+                "name": "limit",
+                "type": "integer",
+                "description": "Rows to return (default 100)",
+                "required": False,
+            },
+        ],
+    },
+    "get-sync-status": {
+        "name": "get-sync-status",
+        "description": "The latest sync runs of every schedule (admin roles).",
+        "parameters": [],
+    },
+}
+
+
+def input_schema(parameters: list[dict]) -> dict:
+    """The JSON Schema an MCP client expects for a tool's arguments."""
+    properties, required = {}, []
+    for p in parameters or []:
+        name = str(p.get("name", ""))
+        properties[name] = {
+            "type": _JSON_TYPES.get(str(p.get("type", "string")).lower(), "string"),
+            "description": str(p.get("description", "")),
+        }
+        if p.get("required", True):
+            required.append(name)
+    return {"type": "object", "properties": properties, "required": required}
+
+
+def server_info() -> dict:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        v = version("iblai-ontology")
+    except PackageNotFoundError:  # pragma: no cover - source checkout without install
+        v = "0"
+    return {"name": "iblai-ontology", "version": v}
 
 
 class MCPError(Exception):
@@ -61,19 +139,38 @@ class MCPHandlers:
 
     # -- tools/list ------------------------------------------------------
     def list_tools(self) -> list[dict]:
-        specs = self.resolver.tool_specs(self.ctx.permissions)
+        """The caller's tools: tools.yaml ones in scope, plus the gateway's own."""
+        specs = {t["name"]: t for t in self.resolver.tool_specs(self.ctx.permissions)}
+        scoped = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
+        # The gateway serves these itself, so its own schema wins over tools.yaml's.
+        specs["read-memory"] = BUILTIN_TOOLS["read-memory"]
+        if "query-ontology-cache" in scoped:
+            specs["query-ontology-cache"] = BUILTIN_TOOLS["query-ontology-cache"]
+        if self._may_see_sync_status():
+            specs.setdefault("get-sync-status", BUILTIN_TOOLS["get-sync-status"])
         return [
             {
                 "name": t["name"],
                 "description": t.get("description", ""),
                 "parameters": t.get("parameters", []),
+                "inputSchema": input_schema(t.get("parameters", [])),
             }
-            for t in specs
+            for t in specs.values()
         ]
+
+    def _may_see_sync_status(self) -> bool:
+        perms = self.ctx.permissions
+        return (
+            perms.admin_dashboard
+            or "admin-analytics-tools" in perms.mcp_toolsets
+            or "*" in perms.mcp_toolsets
+        )
 
     # -- read-memory -----------------------------------------------------
     def read_memory(self, path: str) -> str:
-        # Permission check is against the logical "/ontology/..." namespace.
+        # Permission check is against the logical "/ontology/..." namespace, with ".."
+        # resolved first: a path may not climb out of a granted folder into another.
+        path = posixpath.normpath(path)
         if not self.ctx.permissions.allows_memory_path(path):
             raise PermissionDenied(
                 f"role '{self.ctx.permissions.role}' cannot read {path}"
@@ -188,26 +285,32 @@ class MCPHandlers:
         limit = max(1, int(limit))
         from django.db import connection
 
+        sqlite = connection.vendor == "sqlite"
+        if sqlite and "*" not in self.ctx.permissions.cache_tables:
+            # The plan-based table ACL is PostgreSQL's; a scoped role on SQLite gets a clear no.
+            raise PermissionDenied(
+                f"role '{self.ctx.permissions.role}' is limited to some cache tables, "
+                "which only a PostgreSQL cache can enforce"
+            )
         with connection.cursor() as cur:
-            # READ ONLY transaction: any write, including DML hidden in a CTE,
-            # fails at the engine. Always rolled back; this path never commits.
-            cur.execute("BEGIN TRANSACTION READ ONLY")
+            # A read-only transaction (PostgreSQL) or connection (SQLite's query_only):
+            # any write, including DML hidden in a CTE, fails at the engine. Always
+            # rolled back; this path never commits.
+            cur.execute(
+                "PRAGMA query_only = ON" if sqlite else "BEGIN TRANSACTION READ ONLY"
+            )
             try:
                 self._enforce_cache_acl(cur, statement)
                 cur.execute(statement)
                 cols = [c[0] for c in cur.description] if cur.description else []
                 rows = cur.fetchmany(limit)
             finally:
-                cur.execute("ROLLBACK")
+                cur.execute("PRAGMA query_only = OFF" if sqlite else "ROLLBACK")
         return [dict(zip(cols, r)) for r in rows]
 
     # -- get-sync-status (admin) ----------------------------------------
     def get_sync_status(self) -> list[dict]:
-        if not (
-            self.ctx.permissions.admin_dashboard
-            or "admin-analytics-tools" in self.ctx.permissions.mcp_toolsets
-            or "*" in self.ctx.permissions.mcp_toolsets
-        ):
+        if not self._may_see_sync_status():
             raise PermissionDenied("sync status requires an admin role")
         from iblai_ontology.backend import store
         from iblai_ontology.backend.sync.models import SyncRun
@@ -288,19 +391,44 @@ class MCPHandlers:
             raise MCPError(str(exc)) from exc
 
 
-def dispatch(handlers: MCPHandlers, request: dict) -> dict:
-    """Dispatch a single JSON-RPC request to the handlers; return the response."""
+def dispatch(handlers: MCPHandlers, request: dict) -> dict | None:
+    """Dispatch one JSON-RPC message; ``None`` for a notification (no response body)."""
     method = request.get("method")
     params = request.get("params", {}) or {}
     req_id = request.get("id")
+    if isinstance(method, str) and method.startswith("notifications/"):
+        return None
     try:
-        if method == "tools/list":
-            result: Any = {"tools": handlers.list_tools()}
-        elif method == "tools/call":
-            value = handlers.call_tool(params["name"], params.get("arguments", {}))
-            result = {
-                "content": [{"type": "text", "text": json.dumps(value, default=str)}]
+        if method == "initialize":
+            result: Any = {
+                # Echo the client's revision: this surface is the same under every one.
+                "protocolVersion": params.get("protocolVersion") or PROTOCOL_VERSION,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": server_info(),
             }
+        elif method == "ping":
+            result = {}
+        elif method == "tools/list":
+            result = {"tools": handlers.list_tools()}
+        elif method == "tools/call":
+            try:
+                value = handlers.call_tool(params["name"], params.get("arguments", {}))
+                result = {
+                    "content": [
+                        {"type": "text", "text": json.dumps(value, default=str)}
+                    ]
+                }
+            except MCPError:
+                raise
+            except Exception as exc:
+                # A tool that failed (bad SQL, unreachable source) is a result the
+                # agent can read, not a transport failure that drops every tool.
+                result = {
+                    "content": [
+                        {"type": "text", "text": f"{type(exc).__name__}: {exc}"}
+                    ],
+                    "isError": True,
+                }
         else:
             raise MCPError(f"unknown method: {method}", code=-32601)
         return {"jsonrpc": "2.0", "result": result, "id": req_id}

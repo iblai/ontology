@@ -3,15 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ShieldCheck } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import { Spinner } from "@iblai/iblai-js/web-containers";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/ontology/api-client";
 import type { GraphData, GraphKind, McpToolset, Role } from "@/lib/ontology/types";
-import { KIND_COLORS, endId, grantPatch, reach, type ToggleKind } from "@/lib/ontology/graph";
+import {
+  KIND_COLORS,
+  cacheTables,
+  cachesDomain,
+  endId,
+  grantPatch,
+  reach,
+  type ToggleKind,
+} from "@/lib/ontology/graph";
 import { CARD, COLUMNS, colX, layoutFlow, type FlowCard } from "@/lib/ontology/flow";
 import { SectionHeader } from "@/components/console/section-header";
 import { EmptyState } from "@/components/console/empty-state";
+import { RoleDialog } from "@/components/roles/role-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,6 +35,10 @@ import { cn } from "@/lib/utils";
 
 const EMPTY: GraphData = { nodes: [], links: [], stats: { hubs: [], orphans: 0, dangling: 0 } };
 const kindOf = (id: string) => id.split(":")[0] as GraphKind;
+/** On a card's main control: a click anywhere on the node is a click on it. */
+const STRETCH = "cursor-pointer after:absolute after:inset-0";
+/** On a card's other control: it stays clickable above the stretched one. */
+const RAISED = "relative z-10";
 
 export default function AccessPage() {
   const t = useTranslations("access");
@@ -38,6 +51,9 @@ export default function AccessPage() {
   const [roleName, setRoleName] = useState("all");
   const [toolsetName, setToolsetName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  // Bumped to read everything again, after a role is created here.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -59,7 +75,7 @@ export default function AccessPage() {
     return () => {
       live = false;
     };
-  }, [tg]);
+  }, [tg, version]);
 
   const graph = data ?? EMPTY;
   const flow = useMemo(() => layoutFlow(graph, roles), [graph, roles]);
@@ -80,6 +96,16 @@ export default function AccessPage() {
         if (endId(l.source) === `role:${role.name}`) set.add(`${l.kind}>${endId(l.target)}`);
     return set;
   }, [graph.links, role]);
+  // The memory domains that are cached in a table: only those have a cache to grant.
+  const cached = useMemo(
+    () =>
+      new Map(
+        graph.nodes
+          .filter((n) => n.kind === "memory_domain" && cacheTables(n).length > 0)
+          .map((n) => [n.id, n]),
+      ),
+    [graph.nodes],
+  );
 
   async function onGrant(kind: ToggleKind, name: string) {
     if (!role) return;
@@ -146,6 +172,7 @@ export default function AccessPage() {
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const el = pan.current;
     if (!el || e.pointerType !== "mouse" || e.button !== 0) return;
+    // A node whose control is stretched over it is that control: it clicks, it does not pan.
     if ((e.target as Element).closest("button, [role=switch], a, input, select")) return;
     e.preventDefault();
     drag.current = {
@@ -181,6 +208,7 @@ export default function AccessPage() {
     if (role && card.kind === "toolset")
       return (
         <Switch
+          className={STRETCH}
           aria-label={t("grant", { name: card.label })}
           checked={granted.has(`grants>${card.id}`)}
           disabled={saving}
@@ -190,6 +218,7 @@ export default function AccessPage() {
     if (toolset && card.kind === "tool")
       return (
         <Switch
+          className={STRETCH}
           aria-label={t("member", { tool: card.label, toolset: toolset.name })}
           checked={toolset.tools.includes(card.label)}
           disabled={saving}
@@ -201,28 +230,36 @@ export default function AccessPage() {
 
   /** A card's bottom row: the fact, or a memory domain's read and cache switches for the role. */
   function detail(card: FlowCard) {
-    if (role && card.kind === "memory_domain")
+    if (role && card.kind === "memory_domain") {
+      const domain = cached.get(card.id);
       return (
         <span className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
           {t("read")}
           <Switch
+            className={STRETCH}
             aria-label={t("readOf", { name: card.label })}
             checked={granted.has(`reads>${card.id}`)}
             disabled={saving}
             onCheckedChange={() => onGrant("memory_domain", card.label)}
           />
-          <span className="ml-1">{t("cache")}</span>
-          <Switch
-            aria-label={t("cacheOf", { name: card.label })}
-            checked={granted.has(`caches>${card.id}`)}
-            disabled={saving}
-            onCheckedChange={() => onGrant("cache", card.label)}
-          />
+          {domain && (
+            <>
+              <span className="ml-1">{t("cache")}</span>
+              <Switch
+                className={RAISED}
+                aria-label={t("cacheOf", { name: card.label })}
+                checked={cachesDomain(role, domain)}
+                disabled={saving}
+                onCheckedChange={() => onGrant("cache", card.label)}
+              />
+            </>
+          )}
         </span>
       );
+    }
     const text =
       card.fact ?? (card.count ? t(`count.${card.count.unit}`, { n: card.count.n }) : "");
-    return <span className="text-muted-foreground truncate font-mono text-[11px]">{text}</span>;
+    return <span className="text-muted-foreground truncate text-[11px]">{text}</span>;
   }
 
   return (
@@ -245,6 +282,10 @@ export default function AccessPage() {
             </SelectContent>
           </Select>
         </div>
+        <Button variant="outline" size="sm" className="h-9" onClick={() => setCreating(true)}>
+          <Plus className="mr-2 size-3.5" />
+          {t("newRole")}
+        </Button>
         <p className="text-muted-foreground pb-2 text-xs">
           {toolset
             ? t("hintToolset", { name: toolset.name })
@@ -312,7 +353,6 @@ export default function AccessPage() {
                         y={e.ly + 3}
                         className="fill-muted-foreground"
                         fontSize={9}
-                        fontFamily="ui-monospace, monospace"
                       >
                         {edgeLabel(e.kind)}
                       </text>
@@ -332,7 +372,11 @@ export default function AccessPage() {
                       ? "entity_group"
                       : card.kind
                 ];
-              const picked = card.kind === "toolset" && toolsetName === card.label;
+              const cardRole = card.kind === "role" ? card.id.slice("role:".length) : null;
+              const picked =
+                cardRole !== null
+                  ? roleName === cardRole
+                  : card.kind === "toolset" && toolsetName === card.label;
               return (
                 <div
                   key={card.id}
@@ -353,14 +397,20 @@ export default function AccessPage() {
                     <span>{t(`kinds.${card.kind}`)}</span>
                     {control(card)}
                   </div>
-                  {card.kind === "toolset" ? (
+                  {cardRole !== null || card.kind === "toolset" ? (
                     <button
                       type="button"
                       aria-pressed={picked}
-                      onClick={() => setToolsetName(picked ? null : card.label)}
+                      onClick={() =>
+                        cardRole !== null
+                          ? setRoleName(picked ? "all" : cardRole)
+                          : setToolsetName(picked ? null : card.label)
+                      }
                       className={cn(
                         "truncate text-left text-sm font-semibold hover:underline",
                         picked && "underline",
+                        // With a role picked a toolset's switch is its node's click; its name still opens its tools.
+                        card.kind === "toolset" && role ? RAISED : STRETCH,
                       )}
                     >
                       {card.label}
@@ -380,6 +430,18 @@ export default function AccessPage() {
           )}
         </div>
       )}
+      <RoleDialog
+        key={creating ? "new" : "closed"}
+        open={creating}
+        onOpenChange={setCreating}
+        toolsets={toolsets.map((ts) => ts.name)}
+        onSaved={(saved) => {
+          // Listed and picked at once; its node arrives with the map, read again.
+          setRoles((rs) => [...rs.filter((x) => x.name !== saved.name), saved]);
+          setRoleName(saved.name);
+          setVersion((v) => v + 1);
+        }}
+      />
     </div>
   );
 }

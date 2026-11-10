@@ -84,7 +84,7 @@ See [Component 5](05-service-discovery.md) and [Component 6](06-provisioning.md)
 | `show [section]` | Display current config, redacting secrets. | `section` (optional arg) |
 | `set <key> <value>` | Set a config value via dot-notation. | `key`, `value` (args) |
 | `llm` | Configure the BYOK LLM provider + key. | Prompts: `--provider` (`anthropic`/`openai`), `--api-key`; `--model` optional override |
-| `validate` | Validate all config files; exits non-zero on error. | — |
+| `validate` | Validate all config files; exits non-zero on error. With `ONTOLOGY_DATA_STORE=dm` it leaves `roles.yaml` and `sync-schedules.yaml` out: both are kept in the ibl.ai platform, and `ontology roles validate` checks the roles there. | — |
 
 ```bash
 ontology config init /opt/iblai-ontology
@@ -113,7 +113,8 @@ Default LLM models (BYOK): `anthropic` → `claude-opus-4-8`, `openai` → `gpt-
 | `run [service]` | Run syncs now. Omit `service` to run all *due* syncs. | `service` (optional arg); `--schedule <name>`; `--full` (force full refresh) |
 | `status` | Latest run per schedule (schedule, service, status, last run, duration, records). | — |
 | `history [service]` | Sync run history. | `service` (optional arg); `--limit` (default 20) |
-| `schedule` | Show configured schedules from `sync-schedules.yaml`. | — |
+| `schedule` | Show configured schedules from `sync-schedules.yaml`, or from the ibl.ai platform with `ONTOLOGY_DATA_STORE=dm`. | — |
+| `import [path]` | Copy a `sync-schedules.yaml` into the ibl.ai platform, as written; prints each name. `dm` only. | `path` (optional arg; default: the config directory's file) |
 
 ```bash
 ontology sync run
@@ -130,9 +131,10 @@ ontology sync schedule
 
 | Command | What it does | Key args / options |
 |---|---|---|
-| `list` | List roles from `roles.yaml` (name, display name, toolsets, memory-path count, cache tables). | — |
+| `list` | List roles from `roles.yaml`, or from the ibl.ai platform with `ONTOLOGY_DATA_STORE=dm` (name, display name, toolsets, memory-path count, cache tables). | — |
 | `show <role>` | Full YAML for one role; exits non-zero if not found. | `role` (arg) |
-| `validate` | Validate `roles.yaml` against available toolsets and memory paths. | — |
+| `validate` | Check that each role's toolsets exist in `tools.yaml`: the roles of `roles.yaml`, or the ibl.ai platform's with `ONTOLOGY_DATA_STORE=dm`. | — |
+| `import <path>` | Copy a `roles.yaml` into the ibl.ai platform's roles; prints each name, and a role the platform cannot keep with the reason (then exits non-zero). `dm` only. | `path` (arg, required: no file is read by default) |
 
 ```bash
 ontology roles list
@@ -140,7 +142,8 @@ ontology roles show FinancialAidCounselor
 ontology roles validate
 ```
 
-See [identity.md](../identity.md) for the `roles.yaml` format.
+See [identity.md](../identity.md) for the `roles.yaml` format, and
+[DEV.md](../../DEV.md#roles-in-the-platform) for how a role is kept in the ibl.ai platform.
 
 ---
 

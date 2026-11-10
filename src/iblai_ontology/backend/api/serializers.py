@@ -425,11 +425,25 @@ class RoleSerializer(serializers.Serializer):
     concurrency_limits = serializers.DictField(required=False)
 
 
+class ConfigFileSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    # Masked before it is serialized; null when the file is absent.
+    content = serializers.CharField(allow_null=True, trim_whitespace=False)
+    modified_at = serializers.DateTimeField(allow_null=True)
+
+
+class ConfigFilesSerializer(serializers.Serializer):
+    root = serializers.CharField()
+    files = ConfigFileSerializer(many=True)
+
+
 class CountsSerializer(serializers.Serializer):
     services = serializers.IntegerField()
     tools = serializers.IntegerField()
     toolsets = serializers.IntegerField()
     roles = serializers.IntegerField()
+    # Where roles, schedules and the registry live: the Config page hides what is not a file.
+    data_store = serializers.ChoiceField(choices=["local", "dm"])
 
 
 # ---------------------------------------------------------------------------

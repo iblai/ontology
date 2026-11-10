@@ -1,4 +1,5 @@
-"""Merge generated sync schedules into the live sync-schedules.yaml (Component 6.4)."""
+"""Merge generated sync schedules into the live ones (Component 6.4): sync-schedules.yaml,
+or the ibl.ai platform in dm mode."""
 
 from __future__ import annotations
 
@@ -6,17 +7,21 @@ from pathlib import Path
 
 import yaml
 
-from iblai_ontology.config import config_dir
+from iblai_ontology.config import config_dir, dm_store
 
 
 class SyncScheduleGenerator:
-    """Merges a service's generated schedules into sync-schedules.yaml by name."""
+    """Merges a service's generated schedules into the live ones by name."""
 
     def __init__(self, config_directory: str | Path | None = None) -> None:
         self.dir = Path(config_directory) if config_directory else config_dir()
         self.path = self.dir / "sync-schedules.yaml"
 
     def _existing(self) -> list[dict]:
+        if dm_store():
+            from iblai_ontology.backend.sync import schedules
+
+            return schedules.all()
         if not self.path.exists():
             return []
         with open(self.path) as f:
@@ -35,6 +40,13 @@ class SyncScheduleGenerator:
         )
 
     def apply(self, generated_sync_yaml: str) -> str:
+        if dm_store():
+            from iblai_ontology.backend.sync import schedules
+
+            incoming = (yaml.safe_load(generated_sync_yaml) or {}).get("schedules", [])
+            for schedule in incoming:
+                schedules.upsert(schedule)
+            return "the ibl.ai platform"
         merged = self.merge(generated_sync_yaml)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path.write_text(merged)

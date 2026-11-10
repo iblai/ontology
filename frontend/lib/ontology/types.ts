@@ -310,6 +310,8 @@ export interface QuickCounts {
   tools: number;
   toolsets: number;
   roles: number;
+  /** Where roles, schedules and the registry live: the backend's host, or the ibl.ai platform. */
+  data_store: "local" | "dm";
 }
 
 export interface Db {
@@ -328,7 +330,7 @@ export interface Db {
 // ---- Backend configuration visibility (read-only; secrets masked server-side) ----
 
 export interface BackendConfigFile {
-  /** Stable id: ontology | services | schedules | roles | tools | catalog | compose | caddyfile | env */
+  /** Stable id: ontology | schedules | roles | tools | catalog | compose | caddyfile | env */
   id: string;
   /** Repo-relative path under the ontology root. */
   path: string;

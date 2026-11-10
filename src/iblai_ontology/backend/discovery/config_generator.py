@@ -257,26 +257,40 @@ def analysis_from_dict(data: dict) -> LLMAnalysisResult:
 
 
 def api_schedules_yaml(
-    service_name: str, display_name: str, sync_defaults: dict
+    service_name: str,
+    display_name: str,
+    sync_defaults: dict,
+    mapping: dict | None = None,
 ) -> str:
     """Schedules for an API service: one ``list-<entity>`` tool per catalog ``sync_defaults``
-    entry, served by the service's custom MCP server, landing in a table built from the first row."""
-    schedules = [
-        {
-            "name": f"{service_name}-{entity}",
-            "cron": _CADENCE_CRON.get(cadence, "0 */6 * * *"),
-            "source": f"{service_name}-mcp",
-            "tool": f"list-{entity}",
-            "output": {
-                "structured_cache": entity,
-                "text_memories": f"/ontology/{entity}/",
-                "primary_key": ["id"],
-                "create_table": True,
-            },
-            "description": f"Sync {entity} from {display_name} every {cadence}",
+    entry, served by the service's custom MCP server, landing in a table built from the first row.
+    The catalog's ``mapping`` names the house table, column renames and template per entity."""
+    schedules = []
+    for entity, cadence in sync_defaults.items():
+        m = (mapping or {}).get(entity) or {}
+        target = m.get("entity") or entity
+        output = {
+            "structured_cache": target,
+            "text_memories": f"/ontology/{target}/",
+            "primary_key": ["id"],
+            "create_table": True,
         }
-        for entity, cadence in sync_defaults.items()
-    ]
+        if m.get("fields"):
+            output["map"] = {
+                str(k).lower(): str(v).lower() for k, v in m["fields"].items()
+            }
+        if m.get("template"):
+            output["template"] = m["template"]
+        schedules.append(
+            {
+                "name": f"{service_name}-{entity}",
+                "cron": _CADENCE_CRON.get(cadence, "0 */6 * * *"),
+                "source": f"{service_name}-mcp",
+                "tool": f"list-{entity}",
+                "output": output,
+                "description": f"Sync {entity} from {display_name} every {cadence}",
+            }
+        )
     return yaml.dump(
         {"schedules": schedules}, default_flow_style=False, sort_keys=False
     )

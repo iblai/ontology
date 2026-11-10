@@ -27,9 +27,7 @@ export function CodeBlock({
   return (
     <div className={cn("group relative rounded-md border border-border bg-muted/40", className)}>
       {language && (
-        <span className="text-muted-foreground absolute top-2 left-3 font-mono text-xs">
-          {language}
-        </span>
+        <span className="text-muted-foreground absolute top-2 left-3 text-xs">{language}</span>
       )}
       {showCopy && (
         <Button

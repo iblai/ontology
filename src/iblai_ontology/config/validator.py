@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from iblai_ontology.config import config_dir
+from iblai_ontology.config import config_dir, dm_store
 from iblai_ontology.config.reader import ConfigReader
 
 
@@ -71,6 +71,17 @@ class ConfigValidator:
             )
         )
 
+        if dm_store():
+            # Neither file is read in dm mode; `ontology roles validate` checks the roles.
+            result.items.append(
+                ValidationItem(
+                    "roles, sync schedules",
+                    True,
+                    "kept in the ibl.ai platform; the two files are not read",
+                )
+            )
+            return result
+
         # sync-schedules.yaml
         schedules = self.reader.get_sync_schedules()
         bad_cron = [s.get("name", "?") for s in schedules if not s.get("cron")]
@@ -97,14 +108,15 @@ class ConfigValidator:
 
         return result
 
-    def validate_roles(self) -> RoleValidationResult:
-        """Check every role references toolsets that exist in tools.yaml."""
+    def validate_roles(self, roles: dict | None = None) -> RoleValidationResult:
+        """Check every role (roles.yaml's unless given) references toolsets tools.yaml has."""
         result = RoleValidationResult()
-        roles = self.reader.get_roles()
+        if roles is None:
+            roles = self.reader.get_roles()
         known_toolsets = set(self.reader.get_toolsets().keys())
 
         if not roles:
-            result.issues.append(RoleIssue("warning", "no roles defined in roles.yaml"))
+            result.issues.append(RoleIssue("warning", "no roles defined"))
             return result
 
         for name, spec in roles.items():

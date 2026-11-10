@@ -67,7 +67,9 @@ def test_list_tools_handler():
     handlers = MCPHandlers(MCPContext(permissions=perms), resolver=_resolver())
     tools = handlers.list_tools()
     names = {t["name"] for t in tools}
-    assert names == {"get-student-enrollment", "search-students"}
+    # The role's toolset, plus the gateway's own memory reader (no cache or admin scope here).
+    assert names == {"get-student-enrollment", "search-students", "read-memory"}
+    assert all(t["inputSchema"]["type"] == "object" for t in tools)
 
 
 def test_call_disallowed_tool_denied():
@@ -94,6 +96,25 @@ def test_read_memory_scoping(tmp_path):
     assert "Student 1" in handlers.read_memory("/ontology/students/by-id/1.md")
     with pytest.raises(PermissionDenied):
         handlers.read_memory("/ontology/students/by-id/2.md")
+
+
+def test_read_memory_resolves_dot_dot_before_the_role_check(tmp_path):
+    root = tmp_path / "ontology"
+    (root / "students" / "by-id").mkdir(parents=True)
+    (root / "courses" / "by-dept").mkdir(parents=True)
+    (root / "students" / "by-id" / "1.md").write_text("# Student 1")
+    (root / "courses" / "by-dept" / "cs.md").write_text("# CS")
+    perms = Permissions(
+        role="default", display_name="x", memory_paths=["/ontology/courses/by-dept/**"]
+    )
+    handlers = MCPHandlers(
+        MCPContext(permissions=perms, files_root=str(root)), resolver=_resolver()
+    )
+    # Inside the granted folder, however the path is spelled.
+    assert handlers.read_memory("/ontology/courses/by-dept/x/../cs.md") == "# CS"
+    # Climbing out of it would read another domain's record.
+    with pytest.raises(PermissionDenied):
+        handlers.read_memory("/ontology/courses/by-dept/../../students/by-id/1.md")
 
 
 def test_read_memory_blocks_traversal(tmp_path):
@@ -151,7 +172,11 @@ def test_dispatch_tools_list():
     handlers = MCPHandlers(MCPContext(permissions=perms), resolver=_resolver())
     resp = dispatch(handlers, {"jsonrpc": "2.0", "method": "tools/list", "id": 1})
     assert resp["id"] == 1
-    assert len(resp["result"]["tools"]) == 2
+    assert {t["name"] for t in resp["result"]["tools"]} == {
+        "get-student-enrollment",
+        "search-students",
+        "read-memory",
+    }
 
 
 def test_dispatch_unknown_method_errors():

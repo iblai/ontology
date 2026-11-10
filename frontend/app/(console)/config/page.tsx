@@ -59,7 +59,7 @@ export default function BackendConfigPage() {
       />
 
       <p className="border-border bg-muted/40 text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
-        <ShieldCheck className="size-3.5 shrink-0 text-emerald-600" />
+        <ShieldCheck className="text-muted-foreground size-3.5 shrink-0" />
         {t("maskedNotice")}
       </p>
 
@@ -116,7 +116,7 @@ function ConfigFileView({ file }: { file: BackendConfigFile }) {
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-        <CardTitle className="font-mono text-sm font-medium">{file.path}</CardTitle>
+        <CardTitle className="text-sm font-medium">{file.path}</CardTitle>
         <span className="text-muted-foreground text-xs">
           {fmtBytes(file.sizeBytes)} · {t("updated")} {fmtDateTime(file.modifiedAt ?? undefined)}
         </span>
@@ -134,7 +134,7 @@ function ConfigFileView({ file }: { file: BackendConfigFile }) {
           </div>
         )}
         {file.error && (
-          <p className="text-xs text-amber-700">
+          <p className="text-xs text-red-600">
             {t("parseError")}: {file.error}
           </p>
         )}

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { route } from "./routes";
+import { configFromBackend, maskSecrets } from "../config-files";
 import { getDb, resetDb } from "../mock/store";
 import type { BackendConfigSnapshot, Role, Service, SyncRun } from "../types";
 
@@ -97,7 +98,6 @@ describe("route table", () => {
     const snap = call("GET", "config") as BackendConfigSnapshot;
     expect(snap.files.filter((f) => f.exists).map((f) => f.id)).toEqual([
       "ontology",
-      "services",
       "schedules",
       "roles",
       "tools",
@@ -107,9 +107,38 @@ describe("route table", () => {
       value: "5",
     });
     const text = snap.files.map((f) => f.content ?? "").join("\n");
-    expect(text).toContain("password: ••••••••");
     expect(text).toContain("password: ${PEOPLESOFT_RO_PASSWORD}");
     expect(text).not.toContain("REDACTED_SECRET_VALUE");
+    // A literal secret is masked; a ${VAR} reference is configuration and stays.
+    expect(maskSecrets("password: hunter2\ntoken: ${API_TOKEN}")).toBe(
+      "password: ••••••••\ntoken: ${API_TOKEN}",
+    );
+  });
+
+  it("renders what a backend sent in the page's order, masked again, and nothing it did not send", () => {
+    const at = "2026-11-11T09:00:00Z";
+    const snap = configFromBackend({
+      root: "/app/config",
+      files: [
+        { id: "catalog", content: "entries:\n  - key: twenty\n", modified_at: at },
+        { id: "tools", content: "kind: source\npassword: hunter2\n", modified_at: at },
+        { id: "caddyfile", content: null, modified_at: null },
+        { id: "ontology", content: "llm:\n  provider: openai\n", modified_at: at },
+        { id: "not-a-file-of-ours", content: "x", modified_at: null },
+      ],
+    });
+    expect(snap.root).toBe("/app/config");
+    // No roles or schedules (dm keeps them in the ibl.ai platform), no compose or .env (the host's).
+    expect(snap.files.map((f) => [f.id, f.exists])).toEqual([
+      ["ontology", true],
+      ["tools", true],
+      ["catalog", true],
+      ["caddyfile", false],
+    ]);
+    const tools = snap.files[1];
+    expect(tools.content).toBe("kind: source\npassword: ••••••••\n");
+    expect(tools.modifiedAt).toBe("2026-11-11T09:00:00.000Z");
+    expect(tools.summary).toContainEqual({ label: "source", value: "1" });
   });
 
   it("keeps one store per process until a reset", () => {

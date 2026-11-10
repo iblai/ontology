@@ -26,10 +26,29 @@ def _driver_available(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
 
+def _services(cfg) -> list[tuple[str, str]]:
+    """Each connected service's name and catalog key: services.yaml, or the registry in dm mode."""
+    from iblai_ontology.config import dm_store
+    from iblai_ontology.config.reader import ConfigReader
+
+    if not dm_store():
+        return [
+            (svc.get("name"), svc.get("name", svc.get("adapter")))
+            for svc in ConfigReader(cfg).get_services()
+        ]
+    from iblai_ontology.backend import bootstrap
+
+    bootstrap()
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.services.models import Service
+
+    return [(service.name, service.adapter) for service in store.filter(Service)]
+
+
 def run_checks() -> list[Check]:
     """Run all diagnostics and return the results (pure; CLI renders them)."""
+    from iblai_ontology.catalog import get_entry
     from iblai_ontology.config import config_dir, credential_key
-    from iblai_ontology.config.reader import ConfigReader
     from iblai_ontology.config.validator import ConfigValidator
 
     checks: list[Check] = []
@@ -53,26 +72,26 @@ def run_checks() -> list[Check]:
     ]:
         checks.append(Check(f"extra:{label}", _driver_available(module), module))
 
-    # 3. Env vars for configured services (from services.yaml + catalog).
+    # 3. Env vars the catalog names for each connected service. A service list that
+    # cannot be read is a finding of its own, not a silent skip.
     try:
-        from iblai_ontology.catalog import get_entry
-
-        for svc in ConfigReader(cfg).get_services():
-            key = svc.get("adapter") or svc.get("name")
-            try:
-                entry = get_entry(svc.get("name", key))
-            except KeyError:
-                continue
-            missing = [v for v in entry.env if not os.environ.get(v)]
-            checks.append(
-                Check(
-                    f"env:{svc.get('name')}",
-                    not missing,
-                    "all set" if not missing else f"missing: {', '.join(missing)}",
-                )
+        services = _services(cfg)
+    except Exception as exc:
+        services = []
+        checks.append(Check("services", False, f"could not be read: {exc}"[:200]))
+    for name, key in services:
+        try:
+            entry = get_entry(key)
+        except KeyError:
+            continue
+        missing = [v for v in entry.env if not os.environ.get(v)]
+        checks.append(
+            Check(
+                f"env:{name}",
+                not missing,
+                "all set" if not missing else f"missing: {', '.join(missing)}",
             )
-    except Exception:
-        pass
+        )
 
     # 4. Gateway / Entra config.
     checks.append(

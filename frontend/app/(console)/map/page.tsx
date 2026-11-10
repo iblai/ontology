@@ -243,7 +243,7 @@ export default function GraphPage() {
           )}
         >
           <h1 className="text-base font-semibold tracking-tight text-white">{t("title")}</h1>
-          <p className="mt-0.5 font-mono text-[11px] text-white/55">
+          <p className="mt-0.5 text-[11px] text-white/55">
             {data ? (
               <>
                 {t("statNodes", { n: graph.nodes.length })} ·{" "}
@@ -311,7 +311,7 @@ export default function GraphPage() {
                       className="inline-block size-2 shrink-0 rounded-full"
                       style={{ backgroundColor: KIND_COLORS[m.kind] }}
                     />
-                    <span className="truncate font-mono">{m.label}</span>
+                    <span className="truncate">{m.label}</span>
                     <span className="ml-auto text-white/40">{t(`kinds.${m.kind}`)}</span>
                   </button>
                 ))}
@@ -380,9 +380,7 @@ export default function GraphPage() {
                     style={{ backgroundColor: KIND_COLORS[k] }}
                   />
                   <span className="truncate">{t(`kinds.${k}`)}</span>
-                  <span className="ml-auto pl-3 font-mono text-white/40 tabular-nums">
-                    {counts.get(k)}
-                  </span>
+                  <span className="ml-auto pl-3 text-white/40 tabular-nums">{counts.get(k)}</span>
                 </button>
               </li>
             ))}

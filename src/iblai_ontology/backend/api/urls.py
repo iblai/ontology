@@ -62,6 +62,7 @@ misc_urls = [
     path("graph", views.GraphView.as_view()),
     path("graph/records", views.GraphRecordsView.as_view()),
     path("counts", views.CountsView.as_view()),
+    path("config", views.ConfigFilesView.as_view()),
     path("reset", views.ResetView.as_view()),
 ]
 

@@ -41,7 +41,7 @@ The university's firewall allows inbound HTTPS on port 443 **only** from authori
 
 ### Level 2 — Authentication (Entra ID tokens)
 
-Every MCP request must carry a valid Entra ID access token. The gateway validates it — signature via Entra's JWKS, plus `aud`/`iss`/`exp` checks — before executing any tool, then resolves the caller's role from the `X-Iblai-Role` header against `roles.yaml`. See [../identity.md](../identity.md) for the full validation logic.
+Every MCP request must carry a valid Entra ID access token. The gateway validates it — signature via Entra's JWKS, plus `aud`/`iss`/`exp` checks — before executing any tool, then resolves the caller's role from the `X-Iblai-Role` header against `roles.yaml` (with `ONTOLOGY_DATA_STORE=dm`, against the roles kept in the ibl.ai platform; while those cannot be read the gateway answers `503`, never with the `default` role). See [../identity.md](../identity.md) for the full validation logic.
 
 Because the two levels are independent, a leaked token is useless from an un-allowlisted network, and a connection from an allowlisted IP is still useless without a valid, role-scoped token.
 
@@ -84,7 +84,7 @@ Response (MCP JSON-RPC format):
 }
 ```
 
-Text memories are read through a `read-memory` tool, and admin roles can call `get-sync-status`. If the caller's role does not allow the requested toolset, memory path, or table, the gateway returns a 403 and logs the denial.
+Text memories are read through a `read-memory` tool, whose path is normalised before the role check (a `..` cannot climb out of a granted folder), and admin roles can call `get-sync-status`. If the caller's role does not allow the requested toolset, memory path, or table, the gateway returns a 403 and logs the denial.
 
 ---
 
@@ -92,7 +92,7 @@ Text memories are read through a `read-memory` tool, and admin roles can call `g
 
 - **The gateway never needs to know about the ibl.ai platform.** It only validates Entra ID tokens and resolves roles. Whether a token came from the platform, a university app, or a direct client is irrelevant — the same validation and scoping apply. This is exactly what makes Option B (any MCP client connecting directly) possible later without changing the gateway.
 - **Network isolation backs the trust model.** On the Docker side, the gateway is the only service (besides the proxy) that bridges the `internal` and `exposed` networks. The databases, MCP Toolbox, and sync engine cannot be reached from outside at all.
-- **Scoping is centralized.** Toolset/memory/table access all flow from one file, `roles.yaml`, so there is a single place to audit what any role can do.
+- **Scoping is centralized.** Toolset/memory/table access all flow from one place, `roles.yaml` (or with `ONTOLOGY_DATA_STORE=dm` the platform's roles, each with one policy under `/custom/ontology/`), so there is a single place to audit what any role can do.
 
 ---
 

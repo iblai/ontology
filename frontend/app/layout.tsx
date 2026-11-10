@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { IblaiProviders } from "@/providers/iblai-providers";
 import { AppShell } from "@/components/shell/app-shell";
 import { Toaster } from "@/components/ui/sonner";
+import { MULTI_PLATFORM } from "@/lib/ontology/server/backend";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,7 +25,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body className="antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <IblaiProviders>
-            <AppShell defaultSidebarOpen={defaultSidebarOpen} demo={!process.env.ONTOLOGY_API_URL}>
+            <AppShell
+              defaultSidebarOpen={defaultSidebarOpen}
+              demo={!process.env.ONTOLOGY_API_URL && !MULTI_PLATFORM}
+              hosted={MULTI_PLATFORM}
+            >
               {children}
             </AppShell>
           </IblaiProviders>
