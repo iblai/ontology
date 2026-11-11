@@ -53,8 +53,10 @@
     "deleteTitle": "Delete {name}?",
     "deleteBody": "This can’t be undone.",
     "create": "Create",
+    "done": "Done",
     "on": "On",
-    "off": "Off"
+    "off": "Off",
+    "changesData": "changes data"
   },
   "signature": {
     "fullName": "Full name",
@@ -400,6 +402,8 @@
       "editTitle": "Edit toolset",
       "name": "Name",
       "pick": "Tools in this toolset",
+      "write": "These tools can change data",
+      "writeHint": "Only a role granted this toolset by name can use it.",
       "empty": "No toolsets yet."
     },
     "validate": {
@@ -492,21 +496,28 @@
     "newTitle": "New role",
     "editTitle": "Edit role",
     "colName": "Name",
-    "colDisplayName": "Display name",
+    "colTechnicalName": "Technical name",
     "colToolsets": "Toolsets",
     "colAdmin": "Admin",
     "name": "Name",
-    "nameHint": "Letters, digits and underscores.",
-    "displayName": "Display name",
-    "toolsets": "Toolsets",
-    "allToolsets": "All toolsets",
-    "memoryPaths": "Memory paths",
-    "cacheTables": "Cache tables",
-    "agents": "Agents",
-    "onePerLine": "One per line.",
-    "adminDashboard": "Admin dashboard",
-    "maxRecords": "Max records per query",
-    "maxExport": "Max export rows",
+    "technicalName": "Technical name: {name}",
+    "tools": "Tools",
+    "toolsHint": "What agents with this role can do.",
+    "allToolsets": "All read-only toolsets",
+    "allToolsetsHint": "including any added later",
+    "toolCount": "{n, plural, one {# tool} other {# tools}}",
+    "missing": "no longer exists",
+    "knowledge": "Knowledge",
+    "read": "Read",
+    "query": "Query data",
+    "readOf": "Read {name}",
+    "queryOf": "Query data in {name}",
+    "partial": "part of it",
+    "adminDashboard": "Can manage this console",
+    "maxRecords": "Rows per cache query",
+    "maxRecordsHint": "The most rows one query returns.",
+    "noLimit": "No limit",
+    "loadFailed": "Couldn’t load the toolsets and memory domains. Close this and try again.",
     "empty": "No roles yet."
   },
   "graph": {
@@ -538,7 +549,7 @@
     "collapse": "Collapse records",
     "granted": "{role} can now reach {name}.",
     "revoked": "{role} can no longer reach {name}.",
-    "wildcardNote": "This role has access to everything; revoking one item lists its grants explicitly.",
+    "wildcardNote": "This role has all read-only toolsets; revoking one lists the rest by name.",
     "kinds": {
       "service": "Services",
       "table": "Tables",
@@ -571,7 +582,8 @@
       "cron": "Cron",
       "enabled": "Enabled",
       "files": "Records",
-      "expected": "Expected"
+      "expected": "Expected",
+      "write": "Changes data"
     },
     "toggles": {
       "toolset": "Toolsets",

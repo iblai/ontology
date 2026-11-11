@@ -1083,3 +1083,163 @@ def test_config_sends_the_config_files_with_secrets_masked(api, cfg):
     absent = {"id": "caddyfile", "content": None, "modified_at": None}
     assert dict(files["caddyfile"]) == absent
     assert "entries:" in files["catalog"]["content"]
+
+
+# --- the platform lookup the gateway shares ------------------------------------
+
+
+def test_platform_member_tells_an_admin_a_member_and_an_outsider_apart(
+    api, monkeypatch
+):
+    from iblai_ontology.backend.api.auth import (
+        CredentialRejected,
+        PlatformSilent,
+        platform_member,
+    )
+
+    def who(token, **link):
+        links = _FakeResp(200, [_link(**link)])
+        _dm_auth(monkeypatch, links=links, admin_platforms={"acme"})
+        found = platform_member("Token", token)
+        return found.admin, found.member
+
+    assert who("t-admin") == (True, True)
+    assert who("t-member", is_admin=False) == (False, True)
+    assert who("t-elsewhere", key="other-co") == (False, False)
+    assert who("t-inactive", active=False) == (False, False)
+
+    # A platform in trouble is not a bad credential, and neither answer is kept.
+    _dm_auth(monkeypatch, user=_FakeResp(502, {}))
+    with pytest.raises(PlatformSilent):
+        platform_member("Token", "t-new")
+    _dm_auth(monkeypatch, user=_FakeResp(403, {"detail": "Invalid token."}))
+    with pytest.raises(CredentialRejected):
+        platform_member("Token", "t-new")
+    calls = _dm_auth(monkeypatch, admin_platforms={"acme"})
+    assert platform_member("Token", "t-new").member is True and len(calls) == 2
+
+
+def test_an_api_key_the_gateway_verified_is_not_a_console_sign_in(api, monkeypatch):
+    from rest_framework.exceptions import AuthenticationFailed
+
+    from iblai_ontology.backend.api.auth import DmTokenAuthentication, platform_member
+
+    calls = _dm_auth(monkeypatch, admin_platforms={"acme"})
+    who = platform_member("Api-Token", "the-key")
+    assert (who.username, who.admin, who.member) == ("jane", True, True)
+    # The key is sent under its own scheme, to the same two addresses.
+    key = {"Authorization": "Api-Token the-key"}
+    assert calls == [
+        ("http://dm.test/api/core/token/verify/", {}, key),
+        ("http://dm.test/api/core/users/platforms/", {"username": "jane"}, key),
+    ]
+    assert platform_member("Api-Token", "the-key") == who and len(calls) == 2
+
+    # The same characters under Token are another credential: asked again, and refused.
+    calls = _dm_auth(monkeypatch, user=_FakeResp(403, {"detail": "Invalid token."}))
+    with pytest.raises(AuthenticationFailed):
+        DmTokenAuthentication().authenticate(_token_request("the-key"))
+    assert calls[0][2] == {"Authorization": "Token the-key"}
+
+
+# --- toolsets that write ---------------------------------------------------------
+
+
+def _put_mcp(kind, name, **data):
+    from iblai_ontology.backend.api.views import McpResourceView
+
+    raw = _dispatch(McpResourceView, "put", f"/mcp/{kind}s/{name}", data=data)
+    return _run(McpResourceView, raw, name=name, kind=kind).data
+
+
+def _write_tool():
+    """A write account and one tool on it, saved through the console's own endpoints."""
+    source = _put_mcp("source", "sis-rw", type="postgres", host="db", password="${RW}")
+    tool = _put_mcp(
+        "tool",
+        "release-hold",
+        type="postgres-sql",
+        source="sis-rw",
+        statement="UPDATE holds SET released = true WHERE id = $1",
+    )
+    assert source["ok"] and tool["ok"], (source, tool)
+
+
+def test_a_toolset_that_writes_says_so_and_an_unmarked_one_is_refused(api, cfg):
+    from iblai_ontology.backend.api.views import McpToolsetsView
+
+    _write_tool()
+    refused = _put_mcp("toolset", "registrar-writes", tools=["release-hold"])
+    assert refused["ok"] is False and "holds 'release-hold'" in refused["message"]
+    assert "registrar-writes" not in (cfg / "tools.yaml").read_text()
+
+    saved = _put_mcp("toolset", "registrar-writes", tools=["release-hold"], write=True)
+    assert saved["ok"] is True
+    listed = {
+        t["name"]: t for t in _run(McpToolsetsView, _dispatch(McpToolsetsView)).data
+    }
+    assert listed["registrar-writes"]["write"] is True
+    assert listed["admin-analytics-tools"]["write"] is False
+
+    # A toolset that only reads says nothing about it in the file.
+    assert _put_mcp("toolset", "plain", tools=["search-students"], write=False)["ok"]
+    assert (cfg / "tools.yaml").read_text().count("write:") == 1
+    # The mark cannot come off while the toolset still holds the tool.
+    off = _put_mcp("toolset", "registrar-writes", write=False)
+    assert off["ok"] is False and "write: true" in (cfg / "tools.yaml").read_text()
+    # An edit that does not mention the mark keeps it.
+    assert _put_mcp("toolset", "registrar-writes", tools=["release-hold"])["ok"]
+    assert "write: true" in (cfg / "tools.yaml").read_text()
+
+
+def test_a_tool_that_writes_is_not_tested_and_not_scheduled(api, cfg):
+    from iblai_ontology.backend.api.views import McpTestView, SyncScheduleDetailView
+
+    _write_tool()
+    raw = _dispatch(McpTestView, "post", "/mcp/test/release-hold", data={"hold_id": 1})
+    body = _run(McpTestView, raw, tool="release-hold").data
+    assert body["ok"] is False and "can change data" in body["result"]["error"]
+
+    raw = _dispatch(
+        SyncScheduleDetailView,
+        "put",
+        "/sync/schedules/nightly-release",
+        data={"source": "sis-rw", "tool": "release-hold", "cron": "0 2 * * *"},
+    )
+    body = _run(SyncScheduleDetailView, raw, name="nightly-release").data
+    assert body["ok"] is False and "a schedule only reads" in body["message"]
+    assert "nightly-release" not in (cfg / "sync-schedules.yaml").read_text()
+
+
+def test_a_roles_row_limit_is_a_whole_number_above_zero_or_absent(api, cfg):
+    from iblai_ontology.backend.api.views import RoleDetailView, RolesView
+
+    def put(limits):
+        data = {"display_name": "Limited", "concurrency_limits": limits}
+        raw = _dispatch(RoleDetailView, "put", "/roles/Limited", data=data)
+        return _run(RoleDetailView, raw, name="Limited")
+
+    for bad in (0, -1, 2.5, "100", True):
+        assert put({"max_records_per_query": bad}).status_code == 400, bad
+    assert put({"max_records_per_query": 100, "max_export_rows": 5}).data["ok"] is True
+    # The limits are replaced whole: sending them without the key is "no limit".
+    assert put({"max_export_rows": 5}).data["ok"] is True
+    role = next(
+        r for r in _run(RolesView, _dispatch(RolesView)).data if r["name"] == "Limited"
+    )
+    assert role["concurrency_limits"] == {"max_export_rows": 5}
+
+
+def test_the_yaml_editor_keeps_a_header_reference_and_masks_a_literal(api, cfg):
+    from iblai_ontology.backend.api.views import McpConfigView
+
+    original = (cfg / "tools.yaml").read_text()
+    (cfg / "tools.yaml").write_text(
+        original
+        + "---\nkind: source\nname: crm\ntype: http\nbaseUrl: https://crm.example\n"
+        "headers:\n  Authorization: Bearer ${CRM_TOKEN}\n  Cookie: session=abc123\n"
+    )
+    text = _run(McpConfigView, _dispatch(McpConfigView)).data["text"]
+    # A reference after a scheme word is configuration; masked, it could not be saved back.
+    assert "  Authorization: Bearer ${CRM_TOKEN}\n" in text
+    assert "abc123" not in text and "  Cookie: ********" in text

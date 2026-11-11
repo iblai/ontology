@@ -20,8 +20,8 @@ export async function seedAuth(page: Page, username = "tester") {
   await page.addInitScript(
     ({ username, expiresAt, tenant }) => {
       localStorage.setItem("tenant", "main");
-      // The shape the app's saveCurrentTenant writes; any other makes the SDK's cookie sync redirect to login.
-      localStorage.setItem("current_tenant", "main");
+      // The shape the app's saveCurrentTenant writes: the platform object.
+      localStorage.setItem("current_tenant", JSON.stringify(tenant));
       localStorage.setItem("tenants", JSON.stringify([tenant]));
       localStorage.setItem(
         "userData",

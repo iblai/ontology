@@ -172,6 +172,78 @@ tools:
 
 `roles.yaml` (Component 3) grants toolsets to roles. The outbound gateway (Component 4) only ever exposes the toolsets the caller's role is allowed to use. You can inspect what is configured with `ontology mcp tools` and `ontology mcp toolsets`.
 
+### Tools that change data
+
+A tool that writes is a named operation, defined like any other tool: one fixed statement, or one HTTP request. It differs in three ways: its own source (the write account), its own toolset marked `write: true`, and a role that names that toolset.
+
+```yaml
+# The write account: its own source, so no read tool ever runs on it.
+kind: source
+name: sis-rw
+type: postgres
+host: ${SIS_DB_HOST}
+port: ${SIS_DB_PORT}
+database: ${SIS_DB_NAME}
+user: ${SIS_DB_RW_USER}
+password: ${SIS_DB_RW_PASSWORD}
+---
+kind: tool
+name: release-hold
+type: postgres-sql
+source: sis-rw
+description: Release one hold, with a note saying why.
+parameters:
+  - name: hold_id
+    type: integer
+    description: The hold's id
+  - name: note
+    type: string
+    description: Why it is released
+statement: UPDATE holds SET released = true, released_note = $2 WHERE id = $1 RETURNING id, released
+---
+# An API system: the Toolbox's `http` source and tool. The token stays in the Toolbox's env.
+kind: source
+name: crm
+type: http
+baseUrl: https://crm.example.edu
+headers:
+  Authorization: Bearer ${CRM_TOKEN}
+---
+kind: tool
+name: add-note
+type: http
+source: crm
+description: Add a note to a person's record.
+method: POST
+path: /people/{{.person}}/notes
+headers:
+  Content-Type: application/json
+requestBody: '{"body": "{{.body}}"}'
+pathParams:
+  - name: person
+    type: string
+    description: The person's id
+bodyParams:
+  - name: body
+    type: string
+    description: The note
+---
+kind: toolset
+name: registrar-writes
+write: true
+tools:
+  - release-hold
+  - add-note
+```
+
+- **The gateway decides what writes, not the author** ([authorization-model.md](../authorization-model.md#toolsets-that-change-data)): saving this file with `write: true` left out is refused, naming the tool and why it counts as a write. Put a writing tool on the read source and every tool of that source counts as a write.
+- **A role gets the toolset by name**: `mcp_toolsets: [enrollment-tools, registrar-writes]`, or the switch on the console's Access page. `"*"` does not include it.
+- **Secrets are references.** A password, a token, an `Authorization` or `Cookie` header, at any depth of a source or a tool, must be `${VAR}` (a scheme word may come first: `Bearer ${VAR}`); a literal is refused on save. The Toolbox reads the values from its own environment (`.env.mcp`).
+- **An `http` source on a private address needs saying so.** The Toolbox refuses loopback, private and link-local addresses unless the source lists them (`allowedIpRanges: [10.20.0.0/16]`) or sets `allowPrivateNetworks: true`. An API inside the network is exactly that case.
+- **`http` tools are written in the YAML editor** (console → MCP → tools.yaml). The tool dialog has no method or body fields.
+- The Toolbox does not add a `Content-Type`: set it on the tool, as above.
+- Not available: a tool where the agent writes the SQL (`*-execute-sql`). It would count as a write, and it is not a named operation.
+
 ---
 
 ## Sample MCP Tool Calls
@@ -275,7 +347,7 @@ Representative response from `get_student_courses`:
 
 ## Key Design Decisions
 
-- **Read-only everywhere.** No source-system writes in v1. Every Toolbox source uses a SELECT-only user; every custom server uses GET-only API calls. Component 5's safety suite proves this before any source is integrated.
+- **Read-only unless defined otherwise.** Every source a sync or a read tool uses has a SELECT-only user; every custom server uses GET-only API calls. Component 5's safety suite proves this before any source is integrated. A change exists only as a named tool on a separate write source, in a toolset marked `write: true` ([above](#tools-that-change-data)).
 - **Credential isolation.** Each MCP server has its own credential scope. PeopleSoft credentials live only in the Toolbox's env; Canvas credentials live only in the `mcp-canvas` container. No server can reach another's secrets.
 - **No data crosses MCP boundaries.** Each MCP server is a process-isolated container. Data flows *up* to the sync engine and the exposure gateway, never *sideways* between MCP servers.
 - **Descriptions are part of the contract.** Each tool's `description` is read by the agent/LLM at call time, so writing precise descriptions is how you make tools discoverable and correctly used.

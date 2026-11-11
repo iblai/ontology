@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
-/** The shell every editor dialog shares: title, a form, Cancel and Save. */
+/** The shell the form dialogs share: title, a form, Cancel and Save. */
 export function FormDialog({
   open,
   onOpenChange,
@@ -77,10 +77,3 @@ export function Field({
     </div>
   );
 }
-
-/** "a\nb\n" -> ["a", "b"] for the one-per-line textareas. */
-export const lines = (text: string) =>
-  text
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);

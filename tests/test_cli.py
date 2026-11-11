@@ -66,3 +66,16 @@ def test_group_help(group):
 def test_subcommand_help(path):
     result = runner.invoke(app, path)
     assert result.exit_code == 0
+
+
+def test_mcp_toolsets_marks_the_ones_that_write(tmp_path, monkeypatch):
+    (tmp_path / "tools.yaml").write_text(
+        "kind: toolset\nname: reads\ntools: [a]\n"
+        "---\n"
+        "kind: toolset\nname: registrar-writes\nwrite: true\ntools: [b]\n"
+    )
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(tmp_path))
+    result = runner.invoke(app, ["mcp", "toolsets"])
+    assert result.exit_code == 0
+    assert "  reads: a" in result.stdout
+    assert "  registrar-writes (writes): b" in result.stdout

@@ -189,7 +189,7 @@ RATELIMIT_TOOLS_CALL_MAX = int(
 
 # --- Transport security / security headers -------------------------------
 # Backs OntologySecurityMiddleware: rejects Bearer tokens over cleartext and
-# emits protective response headers. All env-configurable (see the README).
+# emits protective response headers. All env-configurable (see docs/deployment.md).
 SECURITY_HEADERS_ENABLED = (
     os.environ.get("ONTOLOGY_SECURITY_HEADERS_ENABLED", "true").lower() == "true"
 )
@@ -211,7 +211,7 @@ SECURITY_FRAME_OPTIONS = os.environ.get("ONTOLOGY_FRAME_OPTIONS", "DENY")
 # reuse-designed, so the default `bind` mode allows a jti to be reused from its
 # first-seen client IP while rejecting the same jti from a different IP; `strict`
 # enforces single-use; `off` disables. Backed by the Django cache (share it via
-# ONTOLOGY_CACHE_URL for cross-worker coverage). See the README.
+# ONTOLOGY_CACHE_URL for cross-worker coverage). See docs/deployment.md.
 JWT_REPLAY_MODE = os.environ.get("ONTOLOGY_JWT_REPLAY_MODE", "bind").lower()
 JWT_REPLAY_TTL_FALLBACK = int(
     os.environ.get("ONTOLOGY_JWT_REPLAY_TTL_FALLBACK", "3600")

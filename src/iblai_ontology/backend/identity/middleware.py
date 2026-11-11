@@ -13,6 +13,10 @@ The ibl.ai platform itself may call with the shared service token
 (``ONTOLOGY_SERVICE_TOKEN``) instead of a user's JWT; it is the trusted party that
 configured the connection, so the role is the ``X-Iblai-Role`` it sends.
 
+A person may also call ``/mcp`` with their own ibl.ai credential, a DM token or a
+platform API key (``resolve_platform_request``, called by the MCP view): their role
+is one the platform's policies give them.
+
 ``resolve_request`` is the reusable core; ``OntologyIdentityMiddleware`` adapts
 it to Django's middleware contract.
 """
@@ -117,6 +121,97 @@ def resolve_service_request(
     )
 
 
+class CredentialRefused(Exception):
+    """An ibl.ai credential the gateway does not take; ``status`` is the HTTP answer."""
+
+    def __init__(self, message: str, status: int):
+        super().__init__(message)
+        self.status = status
+
+
+# What a credential the platform refused is told, by the scheme it came under.
+_REJECTED = {
+    "Token": "The ibl.ai platform rejected this token.",
+    "Api-Token": (
+        "The ibl.ai platform rejected this API key. A key limited to its own policies "
+        "is rejected too: use one that acts as its owner."
+    ),
+    "Bearer": (
+        "This is not the service token, and the ibl.ai platform rejected it both as a "
+        "token and as an API key (a key limited to its own policies is rejected too)."
+    ),
+}
+
+
+def resolve_platform_request(
+    scheme: str,
+    token: str,
+    role_header: Optional[str],
+    resolver: Optional[RoleResolver] = None,
+) -> ResolvedRequest:
+    """A person calling with their own ibl.ai credential: a DM token or a platform API key.
+
+    ``scheme`` is ``Token``, ``Api-Token``, or ``Bearer``, which tries both. An admin
+    of this platform names any defined role. A member names a role the platform's
+    policies ``Ontology: <role>`` give them, and without a header runs as their only
+    one. Raises :class:`CredentialRefused`, :class:`RoleNotPermitted` or
+    :class:`RolesUnavailable`.
+    """
+    from django.conf import settings
+
+    from iblai_ontology.backend.api import auth
+    from iblai_ontology.backend.identity import role_source
+
+    if not settings.ONTOLOGY_DM_URL or not settings.ONTOLOGY_ADMIN_PLATFORMS:
+        # With no platform named, any platform's admin would reach every role here.
+        raise CredentialRefused(
+            "ibl.ai tokens and API keys are not accepted here: this backend needs both "
+            "its platform (IBLAI_ORG) and the address that verifies them (ONTOLOGY_DM_URL).",
+            401,
+        )
+    who = None
+    for tried in ("Token", "Api-Token") if scheme == "Bearer" else (scheme,):
+        try:
+            who = auth.platform_member(tried, token)
+            break
+        except auth.CredentialRejected:
+            continue
+        except auth.PlatformSilent as exc:
+            raise CredentialRefused(str(exc), 503) from exc
+    if who is None:
+        raise CredentialRefused(_REJECTED[scheme], 401)
+    if not who.member:
+        raise CredentialRefused(
+            "This credential's owner is not a member of this platform.", 403
+        )
+    resolver = resolver or RoleResolver()
+    defined = resolver.role_names()
+    if who.admin:
+        role = role_header or DEFAULT_ROLE
+        if role not in defined:
+            raise RoleNotPermitted(role)
+    else:
+        held = {r for r in role_source.roles_of(who.username) if r in defined}
+        own = sorted(held - {DEFAULT_ROLE})
+        role = role_header or (own[0] if len(own) == 1 else DEFAULT_ROLE)
+        if role != DEFAULT_ROLE and role not in held:
+            raise RoleNotPermitted(role)
+    identity = EntraIdentity(
+        # Prefixed: no member's name can pass for the service account's in the audit log.
+        user_id=f"ibl:{who.username}",
+        email=who.email,
+        name=who.username,
+        roles=[role],
+        groups=[],
+        token_jti=None,
+        token_exp=None,
+        raw_claims={},
+    )
+    return ResolvedRequest(
+        identity=identity, permissions=resolver.resolve(role), emplid=None
+    )
+
+
 def write_audit(
     resolved: ResolvedRequest,
     *,
@@ -125,8 +220,10 @@ def write_audit(
     allowed: bool,
     ip_address: Optional[str] = None,
     session_id: str = "",
+    details: Optional[dict] = None,
+    strict: bool = False,
 ) -> None:
-    """Persist an audit_log row (best-effort; never blocks the request)."""
+    """Persist an audit_log row; best-effort unless ``strict``, which raises when it is not written."""
     try:
         from iblai_ontology.backend import store
         from iblai_ontology.backend.identity.models import AuditLog
@@ -139,12 +236,15 @@ def write_audit(
             action=action,
             resource=resource,
             allowed=allowed,
+            details=details or {},
             ip_address=ip_address,
             session_id=session_id,
             entra_token_id=resolved.identity.token_jti or "",
         )
-    except Exception:  # pragma: no cover - auditing must not break requests
+    except Exception:
         logger.exception("audit write failed: %s %s", action, resource)
+        if strict:
+            raise
 
 
 class OntologyIdentityMiddleware:
@@ -207,7 +307,8 @@ class OntologyIdentityMiddleware:
             except RolesUnavailable:
                 # The role source logged why; never the default role instead.
                 return JsonResponse({"error": ROLES_UNAVAILABLE}, status=503)
-        elif token and self.validator is not None:
+        # Only a JWT is Entra's; a DM token or an API key behind Bearer is the MCP view's.
+        elif token.count(".") == 2 and self.validator is not None:
             try:
                 request.ontology = resolve_request(
                     token=token,

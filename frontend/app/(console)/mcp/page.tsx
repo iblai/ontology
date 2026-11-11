@@ -300,7 +300,14 @@ export default function McpPage() {
                     <Card key={ts.name}>
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
-                          <CardTitle className="text-sm font-medium">{ts.name}</CardTitle>
+                          <div className="flex items-baseline gap-2">
+                            <CardTitle className="text-sm font-medium">{ts.name}</CardTitle>
+                            {ts.write && (
+                              <span className="text-muted-foreground text-xs">
+                                {tc("changesData")}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center">
                             <Button
                               variant="ghost"

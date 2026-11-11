@@ -16,6 +16,19 @@ from iblai_ontology.backend.mcp_server.handlers import (
 from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
 
 
+def _read(name, description):
+    """A tool the gateway knows to read: one fixed SELECT."""
+    return {
+        "kind": "tool",
+        "name": name,
+        "type": "postgres-sql",
+        "source": "cache",
+        "description": description,
+        "parameters": [],
+        "statement": "SELECT 1",
+    }
+
+
 class FakeReader:
     """Stand-in ConfigReader with two toolsets and three tools."""
 
@@ -29,18 +42,59 @@ class FakeReader:
 
     def get_tools(self):
         return [
+            _read("get-student-enrollment", "enroll"),
+            _read("search-students", "search"),
+            _read("get-aid-package", "aid"),
+        ]
+
+
+class WritingReader(FakeReader):
+    """The same, plus a write account: a toolset marked as writing, and one that forgot to be."""
+
+    def get_toolsets(self):
+        return {
+            **super().get_toolsets(),
+            "registrar-writes": {"write": True, "tools": ["release-hold", "add-note"]},
+            "unmarked": {"tools": ["release-hold", "search-students"]},
+        }
+
+    def get_tools(self):
+        return [
+            *super().get_tools(),
             {
-                "name": "get-student-enrollment",
-                "description": "enroll",
-                "parameters": [],
+                "kind": "tool",
+                "name": "release-hold",
+                "type": "postgres-sql",
+                "source": "sis-rw",
+                "parameters": [{"name": "hold_id", "type": "integer"}],
+                "statement": "UPDATE holds SET released = true WHERE id = $1",
             },
-            {"name": "search-students", "description": "search", "parameters": []},
-            {"name": "get-aid-package", "description": "aid", "parameters": []},
+            {
+                "kind": "tool",
+                "name": "add-note",
+                "type": "http",
+                "source": "crm-rw",
+                "method": "POST",
+                "path": "/notes/{{.person}}",
+                "pathParams": [{"name": "person", "type": "string"}],
+                "bodyParams": [{"name": "body", "type": "string"}],
+            },
         ]
 
 
 def _resolver():
     return ToolsetResolver(reader=FakeReader())
+
+
+def _writing_handlers(toolsets, **ctx):
+    perms = Permissions(role="Registrar", display_name="x", mcp_toolsets=toolsets)
+    handlers = MCPHandlers(
+        MCPContext(permissions=perms, **ctx),
+        resolver=ToolsetResolver(reader=WritingReader()),
+    )
+    sent = []
+    handlers._proxy_to_toolbox = lambda name, arguments: sent.append(name) or [{}]
+    return handlers, sent
 
 
 def test_scope_limits_tools_to_role():
@@ -58,6 +112,85 @@ def test_wildcard_role_sees_all():
     scoped = _resolver().scope_for(perms)
     assert set(scoped.toolsets) == {"enrollment-tools", "financial-aid-tools"}
     assert "get-aid-package" in scoped.tool_names
+
+
+def test_wildcard_never_reaches_a_toolset_that_writes():
+    resolver = ToolsetResolver(reader=WritingReader())
+    perms = Permissions(role="Executive", display_name="x", mcp_toolsets=["*"])
+    scoped = resolver.scope_for(perms)
+    assert "registrar-writes" not in scoped.toolsets
+    assert not {"release-hold", "add-note"} & set(scoped.tool_names)
+    assert {"search-students", "get-aid-package"} <= set(scoped.tool_names)
+
+    # Named, alone or beside the wildcard, it is held; the wildcard still adds the rest.
+    perms = Permissions(
+        role="Registrar", display_name="x", mcp_toolsets=["*", "registrar-writes"]
+    )
+    scoped = resolver.scope_for(perms)
+    assert {"release-hold", "add-note", "get-aid-package"} <= set(scoped.tool_names)
+    perms = Permissions(
+        role="Registrar", display_name="x", mcp_toolsets=["registrar-writes"]
+    )
+    assert resolver.scope_for(perms).tool_names == ["release-hold", "add-note"]
+
+
+def test_a_toolset_not_marked_as_writing_never_lends_a_tool_that_writes():
+    # A hand-edited or merged tools.yaml skips the validator: the gateway is the guard.
+    resolver = ToolsetResolver(reader=WritingReader())
+    perms = Permissions(role="x", display_name="x", mcp_toolsets=["unmarked"])
+    assert resolver.scope_for(perms).tool_names == ["search-students"]
+    assert set(resolver.writing) == {"release-hold", "add-note"}
+
+
+def test_a_write_runs_only_after_it_is_recorded():
+    recorded = []
+    handlers, sent = _writing_handlers(
+        ["registrar-writes"],
+        before_write=lambda name, arguments: recorded.append((name, arguments)),
+    )
+    handlers.call_tool("release-hold", {"hold_id": 7})
+    assert recorded == [("release-hold", {"hold_id": 7})] and sent == ["release-hold"]
+
+    # A recorder that fails stops the write.
+    def refuse(name, arguments):
+        raise PermissionDenied("not recorded")
+
+    handlers, sent = _writing_handlers(["registrar-writes"], before_write=refuse)
+    with pytest.raises(PermissionDenied):
+        handlers.call_tool("release-hold", {"hold_id": 7})
+    assert sent == []
+
+    # No recorder at all (a context that is not the gateway's): no write.
+    handlers, sent = _writing_handlers(["registrar-writes"])
+    with pytest.raises(PermissionDenied, match="records the call first"):
+        handlers.call_tool("release-hold", {"hold_id": 7})
+    assert sent == []
+
+    # A tool that reads asks for no record.
+    handlers, sent = _writing_handlers(["enrollment-tools"])
+    handlers.call_tool("search-students", {})
+    assert sent == ["search-students"]
+
+
+def test_list_tools_says_which_tools_write_and_what_an_http_tool_takes():
+    handlers, _ = _writing_handlers(["*", "registrar-writes"])
+    tools = {t["name"]: t for t in handlers.list_tools()}
+    assert tools["search-students"]["annotations"] == {"readOnlyHint": True}
+    assert tools["read-memory"]["annotations"] == {"readOnlyHint": True}
+    assert tools["release-hold"]["annotations"] == {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+    }
+    # An http tool declares its arguments in four lists of its own.
+    assert tools["add-note"]["inputSchema"] == {
+        "type": "object",
+        "properties": {
+            "person": {"type": "string", "description": ""},
+            "body": {"type": "string", "description": ""},
+        },
+        "required": ["person", "body"],
+    }
+    assert [p["name"] for p in tools["add-note"]["parameters"]] == ["person", "body"]
 
 
 def test_list_tools_handler():

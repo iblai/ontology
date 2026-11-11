@@ -10,8 +10,11 @@ test("toolsets, tools and the raw tools.yaml are editable", async ({ page }) => 
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Name", { exact: true }).fill("qa-tools");
   await dialog.getByRole("checkbox").first().click();
+  await dialog.getByRole("switch", { name: "These tools can change data" }).click();
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("qa-tools", { exact: true })).toBeVisible();
+  // Marked as changing data, the toolset says so beside its name.
+  await expect(page.getByText("changes data", { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: "Tools", exact: true }).click();
   await page.getByRole("row", { name: /get-student-enrollment/ }).click();

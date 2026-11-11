@@ -164,7 +164,8 @@ def _resources(spec: dict[str, Any]) -> list[str]:
         names = spec.get(field) or []
         if "*" in names:
             out.append(f"{ROOT}{kind}/")
-            continue
+            # Beside the whole kind only a toolset's name says more: one that writes is granted by name.
+            names = [n for n in names if n != "*"] if kind == "toolsets" else []
         for name in names:
             if not _NAME.fullmatch(str(name)):
                 raise RuntimeError(
@@ -227,7 +228,8 @@ def _spec(name: str, role: dict, resources: list[str], kept: dict) -> dict[str, 
     def reach(kind: str) -> list[str]:
         # A resource counts only when the role holds its kind's verb.
         names = granted[kind] if _holds(role, VERBS[kind]) else set()
-        return ["*"] if "*" in names else sorted(names)
+        # `*` sorts first; a toolset's name stays beside it, as a write toolset is granted by name.
+        return sorted(names) if kind == "toolsets" or "*" not in names else ["*"]
 
     memory = reach("memory")
     return {
@@ -266,6 +268,43 @@ def load_roles() -> dict[str, dict[str, Any]]:
         for name, role in _platform_roles().items()
         if _ours(role)
     }
+
+
+def roles_of(username: str) -> list[str]:
+    """The ontology roles a member of the platform holds: the policies ``Ontology: <role>``
+    that list them, alone or through a group. None when the roles live in roles.yaml.
+
+    Kept for ``ONTOLOGY_ROLES_TTL`` seconds; raises :class:`RolesUnavailable` when the
+    platform does not answer, so nobody is given the default role instead.
+    """
+    if not dm_store():
+        return []
+    import httpx
+    from django.conf import settings
+    from django.core.cache import cache
+
+    key = f"{CACHE_KEY}:of:{username}"
+    held = cache.get(key)
+    if held is None:
+        try:
+            held = sorted(
+                policy["role"]["name"]
+                for policy in _policies(name=POLICY.strip(), username=username)
+                if policy["name"] == POLICY + policy["role"]["name"]
+            )
+        except (
+            RuntimeError,
+            ValueError,
+            LookupError,
+            TypeError,
+            httpx.HTTPError,
+        ) as exc:
+            logger.error(
+                "roles: the platform did not say what %s holds: %s", username, exc
+            )
+            raise RolesUnavailable(str(exc)) from exc
+        cache.set(key, held, settings.ONTOLOGY_ROLES_TTL)
+    return held
 
 
 def _forget() -> None:

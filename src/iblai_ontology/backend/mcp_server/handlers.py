@@ -20,7 +20,7 @@ import json
 import os
 import posixpath
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from iblai_ontology.backend.identity.roles import Permissions
 from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
@@ -82,6 +82,21 @@ BUILTIN_TOOLS = {
 }
 
 
+# Where a tool keeps its arguments: `parameters`, and for an http tool these four lists too.
+_PARAMETER_KEYS = (
+    "parameters",
+    "pathParams",
+    "queryParams",
+    "bodyParams",
+    "headerParams",
+)
+
+
+def tool_parameters(spec: dict) -> list[dict]:
+    """Every argument a tool takes, whichever list of its spec declares it."""
+    return [p for key in _PARAMETER_KEYS for p in spec.get(key) or []]
+
+
 def input_schema(parameters: list[dict]) -> dict:
     """The JSON Schema an MCP client expects for a tool's arguments."""
     properties, required = {}, []
@@ -126,6 +141,8 @@ class MCPContext:
     # The caller's own subject id (emplid), resolved from their token via the
     # IdentityMap. Used to self-scope subject tools for self-service roles.
     subject_id: Optional[str] = None
+    # Called with (tool, arguments) before a tool that can change data runs; raises to stop it.
+    before_write: Optional[Callable[[str, dict], None]] = None
 
 
 class MCPHandlers:
@@ -148,12 +165,19 @@ class MCPHandlers:
             specs["query-ontology-cache"] = BUILTIN_TOOLS["query-ontology-cache"]
         if self._may_see_sync_status():
             specs.setdefault("get-sync-status", BUILTIN_TOOLS["get-sync-status"])
+        writing = self.resolver.writing
         return [
             {
                 "name": t["name"],
                 "description": t.get("description", ""),
-                "parameters": t.get("parameters", []),
-                "inputSchema": input_schema(t.get("parameters", [])),
+                "parameters": tool_parameters(t),
+                "inputSchema": input_schema(tool_parameters(t)),
+                # MCP's hints: a client may ask its user before a tool that is not read-only.
+                "annotations": (
+                    {"readOnlyHint": False, "destructiveHint": True}
+                    if t["name"] in writing
+                    else {"readOnlyHint": True}
+                ),
             }
             for t in specs.values()
         ]
@@ -283,6 +307,10 @@ class MCPHandlers:
     def query_cache(self, sql: str, limit: int = 100) -> list[dict]:
         statement = self._validate_read_only_sql(sql)
         limit = max(1, int(limit))
+        # The role's "rows per cache query"; anything but a whole number above zero is no limit.
+        cap = self.ctx.permissions.concurrency_limits.get("max_records_per_query")
+        if isinstance(cap, int) and not isinstance(cap, bool) and cap > 0:
+            limit = min(limit, cap)
         from django.db import connection
 
         sqlite = connection.vendor == "sqlite"
@@ -375,6 +403,14 @@ class MCPHandlers:
         # to their own subject record.
         self._require_scoped(name)
         self._require_subject_ownership(arguments)
+        if name in self.resolver.writing:
+            # A change is recorded before it is made: no recorder, no change.
+            if self.ctx.before_write is None:
+                raise PermissionDenied(
+                    f"{name} can change data and runs only through the gateway, "
+                    "which records the call first"
+                )
+            self.ctx.before_write(name, arguments)
         return self._proxy_to_toolbox(name, arguments)
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:

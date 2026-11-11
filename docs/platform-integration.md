@@ -233,6 +233,34 @@ call and always send the stored credentials as `Bearer`, which is why the token 
 
 ---
 
+## A Member's Own Credential
+
+A connection can also carry a credential of the person or the team it serves instead of the
+shared service token: a DM token, or a platform API key. The gateway then knows who is calling,
+and the role is one the platform assigned to them, not one the connection claims.
+
+| Stored `credentials` (`auth_type: "none"`, sent verbatim) | The gateway sees |
+|---|---|
+| `Token <dm_token>` | That member |
+| `Api-Token <key>` | The key's owner |
+| `Bearer <dm_token or key>` | Whichever it turns out to be |
+
+The third row is for the path above where the scheme is always `Bearer`: the gateway tries the
+value as a token, then as an API key. An API key must act as its owner (the default mode); one
+limited to its own policies is rejected by the platform's verify endpoint.
+
+Give the person their role in the platform's RBAC screens: add them, or a group of theirs, to the
+policy `Ontology: <role>`. `X-Iblai-Role` in `extra_headers` then only selects among the roles
+they hold; without it a member with exactly one role runs as that role. An administrator of the
+platform may name any role. The backend needs `ONTOLOGY_DM_URL` and `IBLAI_ORG` to take such a
+credential at all, and `ONTOLOGY_DATA_STORE=dm` (roles kept in the platform) for a member to be
+given a role. The full rules are in [identity.md](identity.md#a-persons-own-iblai-credential).
+
+The platform stores one credential per server or connection: it does not forward the token of
+whoever is chatting. Per-person identity through the platform is still the Entra flow above.
+
+---
+
 ## Agent-Scoped Connections
 
 Different agents can have different access to the same ontology: register the server with

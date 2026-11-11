@@ -304,10 +304,16 @@ def test_identity_middleware_role_escalation_forbidden(backend):
 
     mw.validator = FakeValidator()
     req = RequestFactory().get(
-        "/mcp", HTTP_AUTHORIZATION="Bearer x", HTTP_X_IBLAI_ROLE="Executive"
+        "/mcp", HTTP_AUTHORIZATION="Bearer a.b.c", HTTP_X_IBLAI_ROLE="Executive"
     )
     resp = mw(req)
     assert resp.status_code == 403
+
+    # Only a JWT is Entra's: a DM token or an API key behind Bearer is left to the MCP view.
+    req = RequestFactory().get(
+        "/mcp", HTTP_AUTHORIZATION="Bearer " + "f" * 64, HTTP_X_IBLAI_ROLE="Executive"
+    )
+    assert mw(req) == "OK" and req.ontology is None
 
 
 def test_service_mutating_commands(backend, monkeypatch):

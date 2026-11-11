@@ -237,6 +237,57 @@ def test_roles_grants_reads_caches_and_wildcards():
     assert ("role:Exec", "memory_domain:students") in caches
 
 
+def test_a_role_reaches_a_toolset_that_writes_only_by_name():
+    reader = _Reader(
+        sources=READER.get_sources(),
+        tools=READER.get_tools(),
+        toolsets=[
+            *READER.get_toolsets().values(),
+            {
+                "kind": "toolset",
+                "name": "registrar-writes",
+                "write": True,
+                "tools": ["get-enrl"],
+            },
+        ],
+    )
+    roles = {
+        "Exec": {"display_name": "Exec", "mcp_toolsets": ["*"]},
+        "Registrar": {
+            "display_name": "Registrar",
+            "mcp_toolsets": ["*", "registrar-writes", "cache-tools"],
+        },
+    }
+    data = gb.build_graph(
+        [_service()],
+        reader=reader,
+        roles=roles,
+        schedules=SCHEDULES,
+        by_domain=BY_DOMAIN,
+    )
+    assert _node(data, "toolset:registrar-writes")["meta"]["write"] is True
+    assert _node(data, "toolset:cache-tools")["meta"]["write"] is False
+
+    def grants(role):
+        return sorted(
+            (link["target"], link["wildcard"])
+            for link in data["links"]
+            if link["kind"] == "grants" and link["source"] == role
+        )
+
+    # `*` draws the toolsets that only read.
+    assert grants("role:Exec") == [
+        ("toolset:cache-tools", True),
+        ("toolset:enrollment-tools", True),
+    ]
+    # A name beside it is drawn once: by name for the one that writes, not again for one `*` reaches.
+    assert grants("role:Registrar") == [
+        ("toolset:cache-tools", True),
+        ("toolset:enrollment-tools", True),
+        ("toolset:registrar-writes", False),
+    ]
+
+
 def test_schedules_health_and_hubs():
     data = _graph()
     assert ("schedule:students-full", "service:peoplesoft") in _links(

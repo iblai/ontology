@@ -61,6 +61,10 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
 
   const tenantKey = useMemo(() => resolveAppTenant(), []);
   const isSsoRoute = pathname?.startsWith("/sso-login") ?? false;
+  // Off on localhost, where every port shares one cookie jar and local consoles would fight over it.
+  const enableStorageSync =
+    typeof window !== "undefined" &&
+    !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
 
   if (!isInitialized) return LOADING;
 
@@ -73,17 +77,17 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
         pathname={pathname ?? "/"}
         storageService={storageService}
         middleware={PUBLIC_ROUTES}
-        enableStorageSync
+        enableStorageSync={enableStorageSync}
         fallback={LOADING}
       >
         <TenantProvider
           skip={isSsoRoute}
           currentTenant={tenantKey}
           requestedTenant={tenantKey}
-          saveCurrentTenant={(t: any) => {
-            const key = typeof t === "string" ? t : (t?.key ?? String(t));
-            localStorage.setItem("current_tenant", key);
-            localStorage.setItem("tenant", key);
+          saveCurrentTenant={(t: { key: string }) => {
+            // The object, as the SDK's cookie holds it: a bare key reads as a change on every sync.
+            localStorage.setItem("current_tenant", JSON.stringify(t));
+            localStorage.setItem("tenant", t.key);
             checkTenantMismatch();
           }}
           saveUserTenants={(t: unknown) => localStorage.setItem("tenants", JSON.stringify(t))}

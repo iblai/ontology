@@ -653,10 +653,11 @@ class ResetView(ConsoleAPIView):
 # ---------------------------------------------------------------------------
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
-# Lines of tools.yaml whose key looks like a secret and whose value is not a ${VAR}.
+# Lines of tools.yaml whose key looks like a secret and whose value is not a ${VAR}, alone or after a scheme word.
 _SECRET_LINE_RE = re.compile(
-    r"^(\s*[\w-]*(?:password|secret|api_key|api-key|token|client_secret|key)\s*:\s*)"
-    r"(?!['\"]?\$\{)(\S.*)$",
+    r"^(\s*[\w-]*(?:password|secret|api_key|api-key|token|client_secret|key"
+    r"|authorization|cookie)\s*:\s*)"
+    r"(?!['\"]?(?:[A-Za-z][A-Za-z0-9-]* )?\$\{)(\S.*)$",
     re.I | re.M,
 )
 
@@ -858,6 +859,11 @@ class SyncScheduleDetailView(ConsoleAPIView):
         )
         form.is_valid(raise_exception=True)
         merged = {**(existing or {}), **_plain(form.validated_data), "name": name}
+        from iblai_ontology.backend.sync.engine import SyncRunner
+
+        refused = SyncRunner.refuses(str(merged.get("tool") or ""))
+        if refused:
+            return _envelope(False, refused)
         # ponytail: beat reads the yaml at start; restart it for cron/enabled changes.
         gen.apply(yaml.safe_dump({"schedules": [merged]}, sort_keys=False))
         self._audit(request, action="schedule.upsert", resource=name)
@@ -934,6 +940,9 @@ class McpResourceView(ConsoleAPIView):
             "kind": kind,
             "name": name,
         }
+        # The file says `write` only for a toolset that does.
+        if kind == "toolset" and not merged.get("write"):
+            merged.pop("write", None)
         report = save_tools_yaml(
             gen.merge(yaml.safe_dump(merged, sort_keys=False)), gen.path
         )

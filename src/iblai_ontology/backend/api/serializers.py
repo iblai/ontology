@@ -395,6 +395,8 @@ class McpToolsetSerializer(serializers.Serializer):
     kind = serializers.CharField(default="toolset")
     name = serializers.CharField()
     tools = serializers.ListField(child=serializers.CharField(), default=list)
+    # Its tools can change data: granted to a role by name, never by `*`.
+    write = serializers.BooleanField(default=False)
 
 
 class ComplianceIssueSerializer(serializers.Serializer):
@@ -602,6 +604,17 @@ class RoleInputSerializer(serializers.Serializer):
     admin_dashboard = serializers.BooleanField(default=False)
     self_service = serializers.BooleanField(required=False)
     concurrency_limits = serializers.DictField(required=False)
+
+    def validate_concurrency_limits(self, value):
+        # The gateway caps a cache query at this many rows; anything else would be no limit.
+        rows = value.get("max_records_per_query")
+        if rows is not None and (
+            not isinstance(rows, int) or isinstance(rows, bool) or rows < 1
+        ):
+            raise serializers.ValidationError(
+                "max_records_per_query is a whole number above zero, or absent for no limit"
+            )
+        return value
 
 
 class SyncScheduleInputSerializer(serializers.Serializer):

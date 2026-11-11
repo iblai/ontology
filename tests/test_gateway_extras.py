@@ -21,6 +21,8 @@ def _handlers(perms, **ctx):
     from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
 
     class R(ToolsetResolver):
+        writing = {}  # no tool of this resolver changes data
+
         def __init__(self):
             pass
 
@@ -189,6 +191,8 @@ def _subject_handlers(perms, subject_id):
     from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
 
     class R(ToolsetResolver):
+        writing = {}  # no tool of this resolver changes data
+
         def __init__(self):
             pass
 

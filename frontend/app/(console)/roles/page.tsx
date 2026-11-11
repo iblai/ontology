@@ -20,7 +20,6 @@ export default function RolesPage() {
   const t = useTranslations("roles");
   const tc = useTranslations("common");
   const [roles, setRoles] = useState<Role[] | null>(null);
-  const [toolsets, setToolsets] = useState<string[]>([]);
   const [editing, setEditing] = useState<Role | "new" | null>(null);
   useCreateParam("role", () => setEditing("new"));
 
@@ -31,13 +30,7 @@ export default function RolesPage() {
       .catch((e) => console.error("roles load failed", e));
   }, []);
 
-  useEffect(() => {
-    load();
-    apiClient.mcp
-      .toolsets()
-      .then((list) => setToolsets(list.map((ts) => ts.name)))
-      .catch((e) => console.error("toolsets load failed", e));
-  }, [load]);
+  useEffect(load, [load]);
 
   async function remove(name: string) {
     const r = await apiClient.roles.remove(name);
@@ -51,23 +44,23 @@ export default function RolesPage() {
 
   const columns: ColumnDef<Role, unknown>[] = [
     {
-      accessorKey: "name",
+      accessorKey: "display_name",
       header: sortableHeader(t("colName")),
       cell: ({ row }) => (
-        <span className="text-foreground text-xs font-medium">{row.original.name}</span>
+        <span className="text-foreground text-sm font-medium">{row.original.display_name}</span>
       ),
     },
     {
-      accessorKey: "display_name",
-      header: sortableHeader(t("colDisplayName")),
-      cell: ({ row }) => <span className="text-sm">{row.original.display_name}</span>,
+      accessorKey: "name",
+      header: sortableHeader(t("colTechnicalName")),
+      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.name}</span>,
     },
     {
       accessorKey: "mcp_toolsets",
       header: t("colToolsets"),
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {row.original.mcp_toolsets.join(", ")}
+          {row.original.mcp_toolsets.map((n) => (n === "*" ? t("allToolsets") : n)).join(", ")}
         </span>
       ),
     },
@@ -117,8 +110,15 @@ export default function RolesPage() {
         open={editing !== null}
         onOpenChange={(open) => !open && setEditing(null)}
         initial={editing === "new" ? undefined : (editing ?? undefined)}
-        toolsets={toolsets}
-        onSaved={load}
+        taken={(roles ?? []).map((r) => r.name)}
+        // The row follows each save in place: an open dialog saves with every switch.
+        onSaved={(saved) =>
+          setRoles((prev) =>
+            prev?.some((r) => r.name === saved.name)
+              ? prev.map((r) => (r.name === saved.name ? saved : r))
+              : [...(prev ?? []), saved],
+          )
+        }
       />
     </div>
   );

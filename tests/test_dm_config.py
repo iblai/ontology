@@ -223,6 +223,63 @@ def test_a_role_reads_as_its_one_policy_grants_and_no_wider(dm, caplog):
     ]
 
 
+def test_a_toolset_named_beside_the_wildcard_is_kept(dm):
+    from iblai_ontology.backend.identity import role_source
+
+    spec = {
+        "display_name": "Registrar",
+        "mcp_toolsets": ["*", "registrar-writes"],
+        "cache_tables": ["*", "students"],
+    }
+    role_source.put_role("Registrar", spec)
+    # `*` is every toolset that only reads, so one that writes is granted by its own name
+    # beside it. A table's name beside `*` says nothing more and is not kept.
+    assert dm.policy("Ontology: Registrar")["resources"] == [
+        ROOT + "subjects/",
+        ROOT + "tables/",
+        ROOT + "toolsets/",
+        ROOT + "toolsets/registrar-writes/",
+    ]
+    read = role_source.load_roles()["Registrar"]
+    assert read["mcp_toolsets"] == ["*", "registrar-writes"]
+    assert read["cache_tables"] == ["*"]
+
+    # A grant on the root is `*` and nothing more: it names no toolset that writes.
+    _role(dm, "Root", [ROOT])
+    assert role_source.load_roles()["Root"]["mcp_toolsets"] == ["*"]
+
+
+def test_roles_of_reads_the_policies_that_list_a_member(dm):
+    from iblai_ontology.backend.identity import role_source
+    from iblai_ontology.backend.identity.roles import RolesUnavailable
+
+    advisor = dm.add_role("Advisor", actions=["Ontology/*"])
+    dm.add_policy("Ontology: Advisor", advisor, [ROOT + "toolsets/"], users=["Max"])
+    registrar = dm.add_role("Registrar", actions=["Ontology/*"])
+    dm.add_policy("Ontology: Registrar", registrar, [ROOT + "tables/"], users=["ada"])
+    # Only a role's own policy counts, whoever another one lists.
+    dm.add_policy("Ontology: side door", registrar, [ROOT], users=["max"])
+
+    assert role_source.roles_of("max") == ["Advisor"]  # the platform ignores case
+    assert role_source.roles_of("nobody") == []
+    asked = dm.calls[-1].url.params
+    assert (asked["name"], asked["username"]) == ("Ontology:", "nobody")
+
+    # Kept for the roles' TTL; a platform that does not answer is said, never read as no role.
+    before = len(dm.calls)
+    assert role_source.roles_of("max") == ["Advisor"] and len(dm.calls) == before
+    dm.down = (500, {"detail": "boom"})
+    assert role_source.roles_of("max") == ["Advisor"]
+    with pytest.raises(RolesUnavailable):
+        role_source.roles_of("ada")
+
+
+def test_roles_of_is_empty_while_the_roles_live_in_roles_yaml():
+    from iblai_ontology.backend.identity import role_source
+
+    assert role_source.roles_of("max") == []
+
+
 def test_policies_of_another_platform_stop_the_read(dm):
     from iblai_ontology.backend.identity import role_source
     from iblai_ontology.backend.identity.roles import RoleResolver, RolesUnavailable
@@ -331,7 +388,7 @@ def test_a_platform_error_on_a_cold_cache_is_a_503_never_the_default_role(
         return gateway(RequestFactory().post("/mcp", **headers))
 
     # The service token and a user's token, with a role named and with none.
-    for bearer in (token, "a-users-jwt"):
+    for bearer in (token, "a.users.jwt"):
         for role in ("Executive", None):
             resp = call(bearer, role)
             assert resp.status_code == 503, (bearer, role)

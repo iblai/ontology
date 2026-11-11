@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { backendFor, forgetBackends, isPublicAddress } from "./backend";
 
 // One resolver for every copy of the module, a re-imported one included.
-const dns = vi.hoisted(() => ({ lookup: vi.fn() }));
+const dns = vi.hoisted(() => ({
+  lookup: vi.fn<(host: string) => Promise<{ address: string; family: number }[]>>(),
+}));
 vi.mock("node:dns/promises", () => dns);
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -77,7 +79,8 @@ describe("backendFor", () => {
     ];
     for (const [n, address] of addresses.entries()) {
       answers(() => record(address));
-      expect(await backendFor(`Token ${n}`), String(address)).toEqual(bad);
+      const backend = await backendFor(`Token ${n}`);
+      expect({ address, backend }).toEqual({ address, backend: bad });
     }
 
     // A name that resolves into a private network, even in part, or does not resolve.
@@ -116,7 +119,7 @@ describe("isPublicAddress", () => {
       "::ffff:10.0.0.1",
       "::ffff:a00:1",
     ];
-    for (const address of refused) expect(isPublicAddress(address), address).toBe(false);
+    expect(refused.filter((address) => isPublicAddress(address))).toEqual([]);
     const allowed = [
       "93.184.216.34",
       "172.32.0.1",
@@ -124,7 +127,7 @@ describe("isPublicAddress", () => {
       "2606:2800:220:1:248:1893:25c8:1946",
       "::ffff:93.184.216.34",
     ];
-    for (const address of allowed) expect(isPublicAddress(address), address).toBe(true);
+    expect(allowed.filter((address) => !isPublicAddress(address))).toEqual([]);
   });
 });
 

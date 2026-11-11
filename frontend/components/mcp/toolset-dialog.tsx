@@ -11,10 +11,12 @@ import type { McpToolset } from "@/lib/ontology/types";
 import { Field, FormDialog } from "@/components/console/form-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 const schema = z.object({
   name: z.string().regex(/^[A-Za-z0-9_.-]+$/),
   tools: z.array(z.string()).min(1),
+  write: z.boolean(),
 });
 type Values = z.infer<typeof schema>;
 
@@ -36,7 +38,11 @@ export function ToolsetDialog({
   const [saving, setSaving] = useState(false);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    values: { name: initial?.name ?? "", tools: initial?.tools ?? [] },
+    values: {
+      name: initial?.name ?? "",
+      tools: initial?.tools ?? [],
+      write: initial?.write ?? false,
+    },
   });
   const errors = form.formState.errors;
 
@@ -96,6 +102,19 @@ export function ToolsetDialog({
           )}
         />
       </Field>
+      <Controller
+        control={form.control}
+        name="write"
+        render={({ field }) => (
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-center justify-between gap-3 text-sm font-medium">
+              {t("write")}
+              <Switch checked={field.value} onCheckedChange={field.onChange} />
+            </label>
+            <p className="text-muted-foreground text-xs">{t("writeHint")}</p>
+          </div>
+        )}
+      />
     </FormDialog>
   );
 }

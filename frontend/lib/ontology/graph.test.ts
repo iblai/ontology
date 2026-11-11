@@ -6,7 +6,9 @@ import {
   grantPatch,
   neighbourhood,
   reach,
+  readsDomain,
   searchGraph,
+  technicalName,
   toggleGrant,
 } from "./graph";
 import type { GraphData, GraphLink, GraphNode, Role } from "./types";
@@ -71,6 +73,17 @@ describe("toggleGrant", () => {
         .mcp_toolsets,
     ).toEqual(["other", "ts"]);
   });
+  it("flips a toolset that changes data by name, beside the wildcard", () => {
+    // `all` is the read-only toolsets `*` stands for: "writes" is not one of them.
+    const granted = toggleGrant(role, "toolset", "writes", ["ts", "other"]);
+    expect(granted.mcp_toolsets).toEqual(["*", "writes"]);
+    expect(toggleGrant(granted, "toolset", "writes", ["ts", "other"]).mcp_toolsets).toEqual(["*"]);
+    // Revoking a read-only one lists the rest, and keeps the name held beside `*`.
+    expect(toggleGrant(granted, "toolset", "ts", ["ts", "other"]).mcp_toolsets).toEqual([
+      "other",
+      "writes",
+    ]);
+  });
   it("expands a broad memory glob per domain and toggles one domain", () => {
     const revoked = toggleGrant(role, "memory_domain", "students", ["students", "courses"]);
     expect(revoked.memory_paths).toEqual(["/ontology/courses/**"]);
@@ -90,6 +103,7 @@ describe("grantPatch", () => {
     { id: "role:r", kind: "role", label: "R", group: "roles", meta: {} },
     { id: "toolset:ts", kind: "toolset", label: "ts", group: "mcp", meta: {} },
     { id: "toolset:other", kind: "toolset", label: "other", group: "mcp", meta: {} },
+    { id: "toolset:writes", kind: "toolset", label: "writes", group: "mcp", meta: { write: true } },
     { id: "memory_domain:students", kind: "memory_domain", label: "students", group: "", meta: {} },
   ];
   const data: GraphData = {
@@ -123,6 +137,46 @@ describe("grantPatch", () => {
     expect(p.had).toBe(true);
     expect(p.role.memory_paths).toEqual([]);
     expect(edge(p.links, "memory_domain:students")).toBeUndefined();
+  });
+  it("grants a toolset that changes data by name and leaves the wildcard as it was", () => {
+    const p = grantPatch(data, role, "toolset", "writes");
+    expect(p.had).toBe(false);
+    expect(p.role.mcp_toolsets).toEqual(["*", "writes"]);
+    expect(edge(p.links, "toolset:other")?.wildcard).toBe(true);
+    expect(edge(p.links, "toolset:writes")).toEqual({
+      source: "role:r",
+      target: "toolset:writes",
+      kind: "grants",
+    });
+    const back = grantPatch({ ...data, links: p.links }, p.role, "toolset", "writes");
+    expect(back.had).toBe(true);
+    expect(back.role.mcp_toolsets).toEqual(["*"]);
+    expect(edge(back.links, "toolset:writes")).toBeUndefined();
+    expect(edge(back.links, "toolset:other")?.wildcard).toBe(true);
+  });
+});
+
+describe("readsDomain", () => {
+  const reading = (...paths: string[]): Role => ({ ...role, memory_paths: paths });
+
+  it("tells a whole domain from part of one", () => {
+    expect(readsDomain(reading("/ontology/**"), "students")).toBe("all");
+    expect(readsDomain(reading("/ontology/students/**"), "students")).toBe("all");
+    expect(readsDomain(reading("/ontology/students/by-id/${USER_EMPLID}.md"), "students")).toBe(
+      "part",
+    );
+    expect(readsDomain(reading("/ontology/courses/**"), "students")).toBe("none");
+  });
+});
+
+describe("technicalName", () => {
+  it("derives a name, numbered when it is taken or when nothing Latin is left", () => {
+    expect(technicalName("Financial aid advisors", [])).toBe("FinancialAidAdvisors");
+    expect(technicalName("Advisor", ["Advisor"])).toBe("Advisor2");
+    expect(technicalName("advisor", ["Advisor", "Advisor2"])).toBe("Advisor3");
+    expect(technicalName("顧問", ["Role1"])).toBe("Role2");
+    expect(technicalName("2nd shift", [])).toBe("Role2ndShift");
+    expect(technicalName("a".repeat(80), [])).toHaveLength(60);
   });
 });
 

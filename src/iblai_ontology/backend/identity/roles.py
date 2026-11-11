@@ -47,9 +47,6 @@ class Permissions:
     # have cross-subject access by role grant (see docs/authorization-model.md).
     self_service: bool = False
 
-    def allows_toolset(self, toolset: str) -> bool:
-        return "*" in self.mcp_toolsets or toolset in self.mcp_toolsets
-
     def allows_cache_table(self, table: str) -> bool:
         return "*" in self.cache_tables or table in self.cache_tables
 

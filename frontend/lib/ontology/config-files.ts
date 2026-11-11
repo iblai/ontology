@@ -15,7 +15,7 @@ import YAML from "yaml";
 import type { BackendConfigFile, BackendConfigSnapshot } from "./types";
 
 const SECRET_KEY_RE =
-  /(password|passwd|secret|token|api[_-]?key|client[_-]?secret|private[_-]?key|credential|auth)/i;
+  /(password|passwd|secret|token|api[_-]?key|client[_-]?secret|private[_-]?key|credential|auth|cookie)/i;
 const ENV_REF_RE = /^\s*\$\{[A-Z0-9_]+\}\s*$/;
 const MASK = "••••••••";
 

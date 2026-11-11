@@ -15,6 +15,9 @@ Two Authorization schemes (wired in ``settings.REST_FRAMEWORK``):
   ``ONTOLOGY_DM_VERIFY_TTL`` seconds, so an upstream revocation takes effect
   within the TTL.
 
+The lookup itself is :func:`platform_member`, which the MCP gateway shares: there it
+also takes a platform API key (``Api-Token``), cached apart from the console's tokens.
+
 No Django ``User`` rows in either path: ``request.user`` is a small
 :class:`OntologyPrincipal` and ``UNAUTHENTICATED_USER`` is ``None``.
 """
@@ -36,9 +39,98 @@ DM_PLATFORMS_PATH = "/api/core/users/platforms/"
 HTTP_TIMEOUT = 10.0
 
 
-def verdict_key(dm_token: str) -> str:
-    """Where a DM token's verdict is cached; a value there says the token was verified."""
-    return "dmauth:" + hashlib.sha256(dm_token.encode()).hexdigest()
+def verdict_key(credential: str, scheme: str = "Token") -> str:
+    """Where a credential's verdict is cached, per scheme; a value there says it was verified."""
+    digest = hashlib.sha256(credential.encode()).hexdigest()
+    return f"dmauth:{scheme.lower()}:{digest}"
+
+
+class CredentialRejected(Exception):
+    """The ibl.ai platform refused the credential, or named no user for it."""
+
+
+class PlatformSilent(Exception):
+    """The ibl.ai platform did not answer, so nothing is known about the credential."""
+
+
+@dataclass(frozen=True)
+class PlatformMember:
+    """Who a DM token or a platform API key is, as the ibl.ai platform says."""
+
+    user_id: str
+    username: str
+    email: str
+    admin: bool  # an active admin of one of this backend's platforms
+    member: bool  # an active member of one of them
+
+
+def _get_json(path: str, scheme: str, credential: str, what: str, **params):
+    try:
+        resp = httpx.get(
+            settings.ONTOLOGY_DM_URL + path,
+            params=params,
+            headers={"Authorization": f"{scheme} {credential}"},
+            timeout=HTTP_TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        raise PlatformSilent(f"{what} verification unavailable: {exc}") from exc
+    if resp.status_code >= 500:
+        raise PlatformSilent(
+            f"{what} verification unavailable: the platform answered {resp.status_code}"
+        )
+    if resp.status_code != 200:
+        raise CredentialRejected(f"{what} rejected.")
+    return resp.json()
+
+
+def _ask_platform(scheme: str, credential: str) -> PlatformMember:
+    what = "DM token" if scheme == "Token" else "API key"
+    user = _get_json(DM_VERIFY_PATH, scheme, credential, what)
+    if not isinstance(user, dict):
+        raise CredentialRejected(f"{what} rejected.")
+    username = user.get("username") or ""
+    if not username:
+        raise CredentialRejected(f"{what} response has no username.")
+    # The DM answers a user about their own memberships with the credential alone.
+    memberships = _get_json(
+        DM_PLATFORMS_PATH,
+        scheme,
+        credential,
+        "Platform memberships",
+        username=username,
+    )
+    if not isinstance(memberships, list):
+        raise CredentialRejected("Platform memberships rejected.")
+    # The caller's own active memberships on an allowed platform, by its key; an empty
+    # allowlist takes any platform.
+    allowed = settings.ONTOLOGY_ADMIN_PLATFORMS
+    own = [
+        m
+        for m in memberships
+        if m.get("username") == username
+        and m.get("active")
+        and (not allowed or m.get("key") in allowed)
+    ]
+    return PlatformMember(
+        user_id=str(user.get("user_id") or ""),
+        username=username,
+        email=user.get("email") or "",
+        admin=any(m.get("is_admin") for m in own),
+        member=bool(own),
+    )
+
+
+def platform_member(scheme: str, credential: str) -> PlatformMember:
+    """Who a DM token (``Token``) or a platform API key (``Api-Token``) is; cached per scheme.
+
+    Raises :class:`CredentialRejected` or :class:`PlatformSilent`; neither is cached.
+    """
+    key = verdict_key(credential, scheme)
+    fields = cache.get(key)
+    if fields is None:
+        fields = asdict(_ask_platform(scheme, credential))
+        cache.set(key, fields, settings.ONTOLOGY_DM_VERIFY_TTL)
+    return PlatformMember(**fields)
 
 
 @dataclass(frozen=True)
@@ -88,65 +180,22 @@ class DmTokenAuthentication(BaseAuthentication):
             raise AuthenticationFailed(
                 "Token auth is not configured (set ONTOLOGY_DM_URL)."
             )
-        dm_token = header[1].decode()
-        key = verdict_key(dm_token)
-        fields = cache.get(key)
-        if fields is None:
-            fields = asdict(self._verify(dm_token))
-            cache.set(key, fields, settings.ONTOLOGY_DM_VERIFY_TTL)
-        return OntologyPrincipal(**fields), None
+        try:
+            who = platform_member("Token", header[1].decode())
+        except (CredentialRejected, PlatformSilent) as exc:
+            raise AuthenticationFailed(str(exc)) from exc
+        principal = OntologyPrincipal(
+            kind="dm",
+            user_id=who.user_id,
+            username=who.username,
+            email=who.email,
+            role="platform-admin" if who.admin else "platform-user",
+            admin=who.admin,
+        )
+        return principal, None
 
     def authenticate_header(self, request):
         return "Token"
-
-    @staticmethod
-    def _get_json(path: str, dm_token: str, what: str, **params):
-        try:
-            resp = httpx.get(
-                settings.ONTOLOGY_DM_URL + path,
-                params=params,
-                headers={"Authorization": f"Token {dm_token}"},
-                timeout=HTTP_TIMEOUT,
-            )
-        except httpx.HTTPError as exc:
-            raise AuthenticationFailed(
-                f"{what} verification unavailable: {exc}"
-            ) from exc
-        if resp.status_code != 200:
-            raise AuthenticationFailed(f"{what} rejected.")
-        return resp.json()
-
-    def _verify(self, dm_token: str) -> OntologyPrincipal:
-        user = self._get_json(DM_VERIFY_PATH, dm_token, "DM token")
-        if not isinstance(user, dict):
-            raise AuthenticationFailed("DM token rejected.")
-        username = user.get("username") or ""
-        if not username:
-            raise AuthenticationFailed("DM token response has no username.")
-        # The DM answers a user about their own memberships with the token alone.
-        memberships = self._get_json(
-            DM_PLATFORMS_PATH, dm_token, "Platform memberships", username=username
-        )
-        if not isinstance(memberships, list):
-            raise AuthenticationFailed("Platform memberships rejected.")
-        # Admin = an active admin membership on an allowed platform, by its key; an
-        # empty allowlist takes any platform's admin.
-        allowed = settings.ONTOLOGY_ADMIN_PLATFORMS
-        admin = any(
-            m.get("username") == username
-            and m.get("active")
-            and m.get("is_admin")
-            and (not allowed or m.get("key") in allowed)
-            for m in memberships
-        )
-        return OntologyPrincipal(
-            kind="dm",
-            user_id=str(user.get("user_id") or ""),
-            username=username,
-            email=user.get("email") or "",
-            role="platform-admin" if admin else "platform-user",
-            admin=admin,
-        )
 
 
 class AdminDashboardPermission(BasePermission):

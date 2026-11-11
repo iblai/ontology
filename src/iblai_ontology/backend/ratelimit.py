@@ -42,8 +42,8 @@ class OntologyRateLimitMiddleware:
     def __call__(self, request):
         if not self.enabled:
             return self.get_response(request)
-        key, limit = self._bucket(request)
-        if self._over_limit(key, limit):
+        key, limit, weight = self._bucket(request)
+        if self._over_limit(key, limit, weight):
             from django.http import JsonResponse
 
             response = JsonResponse({"error": "rate limit exceeded"}, status=429)
@@ -63,50 +63,62 @@ class OntologyRateLimitMiddleware:
         subject = getattr(identity, "user_id", None)
         if subject:
             return subject
-        # Console requests all come from the Ontology Frontend's one address: count a
-        # DM token the console API has verified by the token, not by that address.
-        # ponytail: a token not yet verified still counts by address; the edge limits floods.
-        scheme, _, token = request.META.get("HTTP_AUTHORIZATION", "").partition(" ")
-        if scheme.lower() == "token" and token.strip():
+        # Console requests all come from the Ontology Frontend's one address, and a person's
+        # own credential on /mcp is resolved after this middleware: count a credential the
+        # platform has verified by the credential, not by the address.
+        # ponytail: a credential not yet verified still counts by address; the edge limits floods.
+        word, _, token = request.META.get("HTTP_AUTHORIZATION", "").partition(" ")
+        schemes = {
+            "token": ("Token",),
+            "api-token": ("Api-Token",),
+            "bearer": ("Token", "Api-Token"),
+        }.get(word.lower(), ())
+        if schemes and token.strip():
             from django.core.cache import cache
 
             from iblai_ontology.backend.api.auth import verdict_key
 
-            key = verdict_key(token.strip())
-            if cache.get(key) is not None:
-                return key
+            for scheme in schemes:
+                key = verdict_key(token.strip(), scheme)
+                if cache.get(key) is not None:
+                    return key
         return None
 
-    def _is_tools_call(self, request) -> bool:
+    def _tools_calls(self, request) -> int:
+        """How many ``tools/call`` messages the request carries: a batch counts each one."""
         if request.method != "POST":
-            return False
+            return 0
         try:
             body = json.loads(request.body or b"{}")
         except (ValueError, TypeError):
-            return False
-        return isinstance(body, dict) and body.get("method") == "tools/call"
+            return 0
+        messages = body if isinstance(body, list) else [body]
+        return sum(
+            isinstance(m, dict) and m.get("method") == "tools/call" for m in messages
+        )
 
-    def _bucket(self, request) -> tuple[str, int]:
-        """Return the (cache key, limit) for this request."""
+    def _bucket(self, request) -> tuple[str, int, int]:
+        """Return the (cache key, limit, weight) for this request."""
         subject = self._subject(request)
         who = f"sub:{subject}" if subject else f"ip:{self._client_ip(request)}"
-        if self._is_tools_call(request):
-            return f"rl:tools_call:{who}", self.tools_call_max
-        return f"rl:req:{who}", self.max_requests
+        calls = self._tools_calls(request)
+        if calls:
+            return f"rl:tools_call:{who}", self.tools_call_max, calls
+        return f"rl:req:{who}", self.max_requests, 1
 
-    def _over_limit(self, key: str, limit: int) -> bool:
-        """Increment the fixed-window counter for ``key``; True if over ``limit``."""
+    def _over_limit(self, key: str, limit: int, weight: int = 1) -> bool:
+        """Add ``weight`` to the fixed-window counter for ``key``; True if over ``limit``."""
         from django.core.cache import cache
 
         # add() starts a new window only if the key is absent; incr() is atomic
         # on a shared backend (Redis). A race on the very first request of a
         # window resolves to at most one extra allowed request, which is fine.
-        if cache.add(key, 1, self.window):
-            return False
+        if cache.add(key, weight, self.window):
+            return weight > limit
         try:
-            count = cache.incr(key)
+            count = cache.incr(key, weight)
         except ValueError:
             # Expired between add and incr — treat as the start of a new window.
-            cache.add(key, 1, self.window)
-            return False
+            cache.add(key, weight, self.window)
+            return weight > limit
         return count > limit

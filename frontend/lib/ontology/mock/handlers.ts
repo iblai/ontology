@@ -432,7 +432,9 @@ export const mockApi = {
             ok: false,
             message: `toolset '${toolset.name}' references undefined tool '${missing}'`,
           };
-        db.mcp_toolsets = upsert(db.mcp_toolsets, toolset);
+        // Like the backend's tools.yaml: `write` is left out unless it is set.
+        const { write, ...rest } = toolset;
+        db.mcp_toolsets = upsert(db.mcp_toolsets, write ? toolset : rest);
         return {
           ok: true,
           message: `toolset '${toolset.name}' saved. Build and restart the MCP Toolbox to apply.`,

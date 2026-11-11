@@ -122,9 +122,22 @@ export function cachesDomain(role: Role, domain: GraphNode): boolean {
   return cacheTables(domain).some((table) => held.includes("*") || held.includes(table));
 }
 
+/** A memory path over every domain. */
+const broad = (p: string) => /^\/ontology\/\*\*?\/?$/.test(p);
+const segments = (p: string) => p.split("/").filter(Boolean);
+
+/** How much of a memory domain a role reads: all of it, only some paths under it, or none. */
+export function readsDomain(role: Role, domain: string): "all" | "part" | "none" {
+  if (role.memory_paths.some(broad)) return "all";
+  const mine = role.memory_paths.map(segments).filter((s) => s[1] === domain);
+  if (mine.length === 0) return "none";
+  return mine.some((s) => s.length === 3 && /^\*\*?$/.test(s[2])) ? "all" : "part";
+}
+
 /**
  * The role after granting or revoking one target; `*` becomes an explicit list on the first
- * revoke. A cache toggle names its domain's tables, granted and revoked together.
+ * revoke. A cache toggle names its domain's tables, granted and revoked together. For toolsets
+ * `all` is the read-only ones `*` stands for; any other toolset flips by name, beside `*`.
  */
 export function toggleGrant(
   role: Role,
@@ -134,18 +147,23 @@ export function toggleGrant(
 ): Role {
   const names = [name].flat();
   if (kind === "memory_domain") {
-    const broad = (p: string) => /^\/ontology\/\*\*?\/?$/.test(p);
     const paths = role.memory_paths.some(broad)
       ? all.map((d) => `/ontology/${d}/**`)
       : role.memory_paths.filter((p) => !broad(p));
-    const mine = (p: string) => p.split("/").filter(Boolean)[1] === names[0];
+    const mine = (p: string) => segments(p)[1] === names[0];
     const next = paths.some(mine)
       ? paths.filter((p) => !mine(p))
       : [...paths, `/ontology/${names[0]}/**`];
     return { ...role, memory_paths: next };
   }
   const key = kind === "toolset" ? "mcp_toolsets" : "cache_tables";
-  const current = role[key].includes("*") ? all : role[key];
+  const held = role[key];
+  let current = held;
+  if (held.includes("*")) {
+    if (kind === "cache") current = all;
+    else if (names.some((n) => all.includes(n)))
+      current = [...new Set([...all, ...held.filter((x) => x !== "*")])];
+  }
   const next = names.some((n) => current.includes(n))
     ? current.filter((x) => !names.includes(x))
     : [...current, ...names];
@@ -170,17 +188,32 @@ export function grantPatch(
   const had = domain
     ? cachesDomain(role, domain)
     : g.links.some((l) => mine(l) && endId(l.target) === targetId);
-  const labels = targets.map((n) => n.label);
+  // `*` stands for the read-only toolsets only.
+  const labels = targets.filter((n) => kind !== "toolset" || !n.meta.write).map((n) => n.label);
   const next = domain
     ? // `*` expands to every table a domain is cached in.
       toggleGrant(role, kind, cacheTables(domain), [...new Set(targets.flatMap(cacheTables))])
     : toggleGrant(role, kind, name, labels);
-  // A wildcard became explicit: keep its edges, drop the flag; then flip the toggled one.
+  // A wildcard that became explicit keeps its edges and drops the flag; then flip the toggled one.
+  const wild = kind === "toolset" && next.mcp_toolsets.includes("*");
   const links = g.links
-    .map((l) => (mine(l) ? { ...l, wildcard: false } : l))
+    .map((l) => (mine(l) && !wild ? { ...l, wildcard: false } : l))
     .filter((l) => !(mine(l) && endId(l.target) === targetId));
   if (!had) links.push({ source: roleId, target: targetId, kind: linkKind });
   return { role: next, links, had };
+}
+
+/** "Financial aid advisors" -> "FinancialAidAdvisors"; numbered when taken or nothing Latin is left. */
+export function technicalName(display: string, taken: string[]): string {
+  const joined = (display.match(/[A-Za-z0-9]+/g) ?? [])
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join("");
+  // A role's name starts with a letter and holds 64 characters at most, its number included.
+  const base = (/^[A-Za-z]/.test(joined) ? joined : `Role${joined}`).slice(0, 60);
+  const used = new Set(taken.map((n) => n.toLowerCase()));
+  if (joined && !used.has(base.toLowerCase())) return base;
+  for (let n = joined ? 2 : 1; ; n++)
+    if (!used.has(`${base}${n}`.toLowerCase())) return `${base}${n}`;
 }
 
 export function searchGraph(nodes: GraphNode[], query: string, limit = 8): GraphNode[] {

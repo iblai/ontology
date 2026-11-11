@@ -10,14 +10,14 @@ import { apiClient, type ApiError } from "@/lib/ontology/api-client";
 type Closed = "no_backend" | "bad_backend" | "not_admin";
 export type Gate = "checking" | "open" | Closed;
 
-/** Hosted mode: whether this platform has a backend the signed-in member may use. */
-export function useBackendGate(hosted: boolean): Gate {
+/** With a backend (not the demo): whether there is one the signed-in member may use. */
+export function useBackendGate(live: boolean): Gate {
   // The sign-in pages run before there is a token to ask with.
   const signingIn = usePathname()?.startsWith("/sso-login") ?? false;
-  const [gate, setGate] = useState<Gate>(hosted ? "checking" : "open");
+  const [gate, setGate] = useState<Gate>(live ? "checking" : "open");
 
   useEffect(() => {
-    if (!hosted || signingIn) return;
+    if (!live || signingIn) return;
     apiClient.counts().then(
       () => setGate("open"),
       (e: ApiError) => {
@@ -28,7 +28,7 @@ export function useBackendGate(hosted: boolean): Gate {
         else setGate("open");
       },
     );
-  }, [hosted, signingIn]);
+  }, [live, signingIn]);
 
   return signingIn ? "open" : gate;
 }

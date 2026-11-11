@@ -198,7 +198,7 @@ export function mockGraph(db: Db, columns: boolean): GraphData {
     }
   }
   for (const ts of db.mcp_toolsets) {
-    const sid = g.node("toolset", ts.name, ts.name, "mcp");
+    const sid = g.node("toolset", ts.name, ts.name, "mcp", { write: Boolean(ts.write) });
     for (const t of ts.tools) g.ref(sid, "contains", "tool", t);
   }
 
@@ -219,12 +219,15 @@ export function mockGraph(db: Db, columns: boolean): GraphData {
     if (domain && domains.has(domain)) g.link(sid, `memory_domain:${domain}`, "writes");
   }
 
-  const toolsetIds = [...g.nodes.keys()].filter((id) => id.startsWith("toolset:"));
+  // `*` reaches the read-only toolsets; one that writes is reached only by name.
+  const readOnly = db.mcp_toolsets.filter((ts) => !ts.write).map((ts) => ts.name);
   const domainNames = [...domains.keys()];
   for (const role of db.roles) {
     const rid = g.node("role", role.name, role.display_name, "roles", roleMeta(role));
-    if (role.mcp_toolsets.includes("*")) for (const t of toolsetIds) g.link(rid, t, "grants", true);
-    else for (const t of role.mcp_toolsets) g.ref(rid, "grants", "toolset", t);
+    const wild = role.mcp_toolsets.includes("*");
+    if (wild) for (const t of readOnly) g.link(rid, `toolset:${t}`, "grants", true);
+    for (const t of role.mcp_toolsets)
+      if (t !== "*" && !(wild && readOnly.includes(t))) g.ref(rid, "grants", "toolset", t);
     for (const [d, wildcard, exists] of roleDomains(role.memory_paths, domainNames)) {
       if (exists) g.link(rid, `memory_domain:${d}`, "reads", wildcard);
       else g.ref(rid, "reads", "memory_domain", d);

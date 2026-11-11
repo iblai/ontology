@@ -13,7 +13,8 @@ from iblai_ontology.config import config_dir, dm_store
 
 # Keys whose values are secrets and must be redacted when displayed.
 _SECRET_KEY_RE = re.compile(
-    r"(password|secret|api_key|api-key|token|client_secret|key)$", re.IGNORECASE
+    r"(password|secret|api_key|api-key|token|client_secret|key|authorization|cookie)$",
+    re.IGNORECASE,
 )
 _REDACTED = "********"
 
@@ -23,7 +24,7 @@ _ENV_TOKEN_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
 # Raw text, as the Configuration page shows a file (the same rules as its config-files.ts).
 _SECRET_LINE_KEY_RE = re.compile(
     r"(password|passwd|secret|token|api[_-]?key|client[_-]?secret|private[_-]?key"
-    r"|credential|auth)",
+    r"|credential|auth|cookie)",
     re.IGNORECASE,
 )
 _KEY_VALUE_RE = re.compile(r"^(\s*-?\s*)([A-Za-z0-9_.-]+)(\s*[:=]\s*)(.+)$")

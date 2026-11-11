@@ -28,7 +28,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <AppShell
               defaultSidebarOpen={defaultSidebarOpen}
               demo={!process.env.ONTOLOGY_API_URL && !MULTI_PLATFORM}
-              hosted={MULTI_PLATFORM}
             >
               {children}
             </AppShell>

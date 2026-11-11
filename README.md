@@ -7,12 +7,10 @@
 <p align="center"><strong>On-premise knowledge layer that makes an organization's existing systems queryable by AI agents over MCP — no data extraction.</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/coverage-85%25-brightgreen.svg" alt="Coverage 85%">
-  <img src="https://img.shields.io/badge/tests-163%20passing-brightgreen.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="Python 3.13+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/protocol-MCP-8A2BE2.svg" alt="MCP">
-  <a href="https://github.com/googleapis/mcp-toolbox"><img src="https://img.shields.io/badge/inbound-MCP%20Toolbox-4285F4.svg" alt="MCP Toolbox"></a>
+  <a href="https://github.com/googleapis/mcp-toolbox"><img src="https://img.shields.io/badge/SQL%20tools-Google%20MCP%20Toolbox-4285F4.svg" alt="Google MCP Toolbox"></a>
+  <a href="https://github.com/NVIDIA/auto-ontology"><img src="https://img.shields.io/badge/connectors-NVIDIA%20auto--ontology-76B900.svg" alt="NVIDIA auto-ontology"></a>
   <img src="https://img.shields.io/badge/identity-Entra%20ID-0078D4.svg" alt="Microsoft Entra ID">
 </p>
 
@@ -24,325 +22,161 @@
 
 ## What it is
 
-iblai/ontology is a **unified knowledge layer that runs inside your network**. It makes the systems you already run — SIS/ERP databases (PeopleSoft, Oracle, Postgres), data warehouses (Snowflake), and SaaS apps (Canvas, Salesforce, ServiceNow, Workday, Jira, …) — queryable by AI agents over the **Model Context Protocol (MCP)**.
+iblai/ontology is a **knowledge layer that runs inside your network**. It makes the systems you already run queryable by AI agents over the **Model Context Protocol (MCP)**: databases (Oracle and PeopleSoft, PostgreSQL, MySQL, SQL Server), warehouses and analytics engines (Snowflake, Trino, ClickHouse), and SaaS applications through a small connector each (Canvas, Slate, Twenty CRM, and others you add).
 
-The prevailing approach extracts your data through a VPN tunnel into a vendor cloud. iblai/ontology does the opposite: **no data extraction, no VPN to our cloud, no third-party infrastructure holding your data.** The agent runtime (where models execute) is a separate concern and can run anywhere; the knowledge layer — the data, the cache, the permissions — stays on-premise and is exposed over MCP so any *authorized* runtime can connect.
+The prevailing approach extracts your data through a VPN tunnel into a vendor cloud. iblai/ontology does the opposite: the copy that agents query, the permissions and the logs stay on a server you own. The agent runtime, where the models run, is a separate concern and can be anywhere; it reaches the knowledge layer over MCP, one authorized request at a time.
 
 > **You will have your data, and we may not even have access to it.**
 
-One opt-in exception: with `ONTOLOGY_DATA_STORE=dm` the roles, the sync schedules and the service registry (schema metadata, safety and health results, provisioning runs) live in your ibl.ai platform instead of on this host — never source records, and credentials only as ciphertext whose key stays with you. Sync runs and the audit log stay on-premise either way ([DEV.md](DEV.md#platform-store-ontology_data_storedm)).
+It is **domain-agnostic**: the same stack serves a university, an enterprise, a school district, a government agency, a law firm, a financial firm or a hospital (see [What it connects to](#what-it-connects-to)).
 
-The Ontology Frontend, its admin console, runs beside the backend or once for every platform (`ontology.ibl.ai`). For the hosted one the backend records its public address in your platform (`ontology platform address`), and your platform's admins reach it with their own platform token, the only credential it is sent ([DEV.md](DEV.md#one-ontology-frontend-for-every-platform)).
+## At a glance
 
-It is **domain-agnostic**: the same stack serves a university (higher-ed systems) and an enterprise (CRM/ITSM/HCM/data-warehouse), with built-in defaults for both (see [the catalog](#built-in-service-catalog)).
+| | |
+|---|---|
+| **Where it runs** | On one server or virtual machine in your network, as a Docker Compose stack |
+| **What it reads** | Your databases and SaaS systems, with read-only access |
+| **What it can change** | Nothing, until your team defines an operation for it: a named change, on a login your team created for it, for the roles it grants by name, each call recorded |
+| **What it keeps** | A copy for agents to query, one text file per record and a search index, all on that server |
+| **Who can ask** | The AI agents and other MCP clients you authorize, each call under a named role |
+| **What leaves your network** | The answer to each authorized request. Three choices send more; each is yours to make ([Where your data lives](#where-your-data-lives)) |
+| **Built with** | Google MCP Toolbox for Databases, NVIDIA auto-ontology, PostgreSQL, ChromaDB, Caddy, Django |
+| **Licence** | MIT, open source |
 
-## How it connects (MCP in, MCP out)
+## How it works
 
-```
-   YOUR NETWORK (ON-PREMISE)
-   ┌──────────────────────────────────────────────────────────────┐
-   │  Source systems                                                │
-   │  PeopleSoft/Oracle · Snowflake · Postgres   Canvas · Salesforce │
-   │        │  (SQL, read-only)                   │ (REST)           │
-   │        ▼                                      ▼                  │
-   │  ┌───────────────────────────┐   ┌──────────────────────────┐  │
-   │  │ Google MCP Toolbox        │   │ Custom MCP servers        │  │
-   │  │ (databases) [1]           │   │ (APIs) [1]                │  │
-   │  └─────────────┬─────────────┘   └────────────┬─────────────┘  │
-   │                └───────────────┬───────────────┘                │
-   │            [2] sync → text memories (MD) + Postgres cache + vectors │
-   │                                │                                │
-   │            [3] identity: Entra ID JWT + roles.yaml (X-Iblai-Role) │
-   │                                │                                │
-   │            [4] iblai/ontology exposed as ONE MCP server (HTTPS) │
-   └────────────────────────────────┬───────────────────────────────┘
-                                     │  MCP over HTTPS, role-scoped
-                                     ▼
-   EXTERNAL: agent runtime (ibl.ai or anywhere) — forwards the user's
-   Entra token per request, never stores institutional data.
-```
+The picture at the top shows every runtime connection. The numbers in parentheses are its numbers.
 
-- **Inbound** uses [**Google MCP Toolbox for Databases**](https://github.com/googleapis/mcp-toolbox): databases are exposed as MCP tools via `config/tools.yaml` (`kind: source | tool | toolset`). REST systems get lightweight custom MCP servers (`mcp-servers/`). Run `ontology mcp validate` to check `tools.yaml` against the Toolbox schema.
-- **Outbound**, iblai/ontology is itself **one MCP server** (`streamable_http`, behind your firewall + Entra ID). Any MCP client — the ibl.ai agent runtime, Claude, Cursor, a custom app — connects and gets results scoped to the caller's role.
+1. **A system is connected read-only.** Your team gives the Ontology Backend a read-only login for a database, or an API key for a SaaS system. A database is first put to a test: seven kinds of write are attempted, and all seven must be refused before any of its data is copied (10).
+2. **Its structure is discovered and reviewed.** The backend reads the tables, columns and keys, then drafts what to copy, how often, and which questions agents may ask. Nothing is served until your team approves it.
+3. **The Sync Engine copies on a schedule.** It reads the approved tables or API objects (8) and writes three things on your server (9): rows in Cache Postgres, one Markdown file per record in Memory Files, and a search index over those files. The copy is as fresh as the schedule you set.
+4. **Agents ask through one gateway.** An agent calls the MCP Gateway over HTTPS (4). The gateway checks who is calling and in which role, then answers from Memory Files (7), from the cache (0), or by running one of that role's predefined queries through the MCP Toolbox (6, 14).
+5. **A change happens only through an operation your team defined.** Out of the box agents only read. To let an agent release a hold or add a note, your team writes that one operation, runs it on a login or API key created for that purpose, and grants it by name to the roles that need it. An agent fills in its inputs and nothing else.
+6. **Each tool call is recorded**: who called, in which role, which tool, allowed or refused, when and from where. A change is recorded before it runs, with its inputs.
 
-Full design: **[docs/architecture.md](docs/architecture.md)**.
+## Where your data lives
 
-## Quick start
-
-```bash
-uv sync                      # core CLI + the dev group (pytest, ruff)
-uv run ontology --help
-uv run ontology config init  # scaffold a deployment (config/, sql/, compose)
-```
-
-Hybrid stack — a lean, Django-free CLI + config layer (works on a fresh checkout) and a Django + Celery backend for the long-running services. Add extras as needed:
-
-```bash
-uv sync --extra django         # backend services (gateway, sync, discovery)
-uv sync --extra llm            # BYOK schema analysis (anthropic / openai)
-uv sync --extra db             # source drivers (oracle, postgres, mysql, mssql)
-uv sync --extra vector         # ChromaDB vector index
-uv sync --extra auto-ontology  # Snowflake / Trino / ClickHouse connectors (NVIDIA auto-ontology)
-```
-
-`uv sync` is exact, so pass every extra you want in one call (`--extra django --extra db`, or `--all-extras`).
-
-Names: distribution **`iblai-ontology`** · import package **`iblai_ontology`** · command **`ontology`**.
-
-### Local checks
-
-**[DEV.md](DEV.md)** has the commands CI runs (ruff format, import sort, lint, pytest) and the ones for running the backend.
-
-CI runs them on every PR to `main`: `.github/workflows/ruff-format.yml` (ruff) and `.github/workflows/tests.yml` (pytest).
-
-## End to end
-
-### 1 · Discover a service — two ways
-
-**A. Live database** — connect, verify read-only, introspect, analyze, provision:
-
-```bash
-ontology service add --from peoplesoft \
-  --host psft-db.internal.edu --database CSPRD --user iblai_readonly
-```
-
-`--from <catalog-key>` prefills the connection shape (driver, port, env) from the [built-in catalog](#built-in-service-catalog). The pipeline runs a **read-only safety suite first** — seven write attempts that must all be denied — then introspects the schema and generates config.
-
-**B. From a SKILL.md** — seed an API source with no live connection:
-
-```bash
-ontology service add --skill canvas      # or: ontology skill import canvas
-ontology skill list                      # all vendored skills (higher-ed + enterprise)
-```
-
-This parses the skill's connection env and key operations into a discovery seed (read-only operations become suggested MCP tools).
-
-### 2 · Interpret the schema & see the connection
-
-```bash
-ontology service schema peoplesoft        # discovered tables, by row count
-ontology service connection peoplesoft     # stored connection (secrets redacted)
-```
-
-```text
-$ ontology service schema peoplesoft
-peoplesoft — oracle | 847 tables, 12,400,000 rows
-            Top 20 tables
-┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┓
-┃ Schema ┃ Table              ┃ Rows      ┃ Columns ┃
-┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━┩
-│ SYSADM │ PS_STDNT_CAR_TERM  │ 2,345,678 │ 24      │
-│ SYSADM │ PS_STDNT_ENRL      │ 1,876,543 │ 31      │
-└────────┴────────────────────┴───────────┴─────────┘
-```
-
-### 3 · Test it
-
-```bash
-ontology service test peoplesoft           # 7-test read-only safety suite
-ontology mcp validate                       # tools.yaml is MCP Toolbox compliant
-ontology mcp test get-student-enrollment --params '{"student_id":"001234567"}'
-```
-
-```text
-$ ontology service test peoplesoft
-  [PASS] CREATE TABLE blocked   [PASS] INSERT blocked   [PASS] UPDATE blocked
-  [PASS] DELETE blocked   [PASS] DROP TABLE blocked   [PASS] ALTER blocked
-  [PASS] TRUNCATE blocked
-  All safety checks passed.   # credentials confirmed read-only
-```
-
-### 4 · Provision, sync, serve
-
-```bash
-ontology service approve peoplesoft         # cache schema, tools, sync schedules
-ontology sync run peoplesoft                # pull → cache + text memories + vectors
-ontology deploy up                          # bring up the stack (compose)
-```
-
-Then register iblai/ontology as an MCP server in your agent platform (see [docs/platform-integration.md](docs/platform-integration.md)):
-
-```bash
-ontology platform register --url https://ontology.your-org.edu/mcp --auth-type none --role Executive  # the platform service token
-ontology platform register --url https://ontology.your-org.edu/mcp                                   # per-user Entra ID OAuth
-ontology platform connect  --server 14 --scope user --role FinancialAidCounselor --auth-type oauth2
-ontology platform attach   <agent-id> --server 14
-```
-
-## Built-in service catalog
-
-`ontology catalog list` ships defaults (connection shape, adapter, default toolset, sync cadences, and the upstream SKILL.md) for 22 systems across two domains. Seed any of them with `ontology service add --from <key>` or `ontology skill import <key>`.
-
-**Higher-ed** — [iblai/higher-education-agents](https://github.com/iblai/higher-education-agents)
-
-| Key | System | Type | Skill |
-|---|---|---|---|
-| `peoplesoft` | PeopleSoft (Oracle) | database | — |
-| `banner` | Ellucian Banner | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/banner/SKILL.md) |
-| `canvas` | Instructure Canvas LMS | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/canvas/SKILL.md) |
-| `slate` | Technolutions Slate CRM | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/slate/SKILL.md) |
-| `workday` | Workday HCM / Student | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/workday/SKILL.md) |
-| `eab-navigate` | EAB Navigate | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/eab-navigate/SKILL.md) |
-| `salesforce-education-cloud` | Salesforce Education Cloud | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/salesforce-education-cloud/SKILL.md) |
-| `servicenow` | ServiceNow ITSM | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/servicenow/SKILL.md) |
-| `civitas-learning` | Civitas Learning | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/civitas-learning/SKILL.md) |
-| `handshake` | Handshake Careers | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/handshake/SKILL.md) |
-| `blackbaud-raisers-edge` | Blackbaud Raiser's Edge NXT | api | [SKILL.md](https://github.com/iblai/higher-education-agents/blob/main/skills/blackbaud-raisers-edge/SKILL.md) |
-
-**Enterprise** — [iblai/enterprise-agents](https://github.com/iblai/enterprise-agents)
-
-| Key | System | Type | Skill |
-|---|---|---|---|
-| `snowflake` | Snowflake Data Warehouse | database | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/snowflake/SKILL.md) |
-| `salesforce` | Salesforce CRM / Sales Cloud | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/salesforce/SKILL.md) |
-| `hubspot` | HubSpot CRM | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/hubspot/SKILL.md) |
-| `twenty` | Twenty CRM (cloud; self-hosted is a `generic-postgres` source) | api | [SKILL.md](src/iblai_ontology/catalog/skills/twenty.md) |
-| `servicenow-itsm` | ServiceNow ITSM | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/servicenow/SKILL.md) |
-| `jira` | Jira | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/jira/SKILL.md) |
-| `confluence` | Confluence | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/confluence/SKILL.md) |
-| `github` | GitHub | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/github/SKILL.md) |
-| `okta` | Okta Identity | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/okta/SKILL.md) |
-| `slack` | Slack | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/slack/SKILL.md) |
-| `zendesk` | Zendesk | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/zendesk/SKILL.md) |
-| `zoom` | Zoom | api | [SKILL.md](https://github.com/iblai/enterprise-agents/blob/main/skills/zoom/SKILL.md) |
-
-```bash
-ontology catalog show snowflake     # connection shape, env, default toolset, cadences, skill
-```
-
-## Utilities
-
-```bash
-ontology doctor          # diagnostics: config validity, drivers, per-service env, Entra
-ontology health          # PostgreSQL cache, MCP servers, sync engine, text-memory storage
-ontology catalog list    # built-in service defaults (--domain higher-ed|enterprise)
-ontology mcp validate    # tools.yaml ↔ Google MCP Toolbox schema
-```
-
-## CLI reference
-
-| Group | Commands | Purpose |
+| What | Where it is kept | Does it leave your network? |
 |---|---|---|
-| `service` | `add` · `list` · `status` · `test` · `schema` · `connection` · `discover` · `approve` · `sync` · `remove` | Source integrations (discovery + provisioning) |
-| `skill` | `list` · `import` | Inspect / seed discovery from a SKILL.md |
-| `catalog` | `list` · `show` | Browse built-in service defaults |
-| `config` | `init` · `show` · `set` · `llm` · `validate` | Configuration management |
-| `sync` | `run` · `status` · `history` · `schedule` | Sync operations |
-| `roles` | `list` · `show` · `validate` | Role & permission management |
-| `mcp` | `status` · `tools` · `toolsets` · `validate` · `test` | MCP server administration |
-| `platform` | `register` · `connect` · `attach` | Register with the ibl.ai platform |
-| `health` / `doctor` | (sub-checks) | Diagnostics |
-| `deploy` | `up` · `down` · `logs` · `restart` · `status` | Docker Compose lifecycle |
+| Records in your source systems | Your systems. They are read; they are changed only by an operation your team defined, if it defines one | No |
+| The copy agents query: cache rows, text memories, search index | The Ontology Host | Only as the answer to an authorized request |
+| Logins and API keys for your systems | The Ontology Host: encrypted in the service registry, with the key in a file on that host; the MCP Toolbox and each connector read theirs from their own environment there | Not in readable form |
+| Audit log and sync history | The Ontology Host | No |
+| Roles, sync schedules and the service registry | The Ontology Host, or your ibl.ai platform if you choose to manage them there | Only if you choose that |
+| Answers to agents | Sent to the agent that asked, over HTTPS | Yes: this is what the product is for |
 
-Full reference: **[docs/components/07-cli.md](docs/components/07-cli.md)**.
+The search index is built on your host. Text is turned into vectors by a small open model that runs locally (ChromaDB's built-in one, downloaded once), not by an outside service.
 
-## Security posture
+Three choices send more than answers. Each is yours:
 
-- **Read-only everywhere.** No source writes in v1. Before touching any data, the safety suite attempts seven write operations and requires **all seven be denied** — otherwise it refuses to proceed and prints remediation SQL.
-- **Data stays on-premise.** Source credentials never leave your network in readable form (with `ONTOLOGY_DATA_STORE=dm` the ibl.ai platform holds only their ciphertext; the key stays in the gateway); the agent runtime queries at runtime, scoped by the authenticated user.
-- **Identity through Entra ID.** Every MCP request carries the user's Entra ID JWT; the gateway validates it and resolves the caller's role against `roles.yaml` (with `ONTOLOGY_DATA_STORE=dm`, against the roles kept in your ibl.ai platform). See [docs/identity.md](docs/identity.md).
-- **Credential isolation & containment.** Each inbound MCP server has its own credential scope; connection secrets are encrypted at rest.
+- **Keeping settings in your ibl.ai platform.** The platform then holds the roles, the sync schedules and the service registry: the list of connected systems with the names of their tables and columns, and their test and health results. It never holds source records. A system's login is stored there only encrypted, and the key stays on your host. The audit log and the sync history stay on your host either way.
+- **An LLM to help map a schema.** It is off until you configure a provider: your own Anthropic or OpenAI account, or your ibl.ai platform. Schema analysis sends table and column names. The table-mapping step also sends up to five sample rows per table. Left off, discovery uses built-in rules (16).
+- **The admin console hosted by ibl.ai.** If your administrators use it instead of a console on your host, what they view passes through that service on the way to their browser (1).
 
-### Gateway hardening (environment variables)
+Administrators sign in with their ibl.ai account. The Ontology Backend asks the platform whether the token is valid and whether the person is an administrator of the platform it is configured for (2, 3).
 
-The gateway middleware is tuned entirely through environment variables on the
-`ontology-gateway` container — no code change or rebuild, just set and restart.
+## Security and governance
 
-**Rate limiting** (fixed-window throttle, keyed on the authenticated subject and
-falling back to client IP):
+| Control | How it is enforced |
+|---|---|
+| **Read-only by proof** | Before a database is accepted, seven writes are attempted (create, insert, update, delete, drop, alter, truncate) and all must be refused. An unclear answer counts as a failure. The console cannot approve a database that has not passed; skipping the test takes a deliberate command-line override |
+| **Identity on every call** | A call carries one of three things: a Microsoft Entra ID token, checked against your directory for signature, audience, issuer and expiry; the service token held by your ibl.ai platform; or a person's own ibl.ai credential (their sign-in token, or an API key they created), checked with your ibl.ai platform and re-checked every few minutes. Anything else is refused |
+| **Roles and least privilege** | A role lists the tool groups, the folders of Memory Files and the cache tables it may reach, and how many rows one cache query may return; nothing else is visible to it. With an Entra ID token a caller can act only in a role the token carries; everyone else gets the default role. With the service token, the role is the one you set on the agent's connection. With a person's own ibl.ai credential, the role is one your platform administrators assigned to that person; an administrator of the platform may name any role |
+| **Self-service limits** | A self-service role, such as a student's, reads only its own record. The gateway compares the person asked about with the caller's own identity and refuses anything else |
+| **Predefined queries** | Agents cannot send arbitrary SQL to your systems. They call named queries your team approved, run by Google MCP Toolbox. Free SQL is possible only against the local cache, only for roles granted it, in a read-only transaction, and only on tables the role may read |
+| **Changes by named operation only** | No agent can change anything until your team defines the operation: one statement or one API request, written in advance, on a separate login created for writing. Such operations live in a tool group marked as changing data. "All tool groups" never includes one: a role holds it only when it is granted by name. A scheduled sync cannot run one and the console's test button refuses it. The gateway treats anything it cannot tell to be a read as a change |
+| **Audit trail** | Each tool call by an authenticated caller is recorded: who, in which role, which tool, allowed or refused, whether it failed, when and from which address. A change is recorded before it runs, with its inputs; if it cannot be recorded, it does not run. Changes applied in the admin console are recorded too. The log stays on your host |
+| **Secrets** | Logins in the service registry are encrypted at rest. The MCP Toolbox and each connector get theirs from their own environment, so no component reads another's. A password or an API token is never written into the tool configuration: a literal one is refused on save. The console masks secret values when it shows configuration |
+| **Network** | One port is published: HTTPS (443) on the reverse proxy. The cache, the search index, the MCP Toolbox and the connectors sit on an internal network; your operators attach a connector to a source's network explicitly |
+| **Transport and abuse** | A token or an API key sent to the gateway over plain HTTP is refused. Requests are rate-limited per caller, with a tighter limit on tool calls, each call in a batch counted. An Entra ID token replayed from another address is rejected |
 
-| Env var | Default | Purpose |
+The settings behind these are in [docs/deployment.md](docs/deployment.md#gateway-hardening-environment-variables); how access is decided is in [docs/authorization-model.md](docs/authorization-model.md).
+
+## Built with Google MCP Toolbox and NVIDIA auto-ontology
+
+Two open-source projects do work that iblai/ontology does not do itself.
+
+| | [Google MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox) | [NVIDIA auto-ontology](https://github.com/NVIDIA/auto-ontology) |
 |---|---|---|
-| `ONTOLOGY_RATELIMIT_ENABLED` | `true` | Master on/off switch |
-| `ONTOLOGY_RATELIMIT_WINDOW` | `60` | Window length in seconds (also the `Retry-After` value) |
-| `ONTOLOGY_RATELIMIT_MAX` | `120` | Max requests per window (general bucket) |
-| `ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX` | `30` | Stricter max per window for `tools/call` |
+| **What it is** | Google's open-source MCP server for databases | NVIDIA's open-source framework for building semantic layers over data |
+| **What it does here** | Runs the predefined queries that agents call | Connects to Snowflake, Trino and ClickHouse |
+| **What uses it** | The MCP Gateway | The Ontology Backend (safety test, discovery) and the Sync Engine |
+| **What it is not used for** | Discovering a schema, or copying the tables discovery finds | Building the ontology: only its database connectors and catalog reader are used |
+| **Version and licence** | 1.5, Apache-2.0 | 1.2, Apache-2.0 |
 
-To loosen limits for higher traffic, raise `ONTOLOGY_RATELIMIT_MAX` /
-`ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX`. Two caveats:
-- The window is **fixed**, not sliding — a client can burst up to `2×MAX` across a
-  window boundary. Size the limit accordingly.
-- Counting is **per worker process** on the default in-memory cache, so with *N*
-  workers the effective limit is ≈ `N × MAX`. Set `ONTOLOGY_CACHE_URL` to a
-  `redis://…` URL so all workers share one counter and the configured number is
-  the true global limit.
+**How Google MCP Toolbox applies.** It is the governed query layer between agents and SQL. Each query an agent may run is written down in advance with its parameters, by your team or drafted by discovery for your team to review, and queries are grouped into toolsets that roles are granted. When an agent calls one, the MCP Gateway first decides whether that caller's role may. Only then does it pass the call to the Toolbox, which fills in the parameters, runs the statement on the cache or on the source, and returns the rows. A change is the same thing with a different statement: an update or an API request your team wrote in advance, never text an agent composes. The Toolbox is not reachable from outside the host: agents talk to the gateway, never to it. One exception is deliberate: free SQL against the local cache is run by the gateway itself, read-only, under the limits listed above.
 
-**Transport security & response headers:**
+**How NVIDIA auto-ontology applies.** Support for Snowflake, Trino and ClickHouse is built on auto-ontology's database connectors; iblai/ontology has no driver of its own for those three. Through them the same steps run as for any other database: the read-only test, the discovery of tables, columns and keys, and the scheduled copy. That is all of it. auto-ontology's own semantic layer, server and store are not used; here a schema is interpreted by iblai/ontology's rules and, if you turn it on, an LLM. Two things follow for these three engines. Their row counts are not reported, so they show as zero. And an engine is offered only when the MCP Toolbox can serve it too, which is why Databricks and DuckDB, which auto-ontology can also read, are not.
 
-| Env var | Default | Purpose |
+The rest of the stack:
+
+| Component | What it does here |
+|---|---|
+| PostgreSQL 16 | Cache Postgres: the copy agents query |
+| ChromaDB 0.6 | The search index over Memory Files |
+| Caddy 2 | The HTTPS reverse proxy, the only published port |
+| Django 5 and Celery | The Ontology Backend and the Sync Engine |
+| MCP Python SDK | The connectors for API systems |
+| Next.js 16 | The Ontology Frontend, the admin console |
+| Microsoft Entra ID | Your own directory: it issues the tokens the gateway checks |
+
+## What it connects to
+
+- **Databases, directly:** Oracle (including PeopleSoft), PostgreSQL, MySQL, SQL Server, Snowflake, Trino and ClickHouse.
+- **API systems, through a small connector each.** Connectors ship for Canvas, Slate, EAB Navigate, LDAP and Twenty CRM.
+- **Everything else in the catalog is a starting point.** The built-in catalog holds a definition for the common systems of seven sectors: how to connect, which read-only operations exist, a suggested schedule. For a system without a shipped connector, that definition is what its connector is written from.
+
+| Sector | Examples | Definitions from |
 |---|---|---|
-| `ONTOLOGY_SECURITY_HEADERS_ENABLED` | `true` | Emit security response headers |
-| `ONTOLOGY_REQUIRE_HTTPS` | `true` | Reject Bearer tokens received over a plaintext (non-HTTPS) connection |
-| `ONTOLOGY_HSTS_MAX_AGE` | `31536000` | `Strict-Transport-Security` max-age (seconds; `0` disables HSTS) |
-| `ONTOLOGY_HSTS_INCLUDE_SUBDOMAINS` | `true` | Add `includeSubDomains` to HSTS |
-| `ONTOLOGY_CSP` | `default-src 'none'; frame-ancestors 'none'` | `Content-Security-Policy` value |
-| `ONTOLOGY_REFERRER_POLICY` | `no-referrer` | `Referrer-Policy` value |
-| `ONTOLOGY_FRAME_OPTIONS` | `DENY` | `X-Frame-Options` value |
+| Higher education | PeopleSoft, Ellucian Banner, Canvas LMS, Slate CRM, Workday | [iblai/higher-education-agents](https://github.com/iblai/higher-education-agents) |
+| Enterprise | Snowflake, Salesforce, HubSpot, Twenty CRM, Jira | [iblai/enterprise-agents](https://github.com/iblai/enterprise-agents) |
+| K-12 | PowerSchool SIS, Google Classroom, Khan Academy | [iblai/k-12-agents](https://github.com/iblai/k-12-agents) |
+| Government | SAM.gov, USAspending.gov, Federal Register | [iblai/government-agents](https://github.com/iblai/government-agents) |
+| Legal | Clio, Westlaw Edge, PACER | [iblai/legal-agents](https://github.com/iblai/legal-agents) |
+| Financial services | Bloomberg Terminal, FactSet, Workiva | [iblai/financial-services-agents](https://github.com/iblai/financial-services-agents) |
+| Healthcare | Epic (FHIR), Oracle Cerner (FHIR), PubMed | [iblai/medical-healthcare-agents](https://github.com/iblai/medical-healthcare-agents) |
 
-HSTS is only emitted over HTTPS. TLS terminates at the Caddy edge, so the gateway
-trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
-whether a connection is secure — keep the gateway reachable only via the proxy,
-never directly on `:8080`.
+## What a deployment takes
 
-**JWT replay protection:**
+**You provide**
 
-The token `jti` (a required, validated claim) is checked against a cache-backed
-replay store keyed on the `jti`, with each entry expiring exactly when the token
-does (`exp - now`).
+- A Linux server or virtual machine in your network with Docker. The deployment guide starts at 16 GB of memory and 500 GB of disk.
+- Network access from that server to the systems you want to connect.
+- A read-only login for each database and an API key for each SaaS system.
+- Only if agents are to change records in a system: a second login or API key for it, limited to those changes.
+- An app registration in your Microsoft Entra ID, and the roles you assign to your users there.
+- A DNS name for the server and a TLS certificate for it; the proxy can obtain one automatically or use yours.
+- A firewall rule that admits only the networks you authorize to port 443, such as your agent runtime.
 
-| Env var | Default | Purpose |
-|---|---|---|
-| `ONTOLOGY_JWT_REPLAY_MODE` | `bind` | `bind` \| `strict` \| `off` (see below) |
-| `ONTOLOGY_JWT_REPLAY_TTL_FALLBACK` | `3600` | Store TTL (seconds) for a token whose `exp` is missing |
+**What runs.** The MCP Gateway, the Sync Engine, Cache Postgres, the search index, the MCP Toolbox, one connector per API system and the HTTPS proxy. The agent runtime is not part of the stack.
 
-Entra ID **access tokens are bearer tokens designed for reuse** within their
-lifetime — the ibl.ai platform forwards the same token across many MCP requests —
-so blind single-use would break the integration. The modes:
-- `bind` (default): on first sight, bind the `jti` to the request's client IP;
-  the same `jti` presented from a **different** IP is rejected as replay.
-  Legitimate reuse from the platform's stable egress passes; a token stolen and
-  replayed from elsewhere is caught. (IP is read from `X-Forwarded-For` set by
-  Caddy; deployments with multiple platform egress IPs may need `off` or
-  `strict`.)
-- `strict`: single-use — any second presentation of a `jti` is rejected. Only for
-  deployments that mint one-time tokens.
-- `off`: no replay checking.
+**How it is rolled out.** Start with one system and one agent, then add sources and roles. The [deployment guide](docs/deployment.md#phased-rollout) lays out four phases: foundation, more sources, the full set, and advanced options.
 
-As with rate limiting, the store is the Django cache: set `ONTOLOGY_CACHE_URL` to
-a `redis://…` URL so the check holds across all worker processes (on the default
-per-process cache a replay is only caught on the worker that first saw the token).
-Replay detection is best-effort; short token lifetimes and sender-constrained
-tokens (DPoP / mTLS) remain the strongest defences.
+**What it does not do.** It changes nothing in your systems on its own: there is no free-form write, and an agent can make only the changes your team defined and granted. It does not run the agents. It is not real-time: an agent sees the copy as of the last sync, except where a predefined query reads a source directly.
 
-**Vector store authentication:**
+## Running it day to day
 
-| Env var | Default | Purpose |
-|---|---|---|
-| `CHROMA_TOKEN` | *(required by compose)* | Static bearer token for the ChromaDB vector store |
+The Ontology Frontend is the admin console. Your team uses it to:
 
-The `vector-store` container runs ChromaDB's `TokenAuthenticationServerProvider`,
-so every request must present `CHROMA_TOKEN`; without it no container on
-`ontology-internal` can read or write embeddings. The same value is passed to the
-`sync-engine` and `ontology-gateway` services, and the shared `VectorSearch`
-client presents it automatically. Generate a strong random value (e.g.
-`openssl rand -hex 32`) and set it in the root `.env`; the compose stack fails to
-start if it is unset. When `CHROMA_TOKEN` is absent (e.g. a local or air-gapped
-run against an unauthenticated store) the client connects without auth.
+- **Connect a system**: add it, see its structure, run the read-only test, approve it.
+- **Watch the sync**: schedules, the last run of each, its history.
+- **Decide access**: what each role may reach, from the systems of record to the agents that act, changed by flipping a switch. A tool group that changes data is marked as such wherever it appears.
+- **See the whole map**: everything the ontology knows, and who may reach it.
+- **Try a tool**: call one with parameters and read the answer, before an agent does.
 
-## Documentation
+It runs on your host or is the one hosted by ibl.ai. Your operators can also work from a command line.
+
+## For your technical team
 
 | Document | Covers |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Full plan: positioning, diagram, seven components, design decisions, rollout |
-| [docs/components/01-mcp-inbound.md](docs/components/01-mcp-inbound.md) | MCP Toolbox + custom MCP servers, `tools.yaml` |
-| [docs/components/02-knowledge-materialization.md](docs/components/02-knowledge-materialization.md) | Sync modes, text memories, Postgres cache, vector index |
-| [docs/components/03-identity.md](docs/components/03-identity.md) · [docs/identity.md](docs/identity.md) | Entra ID flow, `roles.yaml`, Option A vs. B |
-| [docs/components/04-mcp-outbound.md](docs/components/04-mcp-outbound.md) · [docs/platform-integration.md](docs/platform-integration.md) | Outbound MCP server + ibl.ai platform integration |
-| [docs/components/05-service-discovery.md](docs/components/05-service-discovery.md) | Safety suite, introspection, BYOK LLM, adapters |
-| [docs/read-only-db-user.md](docs/read-only-db-user.md) | Provisioning a read-only Postgres role for a DB source |
-| [docs/components/06-provisioning.md](docs/components/06-provisioning.md) | The 6-step idempotent pipeline |
-| [docs/components/07-cli.md](docs/components/07-cli.md) | Full CLI reference |
-| [docs/deployment.md](docs/deployment.md) | Docker Compose stack, networks, Caddyfile, `.env`, rollout |
+| [DEV.md](DEV.md) | Setup, checks, running the backend locally |
+| [docs/architecture.md](docs/architecture.md) | The full design: components, decisions, rollout |
+| [docs/deployment.md](docs/deployment.md) | The Compose stack, networks, environment, gateway hardening, rollout |
+| [docs/identity.md](docs/identity.md) · [docs/authorization-model.md](docs/authorization-model.md) | Entra ID, roles, how access is decided |
+| [docs/platform-integration.md](docs/platform-integration.md) | Connecting agents on the ibl.ai platform |
+| [docs/components/](docs/components/) | Each of the seven components in depth; [07](docs/components/07-cli.md) is the command line, with an end-to-end walk-through |
+| [docs/read-only-db-user.md](docs/read-only-db-user.md) | Creating the read-only database login |
 
 ## License
 

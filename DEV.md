@@ -110,13 +110,27 @@ Then ask the agent on os.ibl.ai what ontology tools it has, or how many students
 The console's audit log lists every call under `platform-service` with its role; ngrok's inspector
 at `http://127.0.0.1:4040` shows the requests.
 
-Notes. The role must exist in `roles.yaml` (`Executive` reaches every toolset and cache table); a
+Notes. The role must exist in `roles.yaml` (`Executive` reaches every read-only toolset and every cache table); a
 per-agent role is `ontology platform connect --server <id> --scope mentor --agent <agent-id> --role <role> --auth-type token`
 on a server registered with `--auth-type token`. The gateway allows 30 `tools/call` a minute per
 token (`ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX`). The agent's model must grant the MCP tool; with OpenAI
 and Azure models the call comes from OpenAI's servers as plain `Bearer`, which the gateway accepts.
 ngrok forwards `X-Forwarded-Proto: https`, which the cleartext-token rule requires, and its free
 plan's browser warning page does not affect API clients.
+
+A person can also call it as themselves, with `ONTOLOGY_DM_URL` and `IBLAI_ORG` set on the backend:
+
+```bash
+# a DM token, a platform API key, or either one behind Bearer (the gateway works out which)
+curl -s -X POST https://<name>.ngrok-free.app/mcp -H "Authorization: Token $DM_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+curl -s -X POST https://<name>.ngrok-free.app/mcp -H "Authorization: Api-Token $PLATFORM_API_KEY" \
+  -H 'X-Iblai-Role: Executive' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+A platform admin names any role; a member runs as a role the policy `Ontology: <role>` lists them
+on (`ONTOLOGY_DATA_STORE=dm`), their only one when no header names it. The audit log shows the
+caller as `ibl:<username>`. Details: [docs/identity.md](docs/identity.md#a-persons-own-iblai-credential).
 
 ## A CRM source: Twenty
 
@@ -255,7 +269,7 @@ client's own verbs:
 
 | In the role | Policy resource | Verb the role holds |
 |---|---|---|
-| `mcp_toolsets: [T]`, `["*"]` | `/custom/ontology/toolsets/T/`, `/custom/ontology/toolsets/` | `Ontology/Toolsets/action` |
+| `mcp_toolsets: [T]`, `["*"]`, `["*", W]` | `/custom/ontology/toolsets/T/`, `/custom/ontology/toolsets/`, both | `Ontology/Toolsets/action` |
 | `cache_tables: [X]`, `["*"]` | `/custom/ontology/tables/X/`, `/custom/ontology/tables/` | `Ontology/Tables/read` |
 | `/ontology/a/b/**`, `/ontology/**` | `/custom/ontology/memory/a/b/`, `/custom/ontology/memory/` | `Ontology/Memory/read` |
 | `/ontology/a/_index.md`, one file | `/custom/ontology/memory/a/_index*/` (the `*` stands for `.md`) | `Ontology/Memory/read` |
@@ -271,6 +285,15 @@ client's own verbs:
   the role changes nothing here, and a role is not deleted while one exists (the platform would
   delete it too). A parent resource (`/custom/ontology/`, `/custom/`) grants everything beneath;
   any other shape is skipped and logged, never widened.
+- **The toolsets root is the read-only ones.** `/custom/ontology/toolsets/` (and any parent of it)
+  reads as `"*"`, which the gateway takes as every toolset *without* `write: true`. A toolset that
+  writes is held only through its own resource, which is why a name is kept beside the root
+  (`["*", "registrar-writes"]`). The platform's own RBAC reads a parent as covering its children;
+  the ontology does not, for this one kind.
+- **Who holds a role.** The people and groups listed on `Ontology: <role>` in the platform's RBAC
+  screens. The gateway reads them only for a caller who signs with their own ibl.ai credential
+  ([docs/identity.md](docs/identity.md#a-persons-own-iblai-credential)); the console has no page
+  for it.
 - **What cannot be kept is refused**, with the reason and before anything is written: a toolset
   or table name with a character outside letters, digits, `-` and `_`; a memory path that is
   neither a folder (`…/**`) nor one `.md` file; a name a platform role that is not an ontology

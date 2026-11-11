@@ -51,7 +51,9 @@ def toolsets() -> None:
     from iblai_ontology.config.reader import ConfigReader
 
     for name, ts in ConfigReader().get_toolsets().items():
-        typer.echo(f"  {name}: {', '.join(ts.get('tools', []))}")
+        # A toolset whose tools can change data: a role holds it by name, never through `*`.
+        mark = " (writes)" if ts.get("write") else ""
+        typer.echo(f"  {name}{mark}: {', '.join(ts.get('tools', []))}")
 
 
 @app.command()

@@ -45,7 +45,7 @@ export function isPublicAddress(address: string): boolean {
     v6 === "::1" ||
     /^f[cd]/.test(v6) ||
     /^fe[89ab]/.test(v6) ||
-    /^ff/.test(v6)
+    v6.startsWith("ff")
   );
 }
 

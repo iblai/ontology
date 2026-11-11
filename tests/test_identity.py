@@ -107,7 +107,7 @@ def resolver(tmp_path, monkeypatch):
 def test_resolve_known_role(resolver):
     perms = resolver.resolve("FinancialAidCounselor")
     assert perms.display_name == "Financial Aid Counselor"
-    assert perms.allows_toolset("financial-aid-tools")
+    assert "financial-aid-tools" in perms.mcp_toolsets
     assert perms.allows_cache_table("financial_aid")
     assert not perms.allows_cache_table("buildings")
 
@@ -120,7 +120,8 @@ def test_unknown_role_falls_back_to_default(resolver):
 
 def test_executive_wildcards(resolver):
     perms = resolver.resolve("Executive")
-    assert perms.allows_toolset("anything")
+    # What `*` reaches among toolsets is the gateway's to say: only those that read.
+    assert perms.mcp_toolsets == ["*"]
     assert perms.allows_cache_table("any_table")
     assert perms.allows_memory_path("/ontology/students/by-id/1.md")
 

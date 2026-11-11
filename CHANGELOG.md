@@ -102,8 +102,48 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gives one agent its own role.
 - `ONTOLOGY_GATEWAY_URL` is probed (`ping`): the console's Live badge and `ontology mcp status`
   say whether the public URL reaches the gateway instead of always "stopped".
+- Tools that change data, as named operations. A toolset marked `write: true` (the console's
+  switch "These tools can change data") holds tools whose fixed statement or HTTP request
+  writes, on a source of their own. A role holds such a toolset only by name, alone or beside
+  the wildcard (`["*", "registrar-writes"]`). The Toolbox's `http` source and tool are
+  recognised, so an API system can be written to as well. `tools/list` carries MCP's
+  `annotations` (`readOnlyHint`, `destructiveHint`) and an `inputSchema` that includes an `http`
+  tool's `pathParams`, `queryParams`, `bodyParams` and `headerParams`.
+- A write is recorded before it runs: an audit row `mcp.tools/call.write` with the arguments
+  (4,000 characters), and the call is refused when that row cannot be written. Every
+  `mcp.tools/call` row now says in `details` whether the tool failed (`isError`).
+- A member's own ibl.ai credential on `/mcp`: a DM token (`Authorization: Token`), a platform API
+  key (`Api-Token`), or either behind `Bearer`, which the gateway tells apart. An admin of the
+  backend's platform names any defined role with `X-Iblai-Role`; a member runs as a role the
+  platform's policy `Ontology: <role>` lists them on (their only one without the header). The
+  audit log and the rate limit see `ibl:<username>`. Needs `ONTOLOGY_DM_URL` and `IBLAI_ORG`.
+- `concurrency_limits.max_records_per_query` is enforced: `query-ontology-cache` returns at most
+  that many rows. The console's role editor offers it as "Rows per cache query" (100, 1,000,
+  10,000, No limit; a new role starts at 1,000).
+- The console's role editor has one text field, the name. Toolsets, memory domains (Read, Query
+  data) and console access are switches; the technical name is derived from the name and
+  numbered when taken; a domain a role reads only in part is shown as such and left as it is.
+  A role that exists is saved with every change and closed with Done; a new one is saved by
+  Create. From 1024 px of width the editor is two columns, short enough not to scroll.
 
 ### Changed
+- `mcp_toolsets: ["*"]` means every toolset that only reads. The gateway decides what writes and
+  fails closed (`toolbox_compat.writing_tools`): a tool reads only if it is an `http` `GET`/`HEAD`
+  or one fixed `*-sql` statement that starts with a reading keyword and holds no `;` and no write
+  word; every tool on a source one tool writes through counts as a write. A writing tool is never
+  lent by an unmarked toolset, saving one in an unmarked toolset is refused, a sync schedule
+  cannot name one (when saved and when run), and the console's Test button and `ontology mcp
+  test` refuse one.
+- `tools.yaml` validation refuses two documents of one kind with one name and an `http` tool
+  without `method` or `path`. A literal secret is refused at any depth of a source or a tool,
+  `Authorization` and `Cookie` headers included; a scheme word may precede the reference
+  (`Bearer ${VAR}`). The same two words are masked wherever configuration is shown.
+- A `Bearer` value that is not shaped like a JWT is no longer answered `401` by the Entra
+  validator: on `/mcp` it is tried as a DM token and as an API key.
+- A batch on `/mcp` counts against the `tools/call` limit once for each call it carries; a
+  verified DM token or API key is counted by itself, not by address.
+- A role's `max_records_per_query` must be a whole number above zero when saved through the
+  console API.
 - The sync engine reads a database source straight through the service's own connection
   (`SyncRunner.pull_table`; the generated schedule names `service` and `table`) instead of a
   Toolbox tool, so "Sync now" works without a Toolbox that knows the source. The Toolbox serves
@@ -142,6 +182,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   still does.
 - Console requests whose platform token the backend has verified are rate limited per token, not
   per client address: behind one frontend every user shared one count.
+- The README is an overview for decision-makers: what it is, where data lives, the security
+  controls and what it is built with (Google MCP Toolbox, NVIDIA auto-ontology). The gateway
+  hardening variables moved to `docs/deployment.md`; the end-to-end walk-through, the catalog and
+  a complete command map moved to `docs/components/07-cli.md`.
 
 
 ### Fixed
@@ -194,6 +238,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   platform), not this file.
 - The generated `get-<table>` "every row" Toolbox tools: the sync no longer goes through the
   Toolbox, and the agent-facing tools are the analysis's suggested ones.
+- `Permissions.allows_toolset`: nothing called it, and `"*"` no longer means every toolset.
+- The role editor's fields for agents and the export limit. Both are still stored and returned;
+  neither was ever enforced.
 
 ## [0.2.11] - 2026-07-09
 

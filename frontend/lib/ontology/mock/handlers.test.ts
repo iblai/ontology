@@ -44,6 +44,29 @@ describe("mock graph", () => {
     expect(g.stats.hubs).toHaveLength(5);
     expect(mockApi.graph(true).nodes.some((n) => n.kind === "column")).toBe(true);
   });
+  it("reaches a toolset that changes data only by name", () => {
+    const writes = { kind: "toolset" as const, name: "writes", tools: ["get-student-enrollment"] };
+    expect(mockApi.mcp.saveToolset({ ...writes, write: true }).ok).toBe(true);
+    expect(mockApi.mcp.toolsets().find((ts) => ts.name === "writes")?.write).toBe(true);
+    const grants = () =>
+      mockApi
+        .graph(false)
+        .links.filter((l) => l.kind === "grants" && l.source === "role:IblaiOntologyAdmin")
+        .map((l) => l.target);
+    // The seeded administrator holds `*`: every read-only toolset, and not this one.
+    expect(grants()).toContain("toolset:canvas-tools");
+    expect(grants()).not.toContain("toolset:writes");
+    const admin = mockApi.roles.list().find((r) => r.name === "IblaiOntologyAdmin")!;
+    expect(mockApi.roles.save({ ...admin, mcp_toolsets: ["*", "writes"] }).ok).toBe(true);
+    expect(grants()).toContain("toolset:writes");
+    expect(mockApi.graph(false).nodes.find((n) => n.id === "toolset:writes")?.meta.write).toBe(
+      true,
+    );
+    // Unmarked, the flag is left out as the backend leaves it out of tools.yaml.
+    expect(mockApi.mcp.saveToolset({ ...writes, write: false }).ok).toBe(true);
+    expect(mockApi.mcp.toolsets().find((ts) => ts.name === "writes")).toEqual(writes);
+    expect(grants().filter((id) => id === "toolset:writes")).toHaveLength(1);
+  });
   it("expands enrollment records with links to students and courses", () => {
     const r = mockApi.graphRecords("enrollment", 10);
     expect(r.ok).toBe(true);

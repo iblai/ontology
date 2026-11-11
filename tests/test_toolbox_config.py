@@ -105,6 +105,60 @@ def test_tools_are_a_map_keyed_by_name(tmp_path):
     assert isinstance(result.config["tools"], dict)
 
 
+def test_a_write_toolset_and_an_http_tool_reach_the_toolbox_as_it_reads_them(tmp_path):
+    path = tmp_path / "tools.yaml"
+    path.write_text(
+        DSL
+        + textwrap.dedent(
+            """
+            ---
+            kind: source
+            name: crm
+            type: http
+            baseUrl: https://crm.example
+            headers:
+              Authorization: Bearer ${CRM_TOKEN}
+            ---
+            kind: tool
+            name: add-note
+            type: http
+            source: crm
+            method: POST
+            path: /people/{{.person}}/notes
+            requestBody: '{"body": "{{.body}}"}'
+            pathParams:
+              - name: person
+                type: string
+            bodyParams:
+              - name: body
+                type: string
+            ---
+            kind: toolset
+            name: crm-writes
+            write: true
+            tools:
+              - add-note
+            """
+        )
+    )
+    config = build_toolbox_config(path).config
+    # `write` is the gateway's word: the Toolbox is given the list of tools and nothing else.
+    assert config["toolsets"]["crm-writes"] == ["add-note"]
+    assert config["sources"]["crm"] == {
+        "kind": "http",
+        "baseUrl": "https://crm.example",
+        "headers": {"Authorization": "Bearer ${CRM_TOKEN}"},
+    }
+    tool = config["tools"]["add-note"]
+    assert (tool["kind"], tool["method"]) == ("http", "POST")
+    assert tool["path"] == "/people/{{.person}}/notes"
+    assert tool["requestBody"] == '{"body": "{{.body}}"}'
+    assert [p["name"] for p in tool["pathParams"] + tool["bodyParams"]] == [
+        "person",
+        "body",
+    ]
+
+
 def test_write_emits_loadable_yaml_without_injection_comment(tmp_path):
     dest = tmp_path / "generated" / "toolbox.yaml"
     write_toolbox_config(_write(tmp_path), dest)

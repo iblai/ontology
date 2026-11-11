@@ -115,6 +115,33 @@ def test_pull_raises_when_the_tool_reports_an_error(monkeypatch):
         SyncRunner(toolbox_url="http://toolbox:5000").pull("get-x")
 
 
+def test_a_schedule_never_runs_a_tool_that_writes(tmp_path, monkeypatch):
+    """A schedule runs unattended and under no role, so it only reads."""
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "tools.yaml").write_text(
+        "kind: tool\nname: release-hold\ntype: postgres-sql\nsource: rw\n"
+        "statement: UPDATE holds SET released = true\n"
+        "---\n"
+        "kind: tool\nname: get-students\ntype: postgres-sql\nsource: ro\n"
+        "statement: SELECT * FROM students\n"
+    )
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
+    runner = SyncRunner(toolbox_url="http://toolbox:5000")
+    pulled: list[str] = []
+    monkeypatch.setattr(
+        runner, "pull", lambda tool, arguments=None, *, url=None: pulled.append(tool)
+    )
+    refusal = "'nightly'.*release-hold can change data.*a schedule only reads"
+    with pytest.raises(RuntimeError, match=refusal):
+        runner._pull({"name": "nightly", "source": "rw", "tool": "release-hold"})
+    assert pulled == []
+    runner._pull({"name": "nightly", "source": "ro", "tool": "get-students"})
+    assert pulled == ["get-students"]
+    # A tool tools.yaml does not define belongs to a custom server: nothing to refuse here.
+    assert SyncRunner.refuses("get-student-activity-bulk") is None
+
+
 def test_detect_primary_key():
     from iblai_ontology.backend.sync.writer import detect_primary_key
 

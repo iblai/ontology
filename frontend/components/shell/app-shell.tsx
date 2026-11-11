@@ -16,19 +16,16 @@ import { cn } from "@/lib/utils";
 export function AppShell({
   defaultSidebarOpen,
   demo,
-  hosted,
   children,
 }: {
   defaultSidebarOpen: boolean;
   /** No backend configured: the console serves its mock data. */
   demo: boolean;
-  /** `ONTOLOGY_MULTI_PLATFORM`: each platform's own backend, found per signed-in admin. */
-  hosted: boolean;
   children: React.ReactNode;
 }) {
   // The semantic map page's content is dark below the navbar; every other page is light.
   const dark = usePathname() === "/map";
-  const gate = useBackendGate(hosted);
+  const gate = useBackendGate(!demo);
   const [mounted, setMounted] = useState(false);
   const [tenantKey, setTenantKey] = useState("");
   const [username, setUsername] = useState("");

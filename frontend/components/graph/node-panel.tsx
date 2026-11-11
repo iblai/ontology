@@ -73,6 +73,7 @@ export function NodePanel({
   onCollapse,
 }: PanelProps) {
   const t = useTranslations("graph");
+  const tc = useTranslations("common");
   const byId = new Map(data.nodes.map((n) => [n.id, n]));
   // Connections grouped by relation: outgoing under the relation, incoming under its "By" reading.
   const groups = new Map<string, GraphNode[]>();
@@ -103,6 +104,7 @@ export function NodePanel({
   if (typeof meta.enabled === "boolean") fact("enabled", meta.enabled ? t("yes") : t("no"));
   fact("files", meta.files);
   fact("expected", meta.expected);
+  if (node.kind === "toolset" && meta.write) fact("write", t("yes"));
   const role =
     node.kind === "role" ? roles.find((r) => r.name === node.id.slice("role:".length)) : undefined;
   const allOf = (kind: GraphKind) =>
@@ -194,6 +196,8 @@ export function NodePanel({
               const node = domain(name);
               return node ? cachesDomain(role, node) : have.has(`${nodeKind}:${name}`);
             };
+            const writes = (name: string) =>
+              toggleKind === "toolset" && Boolean(byId.get(`toolset:${name}`)?.meta.write);
             if (names.length === 0) return null;
             return (
               <div key={toggleKind} className="flex flex-col gap-1">
@@ -208,6 +212,11 @@ export function NodePanel({
                           onCheckedChange={() => onToggle(role, toggleKind, name)}
                         />
                         <span className="truncate">{name}</span>
+                        {writes(name) && (
+                          <span className="text-muted-foreground shrink-0">
+                            {tc("changesData")}
+                          </span>
+                        )}
                       </label>
                     </li>
                   ))}

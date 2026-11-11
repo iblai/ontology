@@ -34,9 +34,9 @@ test("a role is created on the access page and edited by clicking its nodes", as
   await page.goto("/access");
   await page.getByRole("button", { name: "New role", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New role" });
-  await dialog.getByLabel("Name", { exact: true }).fill("Reviewer");
-  await dialog.getByLabel("Display name", { exact: true }).fill("Review board");
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.getByLabel("Name", { exact: true }).fill("Review board");
+  await expect(dialog.getByText("Technical name: ReviewBoard")).toBeVisible();
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect(dialog).toBeHidden();
 
   // The new role is listed and picked, and has a node of its own.
@@ -64,4 +64,40 @@ test("a role is created on the access page and edited by clicking its nodes", as
   await page.reload();
   await page.getByRole("button", { name: "Review board", exact: true }).click();
   await expect(page.getByRole("switch", { name: "Grant canvas-tools" })).toBeChecked();
+});
+
+test("a toolset that changes data is granted by name, beside every read-only one", async ({
+  page,
+}) => {
+  await seedAuth(page);
+  // Marked as its editor's switch marks it.
+  await page.request.put("/api/ontology/mcp/toolsets/canvas-tools", {
+    data: {
+      kind: "toolset",
+      name: "canvas-tools",
+      tools: ["get-canvas-activity", "get-canvas-submissions"],
+      write: true,
+    },
+  });
+  await page.goto("/access");
+  await expect(page.getByText("2 tools · changes data")).toBeVisible();
+
+  // The administrator holds `*`: every read-only toolset, and not this one.
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: "iblai/ontology Administrator" }).click();
+  const grant = page.getByRole("switch", { name: "Grant canvas-tools" });
+  const other = page.getByRole("switch", { name: "Grant enrollment-tools" });
+  await expect(grant).not.toBeChecked();
+  await expect(other).toBeChecked();
+  await grant.click();
+  await expect(grant).toBeChecked();
+  await expect(other).toBeChecked();
+
+  const roles: { name: string; mcp_toolsets: string[] }[] = await (
+    await page.request.get("/api/ontology/roles")
+  ).json();
+  expect(roles.find((r) => r.name === "IblaiOntologyAdmin")?.mcp_toolsets).toEqual([
+    "*",
+    "canvas-tools",
+  ]);
 });

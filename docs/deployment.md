@@ -272,6 +272,107 @@ and lives in a git-ignored `docker-compose.override.yml` (copy from
   `mcp-toolbox` to an egress-capable network and set `*_HOST` to the remote
   hostname/IP.
 
+## Gateway hardening (environment variables)
+
+The gateway middleware is tuned entirely through environment variables on the
+`ontology-gateway` container — no code change or rebuild, just set and restart.
+
+**Rate limiting** (fixed-window throttle, keyed on the authenticated subject and
+falling back to client IP; a batch counts once for each `tools/call` it carries):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_RATELIMIT_ENABLED` | `true` | Master on/off switch |
+| `ONTOLOGY_RATELIMIT_WINDOW` | `60` | Window length in seconds (also the `Retry-After` value) |
+| `ONTOLOGY_RATELIMIT_MAX` | `120` | Max requests per window (general bucket) |
+| `ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX` | `30` | Stricter max per window for `tools/call` |
+
+To loosen limits for higher traffic, raise `ONTOLOGY_RATELIMIT_MAX` /
+`ONTOLOGY_RATELIMIT_TOOLS_CALL_MAX`. Two caveats:
+- The window is **fixed**, not sliding — a client can burst up to `2×MAX` across a
+  window boundary. Size the limit accordingly.
+- Counting is **per worker process** on the default in-memory cache, so with *N*
+  workers the effective limit is ≈ `N × MAX`. Set `ONTOLOGY_CACHE_URL` to a
+  `redis://…` URL so all workers share one counter and the configured number is
+  the true global limit.
+
+**Transport security & response headers:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_SECURITY_HEADERS_ENABLED` | `true` | Emit security response headers |
+| `ONTOLOGY_REQUIRE_HTTPS` | `true` | Reject Bearer tokens received over a plaintext (non-HTTPS) connection, and on `/mcp` a `Token` or `Api-Token` credential too |
+| `ONTOLOGY_HSTS_MAX_AGE` | `31536000` | `Strict-Transport-Security` max-age (seconds; `0` disables HSTS) |
+| `ONTOLOGY_HSTS_INCLUDE_SUBDOMAINS` | `true` | Add `includeSubDomains` to HSTS |
+| `ONTOLOGY_CSP` | `default-src 'none'; frame-ancestors 'none'` | `Content-Security-Policy` value |
+| `ONTOLOGY_REFERRER_POLICY` | `no-referrer` | `Referrer-Policy` value |
+| `ONTOLOGY_FRAME_OPTIONS` | `DENY` | `X-Frame-Options` value |
+
+HSTS is only emitted over HTTPS. TLS terminates at the Caddy edge, so the gateway
+trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
+whether a connection is secure — keep the gateway reachable only via the proxy,
+never directly on `:8080`.
+
+**A member's own ibl.ai credential on `/mcp`** (a DM token as `Token`, a platform
+API key as `Api-Token`, either behind `Bearer`; [identity.md](identity.md#a-persons-own-iblai-credential)):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_DM_URL` | unset | Where a credential is verified. Unset, none is taken |
+| `IBLAI_ORG` / `ONTOLOGY_ADMIN_PLATFORMS` | unset | The platform whose members and admins are taken. With neither, none is |
+| `ONTOLOGY_DM_VERIFY_TTL` | `300` | Seconds a credential's verdict is kept; a revocation shows within it |
+| `ONTOLOGY_ROLES_TTL` | `60` | Seconds a member's roles are kept; a role given in the platform shows within it |
+
+**Tools that change data** need nothing here: the write account's variables go in
+the Toolbox's environment (`.env.mcp`) beside the read-only ones, and an `http`
+source on a private address lists it in `allowedIpRanges`
+([components/01-mcp-inbound.md](components/01-mcp-inbound.md#tools-that-change-data)).
+
+**JWT replay protection:**
+
+The token `jti` (a required, validated claim) is checked against a cache-backed
+replay store keyed on the `jti`, with each entry expiring exactly when the token
+does (`exp - now`).
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_JWT_REPLAY_MODE` | `bind` | `bind` \| `strict` \| `off` (see below) |
+| `ONTOLOGY_JWT_REPLAY_TTL_FALLBACK` | `3600` | Store TTL (seconds) for a token whose `exp` is missing |
+
+Entra ID **access tokens are bearer tokens designed for reuse** within their
+lifetime — the ibl.ai platform forwards the same token across many MCP requests —
+so blind single-use would break the integration. The modes:
+- `bind` (default): on first sight, bind the `jti` to the request's client IP;
+  the same `jti` presented from a **different** IP is rejected as replay.
+  Legitimate reuse from the platform's stable egress passes; a token stolen and
+  replayed from elsewhere is caught. (IP is read from `X-Forwarded-For` set by
+  Caddy; deployments with multiple platform egress IPs may need `off` or
+  `strict`.)
+- `strict`: single-use — any second presentation of a `jti` is rejected. Only for
+  deployments that mint one-time tokens.
+- `off`: no replay checking.
+
+As with rate limiting, the store is the Django cache: set `ONTOLOGY_CACHE_URL` to
+a `redis://…` URL so the check holds across all worker processes (on the default
+per-process cache a replay is only caught on the worker that first saw the token).
+Replay detection is best-effort; short token lifetimes and sender-constrained
+tokens (DPoP / mTLS) remain the strongest defences.
+
+**Vector store authentication:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `CHROMA_TOKEN` | *(required by compose)* | Static bearer token for the ChromaDB vector store |
+
+The `vector-store` container runs ChromaDB's `TokenAuthenticationServerProvider`,
+so every request must present `CHROMA_TOKEN`; without it no container on
+`ontology-internal` can read or write embeddings. The same value is passed to the
+`sync-engine` and `ontology-gateway` services, and the shared `VectorSearch`
+client presents it automatically. Generate a strong random value (e.g.
+`openssl rand -hex 32`) and set it in the root `.env`; the compose stack fails to
+start if it is unset. When `CHROMA_TOKEN` is absent (e.g. a local or air-gapped
+run against an unauthenticated store) the client connects without auth.
+
 ## Operating the Stack
 
 The `ontology deploy` commands wrap Docker Compose (see [CLI reference](components/07-cli.md#ontology-deploy--docker-compose-lifecycle)):
@@ -343,7 +444,7 @@ Validate the deployment with `ontology health` and `ontology config validate`.
 22. **Event-driven sync** via webhooks from PeopleSoft / Canvas / Slate for real-time updates to critical data (new holds, registration changes, grade submissions).
 23. Student-facing self-service agents with limited scope.
 24. Cross-institutional templates — package the stack so a new deployment is *clone → fill credentials → `docker compose up`*.
-25. **Write-back with approval workflows** — an agent creates a pending action, a human approves in the UI, and the approved action executes via an MCP write tool.
+25. **An approval step for writes** — named write tools ship today (a `write: true` toolset, granted by name); the open item is the queue in front of them: an agent creates a pending action, a human approves in the UI, and the write tool runs.
 
 ---
 

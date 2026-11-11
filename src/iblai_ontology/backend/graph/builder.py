@@ -267,7 +267,10 @@ def build_graph(
         for target in tool_tables(str(tool.get("statement") or ""), lookup):
             g.link(tid, target, "queries")
     for name, ts in reader.get_toolsets().items():
-        sid = g.node("toolset", name, label=name, group="mcp")
+        # write: its tools can change data, so a role holds it by name, never through `*`.
+        sid = g.node(
+            "toolset", name, label=name, group="mcp", write=bool(ts.get("write"))
+        )
         for t in ts.get("tools") or []:
             g.ref(sid, "contains", "tool", str(t))
 
@@ -312,8 +315,12 @@ def build_graph(
         if d:
             g.link(sid, nid("memory_domain", d), "writes")
 
-    # Roles: what each one may reach.
-    toolset_ids = [n for n in g.nodes if n.startswith("toolset:")]
+    # Roles: what each one may reach. `*` is every toolset that only reads.
+    toolset_ids = [
+        id
+        for id, node in g.nodes.items()
+        if node["kind"] == "toolset" and not node["meta"].get("write")
+    ]
     for name, spec in roles.items():
         rid = g.node(
             "role",
@@ -327,11 +334,12 @@ def build_graph(
             mcp_toolsets=list(spec.get("mcp_toolsets") or []),
         )
         granted = spec.get("mcp_toolsets") or []
-        if "*" in granted:
-            for tsid in toolset_ids:
-                g.link(rid, tsid, "grants", wildcard=True)
-        else:
-            for ts in granted:
+        through_all = toolset_ids if "*" in granted else []
+        for tsid in through_all:
+            g.link(rid, tsid, "grants", wildcard=True)
+        for ts in granted:
+            # A name beside `*` is drawn too, unless `*` already reaches it.
+            if ts != "*" and nid("toolset", str(ts)) not in through_all:
                 g.ref(rid, "grants", "toolset", str(ts))
         for d, wildcard, exists in role_domains(
             spec.get("memory_paths") or [], domains

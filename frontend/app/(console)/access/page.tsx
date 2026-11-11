@@ -106,6 +106,11 @@ export default function AccessPage() {
       ),
     [graph.nodes],
   );
+  // The toolsets whose tools change data: their cards say so.
+  const writes = useMemo(
+    () => new Set(graph.nodes.filter((n) => n.kind === "toolset" && n.meta.write).map((n) => n.id)),
+    [graph.nodes],
+  );
 
   async function onGrant(kind: ToggleKind, name: string) {
     if (!role) return;
@@ -257,8 +262,9 @@ export default function AccessPage() {
         </span>
       );
     }
-    const text =
+    const fact =
       card.fact ?? (card.count ? t(`count.${card.count.unit}`, { n: card.count.n }) : "");
+    const text = writes.has(card.id) ? `${fact} · ${tc("changesData")}` : fact;
     return <span className="text-muted-foreground truncate text-[11px]">{text}</span>;
   }
 
@@ -434,7 +440,7 @@ export default function AccessPage() {
         key={creating ? "new" : "closed"}
         open={creating}
         onOpenChange={setCreating}
-        toolsets={toolsets.map((ts) => ts.name)}
+        taken={roles.map((r) => r.name)}
         onSaved={(saved) => {
           // Listed and picked at once; its node arrives with the map, read again.
           setRoles((rs) => [...rs.filter((x) => x.name !== saved.name), saved]);

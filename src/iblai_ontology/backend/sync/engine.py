@@ -85,6 +85,17 @@ class SyncRunner:
         rows = call_tool(url or self.toolbox_url, tool, arguments, timeout=120)
         return rows if isinstance(rows, list) else [rows]
 
+    @staticmethod
+    def refuses(tool: str) -> str | None:
+        """Why no schedule may name ``tool``, or None: one that can change data never runs unattended."""
+        from iblai_ontology.backend.mcp_server.toolbox_compat import writing_tools
+        from iblai_ontology.config.reader import ConfigReader
+
+        why = writing_tools(ConfigReader().get_tools()).get(tool)
+        return (
+            f"{tool} can change data ({why}): a schedule only reads." if why else None
+        )
+
     def pull_table(
         self, service, table: str, *, limit: int | None = None
     ) -> list[dict]:
@@ -126,6 +137,9 @@ class SyncRunner:
             service = store.get(Service, name=sched["service"])
             return self.pull_table(service, sched["table"])
         if sched.get("tool"):
+            refused = self.refuses(sched["tool"])
+            if refused:
+                raise RuntimeError(f"schedule {sched.get('name')!r}: {refused}")
             return self.pull(sched["tool"], url=self.mcp_url(sched.get("source") or ""))
         raise ValueError(
             f"schedule {sched.get('name')!r} names neither a table nor a tool"

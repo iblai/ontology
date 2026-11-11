@@ -25,6 +25,10 @@ The on-premise gateway does **one** authorization job: given a validated identit
 3. It reads `X-Iblai-Role`, resolves the role's permissions in `roles.yaml`, and scopes the response (allowed toolsets, memory-path globs, cache tables).
 4. Every access — allowed or denied — is written to the `audit_log` with the token's `jti` for end-to-end traceability.
 
+### Callers without an Entra ID token
+
+Two more kinds of caller reach the same role check: the ibl.ai platform itself, with the shared service token, and a member of the platform with their own credential (a DM token as `Token`, a platform API key as `Api-Token`, either one behind `Bearer`). A member's role is one the platform's policy `Ontology: <role>` gives them. Both are in the deep dive: [the service token](../identity.md#the-platform-service-token), [a person's own credential](../identity.md#a-persons-own-iblai-credential).
+
 ### Two identity options
 
 - **Option A (implemented first).** The gateway trusts `X-Iblai-Role` because the request carries a valid Entra ID JWT, arrives through the firewall from the platform, and the platform is the authoritative source of role assignment. Lowest on-prem complexity.

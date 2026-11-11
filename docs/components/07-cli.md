@@ -34,14 +34,128 @@ The CLI uses `no_args_is_help`, so any group invoked without a subcommand prints
 
 ```
 ontology
-├── service   add · list · status · test · discover · approve · sync · remove
+├── service   add · list · status · test · schema · connection · discover · approve · sync · map · remove
+├── skill     list · import
+├── catalog   list · show
 ├── config    init · show · set · llm · validate
-├── sync      run · status · history · schedule
-├── roles     list · show · validate
+├── sync      run · status · history · schedule · import
+├── roles     list · show · validate · import
 ├── health    db · mcp · sync · storage   (bare `ontology health` runs all four)
+├── doctor    (config, environment, drivers and connectivity in one report)
 ├── data      query · search · memory · stats
 ├── deploy    up · down · logs · restart · status
-└── mcp       status · tools · toolsets · test
+├── mcp       status · tools · toolsets · validate · build · test
+└── platform  register · connect · attach · address
+```
+
+---
+
+## End to end
+
+### 1 · Discover a service — two ways
+
+**A. Live database** — connect, verify read-only, introspect, analyze, provision:
+
+```bash
+ontology service add --from peoplesoft \
+  --host psft-db.internal.edu --database CSPRD --user iblai_readonly
+```
+
+`--from <catalog-key>` prefills the connection shape (driver, port, env) from the [built-in catalog](#built-in-service-catalog). The pipeline runs a **read-only safety suite first** — seven write attempts that must all be denied — then introspects the schema and generates config.
+
+**B. From a SKILL.md** — seed an API source with no live connection:
+
+```bash
+ontology service add --skill canvas      # register the API source from its SKILL.md
+ontology skill import canvas             # only show what the skill declares
+ontology skill list                      # every vendored skill
+```
+
+`service add --skill` registers the service and prints the skill's connection variables and read-only operations (suggested MCP tools). Its data is then read through a custom MCP server (`mcp-servers/`) that you point `MCP_<NAME>_URL` at.
+
+### 2 · Interpret the schema & see the connection
+
+```bash
+ontology service schema peoplesoft        # discovered tables, by row count
+ontology service connection peoplesoft     # stored connection (secrets redacted)
+```
+
+```text
+$ ontology service schema peoplesoft
+peoplesoft — oracle | 847 tables, 12,400,000 rows
+            Top 20 tables
+┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┓
+┃ Schema ┃ Table              ┃ Rows      ┃ Columns ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━┩
+│ SYSADM │ PS_STDNT_CAR_TERM  │ 2,345,678 │ 24      │
+│ SYSADM │ PS_STDNT_ENRL      │ 1,876,543 │ 31      │
+└────────┴────────────────────┴───────────┴─────────┘
+```
+
+### 3 · Test it
+
+```bash
+ontology service test peoplesoft           # 7-test read-only safety suite
+ontology mcp validate                       # tools.yaml is MCP Toolbox compliant
+ontology mcp test get-student-enrollment --params '{"student_id":"001234567"}'
+```
+
+```text
+$ ontology service test peoplesoft
+  [PASS] CREATE TABLE blocked   [PASS] INSERT blocked   [PASS] UPDATE blocked
+  [PASS] DELETE blocked   [PASS] DROP TABLE blocked   [PASS] ALTER blocked
+  [PASS] TRUNCATE blocked
+  All safety checks passed.   # credentials confirmed read-only
+```
+
+### 4 · Provision, sync, serve
+
+```bash
+ontology service approve peoplesoft         # cache schema, tools, sync schedules
+ontology sync run peoplesoft                # pull → cache + text memories + vectors
+ontology deploy up                          # bring up the stack (compose)
+```
+
+Then register iblai/ontology as an MCP server in your agent platform (see [platform-integration.md](../platform-integration.md)):
+
+```bash
+ontology platform register --url https://ontology.your-org.edu/mcp --auth-type none --role Executive  # the platform service token
+ontology platform register --url https://ontology.your-org.edu/mcp                                   # per-user Entra ID OAuth
+ontology platform connect  --server 14 --scope user --role FinancialAidCounselor --auth-type oauth2
+ontology platform attach   <agent-id> --server 14
+```
+
+---
+
+## Built-in service catalog
+
+`ontology catalog list` shows the built-in defaults: for each system its connection shape, adapter, default toolset, sync cadences and the SKILL.md it comes from. Seed one with `ontology service add --from <key>`.
+
+| Segment (`--domain`) | Examples | Skills from |
+|---|---|---|
+| `higher-ed` | PeopleSoft, Ellucian Banner, Canvas LMS, Slate CRM, Workday | [iblai/higher-education-agents](https://github.com/iblai/higher-education-agents) |
+| `enterprise` | Snowflake, Salesforce, HubSpot, Twenty CRM, Jira | [iblai/enterprise-agents](https://github.com/iblai/enterprise-agents) |
+| `k-12` | PowerSchool SIS, Google Classroom, Khan Academy | [iblai/k-12-agents](https://github.com/iblai/k-12-agents) |
+| `government` | SAM.gov, USAspending.gov, Federal Register | [iblai/government-agents](https://github.com/iblai/government-agents) |
+| `legal` | Clio, Westlaw Edge, PACER | [iblai/legal-agents](https://github.com/iblai/legal-agents) |
+| `financial-services` | Bloomberg Terminal, FactSet, Workiva | [iblai/financial-services-agents](https://github.com/iblai/financial-services-agents) |
+| `medical-healthcare` | Epic (FHIR), Oracle Cerner (FHIR), PubMed | [iblai/medical-healthcare-agents](https://github.com/iblai/medical-healthcare-agents) |
+
+Two entries are databases (`peoplesoft`, `snowflake`); the rest are API systems, each seeded from a SKILL.md vendored under `src/iblai_ontology/catalog/skills/`. An API system is synced through a custom MCP server, and `mcp-servers/` ships five: Canvas, Slate, Navigate, LDAP and Twenty. Twenty's cloud is the `twenty` entry; a self-hosted one is a `generic-postgres` database ([DEV.md](../../DEV.md#a-crm-source-twenty)).
+
+```bash
+ontology catalog show snowflake     # connection shape, env, default toolset, cadences, skill
+```
+
+---
+
+## Utilities
+
+```bash
+ontology doctor          # diagnostics: config validity, drivers, per-service env, Entra
+ontology health          # PostgreSQL cache, MCP servers, sync engine, text-memory storage
+ontology catalog list    # built-in service defaults (--domain <segment>)
+ontology mcp validate    # tools.yaml: every type, source and toolset member resolves
 ```
 
 ---
@@ -227,8 +341,8 @@ See [deployment.md](../deployment.md) for the stack itself.
 |---|---|---|
 | `status` | Outbound gateway: running?, URL, tool/toolset counts, active sessions. | — |
 | `tools` | List all exposed MCP tools (name, type, source, description). | — |
-| `toolsets` | List toolsets and their member tools. | — |
-| `test <tool>` | Invoke a tool and print the JSON result. | `tool` (arg); `--params '<json>'` |
+| `toolsets` | List toolsets and their member tools; one whose tools change data is marked `(writes)`. | — |
+| `test <tool>` | Invoke a tool and print the JSON result. A tool that changes data is refused: it runs only through the gateway, which records the call. | `tool` (arg); `--params '<json>'` |
 
 ```bash
 ontology mcp status

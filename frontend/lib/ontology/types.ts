@@ -208,6 +208,8 @@ export interface McpToolset {
   kind: "toolset";
   name: string;
   tools: string[];
+  /** Its tools change data: a role holds it by name, never through `*`. */
+  write?: boolean;
 }
 
 export interface GatewayHealth {

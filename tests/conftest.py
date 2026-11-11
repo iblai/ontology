@@ -225,12 +225,15 @@ class FakeDm:
     def policy(self, name: str) -> dict | None:
         return next((p for p in self.policies if p["name"] == name), None)
 
-    def add_policy(self, name: str, role: dict, resources: list[str]) -> dict:
+    def add_policy(
+        self, name: str, role: dict, resources: list[str], users: tuple = ()
+    ) -> dict:
         policy = {
             "id": max((p["id"] for p in self.policies), default=0) + 1,
             "name": name,
             "role_id": role["id"],
             "resources": resources,
+            "users": list(users),  # who it lists, alone or through a group
         }
         self.policies.append(policy)
         return policy
@@ -270,6 +273,13 @@ class FakeDm:
             found = [p for p in self.policies if name in p["name"].lower()]
             if "role_id" in params:
                 found = [p for p in found if p["role_id"] == int(params["role_id"])]
+            if "username" in params:  # iexact, as the DM matches it
+                wanted = params["username"].lower()
+                found = [
+                    p
+                    for p in found
+                    if wanted in [u.lower() for u in p.get("users", [])]
+                ]
             page = self._page(found, request)
             page["results"] = [self._policy_out(p) for p in page["results"]]
             return 200, page

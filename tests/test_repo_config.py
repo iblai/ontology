@@ -29,6 +29,14 @@ def test_required_toolsets_exist(repo_config_dir):
     assert REQUIRED_TOOLSETS <= toolsets
 
 
+def test_no_stock_toolset_writes_and_no_stock_tool_does(repo_config_dir):
+    from iblai_ontology.backend.mcp_server.toolbox_compat import writing_tools
+
+    reader = ConfigReader(repo_config_dir)
+    assert writing_tools(reader.get_tools()) == {}
+    assert not [name for name, ts in reader.get_toolsets().items() if ts.get("write")]
+
+
 def test_every_role_toolset_is_defined(repo_config_dir):
     reader = ConfigReader(repo_config_dir)
     known = set(reader.get_toolsets())
