@@ -20,8 +20,6 @@
   <a href="docs/images/ontology-architecture.png"><img src="docs/images/ontology-architecture.png" alt="Runtime connections: the ibl.ai platform, the Ontology Host on-premise, and the customer source systems" width="100%"></a>
 </p>
 
-<p align="center"><em>Runtime connections with <code>ONTOLOGY_DATA_STORE=dm</code>. With the default, <code>local</code>, roles, sync schedules and the service registry stay on the Ontology Host.</em></p>
-
 ---
 
 ## What it is
