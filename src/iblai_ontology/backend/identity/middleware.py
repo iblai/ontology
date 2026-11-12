@@ -13,9 +13,9 @@ The ibl.ai platform itself may call with the shared service token
 (``ONTOLOGY_SERVICE_TOKEN``) instead of a user's JWT; it is the trusted party that
 configured the connection, so the role is the ``X-Iblai-Role`` it sends.
 
-A person may also call ``/mcp`` with their own ibl.ai credential, a DM token or a
-platform API key (``resolve_platform_request``, called by the MCP view): their role
-is one the platform's policies give them.
+A caller may also bring their own ibl.ai credential to ``/mcp``, a DM token or a
+platform API key (``resolve_platform_request``, called by the MCP view): it carries its
+role, which is what the platform's RBAC grants it.
 
 ``resolve_request`` is the reusable core; ``OntologyIdentityMiddleware`` adapts
 it to Django's middleware contract.
@@ -23,6 +23,7 @@ it to Django's middleware contract.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import logging
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ from iblai_ontology.backend.identity.roles import (
     RoleNotPermitted,
     RoleResolver,
     RolesUnavailable,
+    permissions,
     select_active_role,
 )
 
@@ -129,78 +131,81 @@ class CredentialRefused(Exception):
         self.status = status
 
 
-# What a credential the platform refused is told, by the scheme it came under.
-_REJECTED = {
-    "Token": "The ibl.ai platform rejected this token.",
-    "Api-Token": (
-        "The ibl.ai platform rejected this API key. A key limited to its own policies "
-        "is rejected too: use one that acts as its owner."
-    ),
-    "Bearer": (
-        "This is not the service token, and the ibl.ai platform rejected it both as a "
-        "token and as an API key (a key limited to its own policies is rejected too)."
-    ),
+# What an admin of the platform reaches with no role listing them: everything that only reads.
+_READS_ALL = {
+    "memory_paths": ["/ontology/**"],
+    "mcp_toolsets": ["*"],
+    "cache_tables": ["*"],
+    "admin_dashboard": True,
 }
+_KIND = {"Token": "token", "Api-Token": "API key"}  # what each scheme carries
 
 
 def resolve_platform_request(
-    scheme: str,
-    token: str,
-    role_header: Optional[str],
-    resolver: Optional[RoleResolver] = None,
+    scheme: str, token: str, resolver: Optional[RoleResolver] = None
 ) -> ResolvedRequest:
-    """A person calling with their own ibl.ai credential: a DM token or a platform API key.
+    """A caller with their own ibl.ai credential: a DM token or a platform API key.
 
-    ``scheme`` is ``Token``, ``Api-Token``, or ``Bearer``, which tries both. An admin
-    of this platform names any defined role. A member names a role the platform's
-    policies ``Ontology: <role>`` give them, and without a header runs as their only
-    one. Raises :class:`CredentialRefused`, :class:`RoleNotPermitted` or
-    :class:`RolesUnavailable`.
+    ``scheme`` is ``Token``, ``Api-Token``, or ``Bearer``, which tries both. The credential
+    carries its role: what the platform's RBAC grants it under ``/custom/ontology/``. A
+    member gets every role that lists them, combined, and the default role; an API key
+    limited to its own policies gets exactly those; an admin gets everything that only
+    reads, and a toolset that changes data only through a role that lists them. Raises
+    :class:`CredentialRefused` or :class:`RolesUnavailable`.
     """
     from django.conf import settings
 
     from iblai_ontology.backend.api import auth
     from iblai_ontology.backend.identity import role_source
 
-    if not settings.ONTOLOGY_DM_URL or not settings.ONTOLOGY_ADMIN_PLATFORMS:
-        # With no platform named, any platform's admin would reach every role here.
+    if not settings.ONTOLOGY_DM_URL or not settings.IBLAI_ORG:
         raise CredentialRefused(
             "ibl.ai tokens and API keys are not accepted here: this backend needs both "
             "its platform (IBLAI_ORG) and the address that verifies them (ONTOLOGY_DM_URL).",
             401,
         )
-    who = None
+    grants = who = None
+    said: dict[str, str] = {}  # the platform's words, per scheme it refused under
     for tried in ("Token", "Api-Token") if scheme == "Bearer" else (scheme,):
         try:
-            who = auth.platform_member(tried, token)
+            grants = auth.platform_grants(tried, token)
+            who = auth.platform_owner(tried, token)
             break
-        except auth.CredentialRejected:
-            continue
+        except auth.CredentialRejected as exc:
+            said[tried] = str(exc)
         except auth.PlatformSilent as exc:
             raise CredentialRefused(str(exc), 503) from exc
+    if grants is None:
+        if scheme == "Bearer":
+            reason = (
+                "This is not the service token, and the ibl.ai platform refused it as a "
+                f"token ({said['Token']}) and as an API key ({said['Api-Token']})."
+            )
+        else:
+            reason = f"The ibl.ai platform refused this {_KIND[scheme]}: {said[scheme]}"
+        raise CredentialRefused(reason, 401)
+    held = role_source.granted(grants)
     if who is None:
-        raise CredentialRefused(_REJECTED[scheme], 401)
-    if not who.member:
-        raise CredentialRefused(
-            "This credential's owner is not a member of this platform.", 403
-        )
-    resolver = resolver or RoleResolver()
-    defined = resolver.role_names()
-    if who.admin:
-        role = role_header or DEFAULT_ROLE
-        if role not in defined:
-            raise RoleNotPermitted(role)
+        # Never the key: twelve characters of its hash tell one key's calls from another's.
+        name = hashlib.sha256(token.encode()).hexdigest()[:12]
+        subject, role, spec = f"ibl-key:{name}", "platform-key", held
+    elif who.admin_here:
+        subject, role = f"ibl:{who.username}", "platform-admin"
+        spec = {**role_source.combine([_READS_ALL, held]), "concurrency_limits": {}}
     else:
-        held = {r for r in role_source.roles_of(who.username) if r in defined}
-        own = sorted(held - {DEFAULT_ROLE})
-        role = role_header or (own[0] if len(own) == 1 else DEFAULT_ROLE)
-        if role != DEFAULT_ROLE and role not in held:
-            raise RoleNotPermitted(role)
+        subject, role = f"ibl:{who.username}", "platform-user"
+        default = (resolver or RoleResolver()).spec(DEFAULT_ROLE)
+        spec = role_source.combine([held, default])
+    reach = ("memory_paths", "mcp_toolsets", "cache_tables", "admin_dashboard")
+    if not any(spec[field] for field in reach):
+        raise CredentialRefused(
+            "This credential holds no ontology grant on this platform.", 403
+        )
     identity = EntraIdentity(
         # Prefixed: no member's name can pass for the service account's in the audit log.
-        user_id=f"ibl:{who.username}",
-        email=who.email,
-        name=who.username,
+        user_id=subject,
+        email=who.email if who else "",
+        name=who.username if who else subject,
         roles=[role],
         groups=[],
         token_jti=None,
@@ -208,7 +213,7 @@ def resolve_platform_request(
         raw_claims={},
     )
     return ResolvedRequest(
-        identity=identity, permissions=resolver.resolve(role), emplid=None
+        identity=identity, permissions=permissions(role, spec), emplid=None
     )
 
 

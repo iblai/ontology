@@ -84,6 +84,8 @@ def run_checks() -> list[Check]:
             entry = get_entry(key)
         except KeyError:
             continue
+        if not entry.env:
+            continue  # read by the backend itself with a login the registry keeps (Twenty)
         missing = [v for v in entry.env if not os.environ.get(v)]
         checks.append(
             Check(

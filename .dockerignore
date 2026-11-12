@@ -1,4 +1,4 @@
-# The gateway and sync-engine images build from the repo root (COPY . /src).
+# The image builds from the repo root (COPY . /src).
 .git
 .venv
 frontend

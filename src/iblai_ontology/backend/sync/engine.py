@@ -5,7 +5,8 @@ store: Markdown text memories, the structured cache, and the vector index. Each
 run is recorded as a SyncRun.
 
 A database service is read straight through its own connection (``pull_table``,
-the schedule names ``service`` and ``table``). An API service is read through its
+the schedule names ``service`` and ``table``), and so is Twenty, over its REST API
+with the key its registry entry keeps. Another API service is read through its
 custom MCP server (``pull``, the schedule names a ``tool`` and a ``<name>-mcp``
 source). The MCP Toolbox serves agent-facing tools only.
 """
@@ -99,11 +100,18 @@ class SyncRunner:
     def pull_table(
         self, service, table: str, *, limit: int | None = None
     ) -> list[dict]:
-        """Rows of ``schema.table`` through the service's own connection, JSON-native values."""
+        """Rows of ``schema.table`` through the service's own connection, JSON-native values.
+
+        For Twenty ``table`` is an object's REST plural and the connection its REST API.
+        """
         from iblai_ontology.backend.discovery.engine import create_connection
+        from iblai_ontology.backend.services import twenty
         from iblai_ontology.backend.services.encryption import decrypt_connection_config
 
         config = decrypt_connection_config(service.connection_config_encrypted)
+        if service.adapter == twenty.ADAPTER:
+            rows = twenty.list_records(config, table)
+            return rows[:limit] if limit else rows
         name = _qualified(table, config.get("db_type"))
         sql = (
             _LIMIT_SQL.get(
@@ -140,10 +148,30 @@ class SyncRunner:
             refused = self.refuses(sched["tool"])
             if refused:
                 raise RuntimeError(f"schedule {sched.get('name')!r}: {refused}")
-            return self.pull(sched["tool"], url=self.mcp_url(sched.get("source") or ""))
+            source = sched.get("source") or ""
+            try:
+                url = self.mcp_url(source)
+            except RuntimeError:
+                if self._is_twenty(source.removesuffix("-mcp")):
+                    # Connected when Twenty was read by a container of its own.
+                    raise RuntimeError(
+                        f"schedule {sched.get('name')!r} is from before the backend read "
+                        "Twenty itself: remove this system and add it again."
+                    ) from None
+                raise
+            return self.pull(sched["tool"], url=url)
         raise ValueError(
             f"schedule {sched.get('name')!r} names neither a table nor a tool"
         )
+
+    @staticmethod
+    def _is_twenty(service: str) -> bool:
+        from iblai_ontology.backend import store
+        from iblai_ontology.backend.services import twenty
+        from iblai_ontology.backend.services.models import Service
+
+        found = store.first(Service, name=service)
+        return found is not None and found.adapter in (twenty.ADAPTER, "twenty")
 
     # -- schedule execution ---------------------------------------------
     def run_service(

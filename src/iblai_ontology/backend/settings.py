@@ -158,8 +158,13 @@ ENTRA_CLIENT_ID = os.environ.get("ENTRA_CLIENT_ID")
 SERVICE_TOKEN = os.environ.get("ONTOLOGY_SERVICE_TOKEN") or None
 
 # --- Celery --------------------------------------------------------------
-CELERY_BROKER_URL = os.environ.get("ONTOLOGY_CELERY_BROKER", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get("ONTOLOGY_CELERY_BACKEND", CELERY_BROKER_URL)
+# Syncs run on the worker when a broker is named; with none a task runs where it is
+# called, errors and all, so local use and the tests need neither a worker nor Redis.
+CELERY_BROKER_URL = os.environ.get("ONTOLOGY_CELERY_BROKER") or None
+CELERY_TASK_ALWAYS_EAGER = CELERY_BROKER_URL is None
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_IGNORE_RESULT = True  # nothing reads a task's result
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TIMEZONE = TIME_ZONE
 
 # --- Cache (backs gateway rate limiting) ---------------------------------
@@ -246,22 +251,26 @@ def _admin_platforms(environ=os.environ) -> set[str]:
 
 
 ONTOLOGY_ADMIN_PLATFORMS = _admin_platforms()
+# This backend's own platform, by key: the one whose RBAC says what a credential reaches on /mcp.
+IBLAI_ORG = (os.environ.get("IBLAI_ORG") or "").strip()
 # Where roles, sync schedules and the service registry live: this host (the YAML files and
 # this database), or with "dm" the ibl.ai platform of IBLAI_ORG, reached with
-# IBLAI_BASE_URL / IBLAI_ADMIN_TOKEN. Sync runs and the audit log stay here either way.
+# IBLAI_BASE_URL / IBLAI_ADMIN_TOKEN. "rbac" is for a platform that keeps no ontology
+# records: its RBAC holds the roles and the rest stays here. Sync runs and the audit log
+# stay here in all three.
 ONTOLOGY_DATA_STORE = os.environ.get("ONTOLOGY_DATA_STORE") or "local"
-if ONTOLOGY_DATA_STORE not in ("local", "dm"):
+if ONTOLOGY_DATA_STORE not in ("local", "rbac", "dm"):
     from django.core.exceptions import ImproperlyConfigured
 
     raise ImproperlyConfigured(
-        f"ONTOLOGY_DATA_STORE must be local or dm, not {ONTOLOGY_DATA_STORE!r}."
+        f"ONTOLOGY_DATA_STORE must be local, rbac or dm, not {ONTOLOGY_DATA_STORE!r}."
     )
-if ONTOLOGY_DATA_STORE == "dm":
+if ONTOLOGY_DATA_STORE != "local":
     from iblai_ontology.backend.platform.client import PlatformConfig
 
     # Fails here, not on the first request, when IBLAI_ORG / IBLAI_ADMIN_TOKEN are missing.
     PlatformConfig.from_env()
-# Seconds a process keeps the roles it read from the platform (dm) before asking again.
+# Seconds a process keeps the roles it read from the platform (rbac, dm) before asking again.
 ONTOLOGY_ROLES_TTL = int(os.environ.get("ONTOLOGY_ROLES_TTL") or 60)
 # Local dev without Entra/DM: anonymous requests act as a synthetic admin.
 ONTOLOGY_API_DEV_ALLOW_ANON = (

@@ -15,6 +15,7 @@ from iblai_ontology.backend.discovery.adapters import get_adapter
 from iblai_ontology.backend.discovery.config_generator import (
     ConfigGenerator,
     api_schedules_yaml,
+    api_tools_yaml,
     apply_overrides,
     apply_table_edits,
     rewrite_entity_files,
@@ -44,6 +45,22 @@ _DB_TYPE = {
 }
 
 
+CONNECT_TIMEOUT = 10  # seconds a PostgreSQL or MySQL server gets to answer a connection
+# Per engine: the database to open for the list, the query, and the engine's own databases.
+_LIST_DATABASES = {
+    "postgresql": (
+        "postgres",
+        "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate",
+        set(),  # `postgres` itself is where some keep their data
+    ),
+    "mysql": (
+        None,
+        "SHOW DATABASES",
+        {"information_schema", "performance_schema", "mysql", "sys"},
+    ),
+}
+
+
 def create_connection(adapter_or_type: str, config: dict):
     """Create a DB-API 2.0 connection for a service from its config."""
     db_type = config.get("db_type") or _DB_TYPE.get(adapter_or_type, "oracle")
@@ -67,6 +84,7 @@ def create_connection(adapter_or_type: str, config: dict):
             dbname=config["database"],
             user=config["username"],
             password=config["password"],
+            connect_timeout=CONNECT_TIMEOUT,
         )
     if db_type == "mysql":
         import pymysql
@@ -77,6 +95,7 @@ def create_connection(adapter_or_type: str, config: dict):
             database=config["database"],
             user=config["username"],
             password=config["password"],
+            connect_timeout=CONNECT_TIMEOUT,
         )
     if db_type == "sqlserver":
         import pyodbc
@@ -88,6 +107,35 @@ def create_connection(adapter_or_type: str, config: dict):
             f"UID={config['username']};PWD={config['password']}"
         )
     raise ValueError(f"Unsupported database type: {db_type}")
+
+
+def list_databases(
+    adapter: str, *, host: str, port: int, user: str, password: str
+) -> list[str]:
+    """The databases a login may open on a PostgreSQL or MySQL server, system ones left out.
+
+    The console's form offers them, so the name is picked, not typed. Raises the driver's
+    own error, and ``ValueError`` for an engine that has no such list to ask for.
+    """
+    db_type = _DB_TYPE.get(adapter)
+    if db_type not in _LIST_DATABASES:
+        raise ValueError(f"Databases cannot be listed for {adapter}.")
+    first, sql, own = _LIST_DATABASES[db_type]
+    config = {
+        "db_type": db_type,
+        "host": host,
+        "port": port,
+        "database": first,
+        "username": user,
+        "password": password,
+    }
+    conn = create_connection(adapter, config)
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        return sorted(row[0] for row in cur.fetchall() if row[0] not in own)
+    finally:
+        conn.close()
 
 
 class SafetyError(RuntimeError):
@@ -227,15 +275,23 @@ class DiscoveryEngine:
         )
 
     def register_api(
-        self, *, name: str, adapter: str, host: str = "", output_dir: str | None = None
+        self,
+        *,
+        name: str,
+        adapter: str,
+        host: str = "",
+        api_key: str = "",
+        output_dir: str | None = None,
     ):
         """Register an API source without database discovery.
 
-        The Service row plus the catalog's ``sync_defaults`` as schedules; the
-        service's custom MCP server (``mcp-servers/``, reached at ``MCP_<NAME>_URL``)
-        does the pulling once approved.
+        The Service row plus the catalog's ``sync_defaults`` as schedules. Twenty is read
+        by the backend itself with ``api_key``, which is tried before anything is saved,
+        and gets its create and update tools; another system's custom MCP server
+        (``mcp-servers/``, reached at ``MCP_<NAME>_URL``) does the pulling once approved.
         """
         from iblai_ontology.backend import store
+        from iblai_ontology.backend.services import twenty
         from iblai_ontology.backend.services.encryption import encrypt_connection_config
         from iblai_ontology.backend.services.models import Service
         from iblai_ontology.catalog import list_entries
@@ -251,6 +307,24 @@ class DiscoveryEngine:
             if entry
             else ""
         )
+        in_process = bool(entry) and entry.adapter == twenty.ADAPTER
+        if in_process:
+            if not api_key:
+                raise twenty.TwentyError("Twenty needs an API key.")
+            config = {
+                "db_type": "api",
+                "host": twenty.address(host),
+                "api_key": api_key,
+            }
+            # A wrong address or key is said now, not by the first sync.
+            twenty.check(config)
+            host, adapter = config["host"], entry.adapter
+        else:
+            config = {
+                "db_type": "api",
+                "host": host,
+                "env": list(entry.env) if entry else [],
+            }
         service = store.first(Service, name=name) or Service(name=name)
         defaults = {
             "display_name": display,
@@ -258,13 +332,7 @@ class DiscoveryEngine:
             "adapter": adapter,
             "host": host,
             "status": Service.Status.PENDING,
-            "connection_config_encrypted": encrypt_connection_config(
-                {
-                    "db_type": "api",
-                    "host": host,
-                    "env": list(entry.env) if entry else [],
-                }
-            ),
+            "connection_config_encrypted": encrypt_connection_config(config),
         }
         for field, value in defaults.items():
             setattr(service, field, value)
@@ -278,8 +346,12 @@ class DiscoveryEngine:
                 display,
                 entry.sync_defaults if entry else {},
                 entry.mapping if entry else None,
+                in_process=in_process,
             )
         )
+        tools = api_tools_yaml(name, display, entry) if in_process else ""
+        if tools:
+            (out / "tools.yaml").write_text(tools)
         return service
 
     def map(

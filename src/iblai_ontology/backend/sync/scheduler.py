@@ -1,16 +1,13 @@
-"""Cron-based scheduling from sync-schedules.yaml (Component 2).
+"""Cron-based scheduling of the sync schedules (Component 2).
 
-Translates the declarative schedules into Celery beat entries. Sync modes:
+Celery beat runs one task a minute (``tasks.tick``), which asks :func:`due` of each
+schedule. Sync modes:
   * full   — periodic full refresh (nightly/weekly)
   * delta  — frequent incremental refresh (minutes)
   * event  — driven by webhooks (registered out-of-band, not on a cron)
 """
 
 from __future__ import annotations
-
-from typing import Any
-
-from iblai_ontology.backend.sync import schedules
 
 
 def _parse_cron(expr: str) -> dict[str, str]:
@@ -33,19 +30,18 @@ def infer_mode(cron: str) -> str:
     return "full"
 
 
-def build_beat_schedule() -> dict[str, dict[str, Any]]:
-    """Build a Celery beat schedule dict from the sync schedules."""
+def due(sched: dict) -> bool:
+    """Whether a schedule's cron has come round since its newest run; one that never ran is due."""
     from celery.schedules import crontab
 
-    beat: dict[str, dict[str, Any]] = {}
-    for sched in schedules.all():
-        name = sched["name"]
-        cron = sched.get("cron")
-        if not cron or sched.get("enabled", True) is False:
-            continue  # event-driven schedules have no cron; disabled ones never run
-        beat[f"sync-{name}"] = {
-            "task": "iblai_ontology.backend.sync.tasks.run_schedule",
-            "schedule": crontab(**_parse_cron(cron)),
-            "args": (name,),
-        }
-    return beat
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.celery import app
+    from iblai_ontology.backend.sync.models import SyncRun
+
+    cron = sched.get("cron")
+    if not cron or sched.get("enabled", True) is False:
+        return False  # event-driven schedules have no cron; disabled ones never run
+    last = store.first(SyncRun, order="-started_at", schedule_name=sched["name"])
+    if last is None:
+        return True
+    return crontab(**_parse_cron(cron), app=app).is_due(last.started_at).is_due

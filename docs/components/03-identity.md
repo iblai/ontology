@@ -27,7 +27,7 @@ The on-premise gateway does **one** authorization job: given a validated identit
 
 ### Callers without an Entra ID token
 
-Two more kinds of caller reach the same role check: the ibl.ai platform itself, with the shared service token, and a member of the platform with their own credential (a DM token as `Token`, a platform API key as `Api-Token`, either one behind `Bearer`). A member's role is one the platform's policy `Ontology: <role>` gives them. Both are in the deep dive: [the service token](../identity.md#the-platform-service-token), [a person's own credential](../identity.md#a-persons-own-iblai-credential).
+Two more kinds of caller reach the same role check: the ibl.ai platform itself, with the shared service token, and an ibl.ai credential (a DM token as `Token`, a platform API key as `Api-Token`, either one behind `Bearer`). Such a credential carries its role and takes no `X-Iblai-Role`: a member reaches every role the platform's policies `Ontology: <role>` list them on, a key made for an agent exactly the role it was made for. Both are in the deep dive: [the service token](../identity.md#the-platform-service-token), [a person's own credential](../identity.md#a-persons-own-iblai-credential).
 
 ### Two identity options
 

@@ -1,11 +1,12 @@
-"""Where roles come from: roles.yaml on this host, or the ibl.ai platform in dm mode.
+"""Where roles come from: roles.yaml on this host, or the ibl.ai platform (rbac and dm).
 
-In dm a role is one of the platform's own RBAC roles that holds an ``Ontology/…`` verb. What
+There a role is one of the platform's own RBAC roles that holds an ``Ontology/…`` verb. What
 it reaches is the resources of its one policy, ``Ontology: <role>``, under ``/custom/ontology/``
 (the platform's namespace for a client's own verbs); no other policy is read or written. What
 a role holds besides grants (display name, agents, limits) is an ontology record of kind
-``role``. A spec keeps the shape roles.yaml has and is stored and read as written: ``${VAR}``
-is expanded for the file only, and roles.yaml itself is never opened in dm.
+``role``: the platform's in dm, this host's own in rbac. A spec keeps the shape roles.yaml has
+and is stored and read as written: ``${VAR}`` is expanded for the file only, and roles.yaml
+itself is never opened there.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ import re
 import time
 from typing import Any
 
-from iblai_ontology.backend.identity.roles import RolesUnavailable
-from iblai_ontology.config import dm_store
+from iblai_ontology.backend.identity.roles import DEFAULT_ROLE, RolesUnavailable
+from iblai_ontology.config import platform_roles
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,8 @@ ALL_VERBS = "Ontology/*"  # what a role the ontology creates holds
 POLICY = "Ontology: "  # a role's one policy is named this plus the role's name
 _NAME = re.compile(r"[A-Za-z0-9_-]+")  # one segment of a resource: no dot, $ or braces
 _SELF = "USER_EMPLID"  # how a resource spells ${USER_EMPLID}
+# A role's rows per cache query as a resource: a caller's grants carry no role name to find its record by.
+_ROWS = re.compile(re.escape(ROOT) + r"limits/rows/([1-9][0-9]*)/?")
 # The fields of a `role` record: what a role holds besides its grants.
 _KEPT = ("display_name", "agents", "concurrency_limits")
 
@@ -178,6 +181,9 @@ def _resources(spec: dict[str, Any]) -> list[str]:
         out.append(f"{ROOT}console/")
     if not spec.get("self_service"):
         out.append(f"{ROOT}subjects/")
+    rows = (spec.get("concurrency_limits") or {}).get("max_records_per_query")
+    if isinstance(rows, int) and not isinstance(rows, bool) and rows > 0:
+        out.append(f"{ROOT}limits/rows/{rows}/")
     # In the DM's own order: by depth, then by name.
     return sorted(set(out), key=lambda resource: (resource.count("/"), resource))
 
@@ -213,6 +219,8 @@ def _read(resources: list[str]) -> dict[str, set[str]]:
         if not path.startswith(ROOT):
             continue  # not the ontology's
         kind, _, tail = path[len(ROOT) :].partition("/")
+        if kind == "limits":
+            continue  # a limit grants nothing; `granted` reads it
         name = "*" if not tail else _name(kind, tail[:-1])
         if kind not in granted or name is None:
             logger.warning("roles: %s grants nothing here and is skipped", resource)
@@ -245,12 +253,54 @@ def _spec(name: str, role: dict, resources: list[str], kept: dict) -> dict[str, 
     }
 
 
+def combine(specs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Several role specs as one: every grant of each.
+
+    A limit is the largest any of them names, and subjects stay the caller's own unless
+    one of them lifts that.
+    """
+
+    def union(field: str) -> list[str]:
+        return sorted({item for spec in specs for item in spec.get(field) or []})
+
+    # ponytail: a role with no limit does not lift another's; grants carry no role names to tell.
+    limits: dict[str, int] = {}
+    for spec in specs:
+        for name, value in (spec.get("concurrency_limits") or {}).items():
+            if isinstance(value, int) and not isinstance(value, bool):
+                limits[name] = max(value, limits.get(name, value))
+    return {
+        "memory_paths": union("memory_paths"),
+        "mcp_toolsets": union("mcp_toolsets"),
+        "cache_tables": union("cache_tables"),
+        "agents": union("agents"),
+        "concurrency_limits": limits,
+        "admin_dashboard": any(spec.get("admin_dashboard") for spec in specs),
+        "self_service": all(spec.get("self_service") for spec in specs),
+    }
+
+
+def granted(grants: dict[str, dict]) -> dict[str, Any]:
+    """The spec a caller's own grants amount to: every role that lists them, combined.
+
+    ``grants`` is ``{resource: {"actions": [...]}}`` as the platform resolves them under
+    ROOT; a resource counts only where it is held with its kind's verb.
+    """
+    spec = combine(
+        [_spec("", held, [resource], {}) for resource, held in grants.items()]
+    )
+    rows = [int(found[1]) for found in map(_ROWS.fullmatch, grants) if found]
+    if rows:
+        spec["concurrency_limits"] = {"max_records_per_query": max(rows)}
+    return spec
+
+
 # -- reading and writing -----------------------------------------------------------------------
 
 
 def load_roles() -> dict[str, dict[str, Any]]:
     """Every role spec as stored, read now: never the cache, never expanded."""
-    if not dm_store():
+    if not platform_roles():
         from iblai_ontology.config import writer
 
         return writer.load_roles()
@@ -268,43 +318,6 @@ def load_roles() -> dict[str, dict[str, Any]]:
         for name, role in _platform_roles().items()
         if _ours(role)
     }
-
-
-def roles_of(username: str) -> list[str]:
-    """The ontology roles a member of the platform holds: the policies ``Ontology: <role>``
-    that list them, alone or through a group. None when the roles live in roles.yaml.
-
-    Kept for ``ONTOLOGY_ROLES_TTL`` seconds; raises :class:`RolesUnavailable` when the
-    platform does not answer, so nobody is given the default role instead.
-    """
-    if not dm_store():
-        return []
-    import httpx
-    from django.conf import settings
-    from django.core.cache import cache
-
-    key = f"{CACHE_KEY}:of:{username}"
-    held = cache.get(key)
-    if held is None:
-        try:
-            held = sorted(
-                policy["role"]["name"]
-                for policy in _policies(name=POLICY.strip(), username=username)
-                if policy["name"] == POLICY + policy["role"]["name"]
-            )
-        except (
-            RuntimeError,
-            ValueError,
-            LookupError,
-            TypeError,
-            httpx.HTTPError,
-        ) as exc:
-            logger.error(
-                "roles: the platform did not say what %s holds: %s", username, exc
-            )
-            raise RolesUnavailable(str(exc)) from exc
-        cache.set(key, held, settings.ONTOLOGY_ROLES_TTL)
-    return held
 
 
 def _forget() -> None:
@@ -349,8 +362,8 @@ def _write_policy(name: str, role: dict, resources: list[str]) -> None:
 
 
 def put_role(name: str, spec: dict[str, Any]) -> None:
-    """Create or replace one role: in dm the platform role, its one policy and its record."""
-    if not dm_store():
+    """Create or replace one role: in the platform its role, its one policy and its record."""
+    if not platform_roles():
         from iblai_ontology.config import writer
 
         return writer.put_role(name, spec)
@@ -401,8 +414,8 @@ def put_role(name: str, spec: dict[str, Any]) -> None:
 
 
 def delete_role(name: str) -> bool:
-    """Remove a role: in dm the platform role, whose policy goes with it, and its record."""
-    if not dm_store():
+    """Remove a role: in the platform its role, whose policy goes with it, and its record."""
+    if not platform_roles():
         from iblai_ontology.config import writer
 
         return writer.delete_role(name)
@@ -429,6 +442,36 @@ def delete_role(name: str) -> bool:
     return True
 
 
+_REACH = ("memory_paths", "mcp_toolsets", "cache_tables")  # what a role reaches
+
+
+def extend_role(name: str, reach: dict[str, list[str]], display_name: str = "") -> None:
+    """Give the role ``name`` this reach on top of what it holds; a role that is not there is made."""
+    if name == DEFAULT_ROLE:
+        raise RuntimeError(
+            f"The role {DEFAULT_ROLE!r} is every signed-in member's: it is not given a "
+            "system's reach. Name the system something else."
+        )
+    spec = load_roles().get(name) or {"display_name": display_name or name}
+    for field in _REACH:
+        spec[field] = sorted({*(spec.get(field) or []), *(reach.get(field) or [])})
+    put_role(name, spec)
+
+
+def reduce_role(name: str, reach: dict[str, list[str]]) -> None:
+    """Take this reach back from the role ``name``; a role left reaching nothing is removed."""
+    spec = load_roles().get(name)
+    if spec is None or name == DEFAULT_ROLE:
+        return
+    for field in _REACH:
+        gone = reach.get(field) or []
+        spec[field] = [held for held in spec.get(field) or [] if held not in gone]
+    if any(spec[field] for field in _REACH) or spec.get("admin_dashboard"):
+        put_role(name, spec)
+    else:
+        delete_role(name)
+
+
 _seed_asked = False  # each process asks the platform once
 
 
@@ -439,7 +482,7 @@ def seed_once() -> None:
     deleted. Never raises: the console works without the examples.
     """
     global _seed_asked
-    if _seed_asked or not dm_store():
+    if _seed_asked or not platform_roles():
         return
     _seed_asked = True
     import httpx
@@ -447,14 +490,18 @@ def seed_once() -> None:
     from iblai_ontology.backend import store
 
     try:
-        asked = store.client().records("GET", "setup", "roles", ok=(404,))
-        if asked.status_code != 404:
+        if store.record("setup", "roles") is not None:
             return
         written = []
         if not load_roles():
+            from iblai_ontology.config.reader import ConfigReader
+
+            # Only toolsets this backend defines: a role naming another cannot be saved again.
+            known = {"*", *ConfigReader().get_toolsets()}
             for name, spec in EXAMPLE_ROLES.items():
+                toolsets = [t for t in spec["mcp_toolsets"] if t in known]
                 try:
-                    put_role(name, spec)
+                    put_role(name, {**spec, "mcp_toolsets": toolsets})
                 except RuntimeError as exc:
                     logger.error(
                         "roles: the example role %s was refused: %s", name, exc
@@ -469,7 +516,7 @@ def seed_once() -> None:
 
 
 class DmRoles:
-    """What ``RoleResolver`` reads in dm mode: the platform's roles, kept for
+    """What ``RoleResolver`` reads in rbac and dm: the platform's roles, kept for
     ``ONTOLOGY_ROLES_TTL`` seconds and past that while the platform does not answer."""
 
     def get_roles(self) -> dict[str, Any]:
@@ -502,7 +549,7 @@ class DmRoles:
 
 def reader():
     """What ``RoleResolver`` reads roles from."""
-    if dm_store():
+    if platform_roles():
         return DmRoles()
     from iblai_ontology.config.reader import ConfigReader
 

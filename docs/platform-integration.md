@@ -235,29 +235,60 @@ call and always send the stored credentials as `Bearer`, which is why the token 
 
 ## A Member's Own Credential
 
-A connection can also carry a credential of the person or the team it serves instead of the
-shared service token: a DM token, or a platform API key. The gateway then knows who is calling,
-and the role is one the platform assigned to them, not one the connection claims.
+A connection can also carry a credential of the person, the team or the agent it serves instead
+of the shared service token: a DM token, or a platform API key. The gateway then knows who is
+calling, and the role is what the platform's RBAC grants that credential, not one the connection
+claims.
 
-| Stored `credentials` (`auth_type: "none"`, sent verbatim) | The gateway sees |
-|---|---|
-| `Token <dm_token>` | That member |
-| `Api-Token <key>` | The key's owner |
-| `Bearer <dm_token or key>` | Whichever it turns out to be |
+| Stored `credentials` (`auth_type: "none"`, sent verbatim) | The gateway sees | Reaches |
+|---|---|---|
+| `Token <dm_token>` | That member | Every role that lists them, combined, plus `default` |
+| `Api-Token <key>` (acts as its owner) | The key's owner | The same |
+| `Api-Token <key>` (limited to its own policies) | The key, by twelve characters of its hash | Exactly the roles attached to it |
+| `Bearer <dm_token or key>` | Whichever it turns out to be | As above |
 
-The third row is for the path above where the scheme is always `Bearer`: the gateway tries the
-value as a token, then as an API key. An API key must act as its owner (the default mode); one
-limited to its own policies is rejected by the platform's verify endpoint.
+The last row is for the path above where the scheme is always `Bearer`: the gateway tries the
+value as a token, then as an API key.
 
-Give the person their role in the platform's RBAC screens: add them, or a group of theirs, to the
-policy `Ontology: <role>`. `X-Iblai-Role` in `extra_headers` then only selects among the roles
-they hold; without it a member with exactly one role runs as that role. An administrator of the
-platform may name any role. The backend needs `ONTOLOGY_DM_URL` and `IBLAI_ORG` to take such a
-credential at all, and `ONTOLOGY_DATA_STORE=dm` (roles kept in the platform) for a member to be
-given a role. The full rules are in [identity.md](identity.md#a-persons-own-iblai-credential).
+No `extra_headers` are needed, and `X-Iblai-Role` must not be sent: with such a credential the
+gateway answers it `400`, because the credential carries its own role. An administrator's token
+or key reads everything and changes nothing, unless a role that lists them names a toolset that
+changes data. Give a person their role in the platform's RBAC screens: add them, or a group of
+theirs, to the policy `Ontology: <role>`. The backend needs `ONTOLOGY_DM_URL` and `IBLAI_ORG` to
+take such a credential at all, and `ONTOLOGY_DATA_STORE=rbac` or `dm` (roles kept in the
+platform) for anyone to be given a role. The full rules are in
+[identity.md](identity.md#a-persons-own-iblai-credential).
 
 The platform stores one credential per server or connection: it does not forward the token of
 whoever is chatting. Per-person identity through the platform is still the Entra flow above.
+
+---
+
+## Connect an Agent
+
+The console's **Agents** page does the three steps for one agent and one role (roles kept in
+the platform, `ONTOLOGY_DATA_STORE=rbac` or `dm`): pick the agent, pick the role, press Connect.
+The role selected at first is the first one that can change data. Connecting Twenty CRM makes
+such a role, named after the system: it may query the system's tables, read their memory and
+use its operations.
+
+| Step | In the platform | With |
+|---|---|---|
+| A key for the role | `POST /api/core/platform/api-tokens/`, `mode: "token_policies"`, `policies_to_add: [<the id of Ontology: <role>>]` | The administrator's own sign-in: the platform lets nothing else make or delete a key |
+| The gateway, for that agent alone | `POST …/mcp-servers/` with `mentor: <agent id>`, `auth_type: "none"`, `credentials: "Api-Token <key>"`, `url: ONTOLOGY_GATEWAY_URL` | The backend's key |
+| The agent's MCP tool switched on | `PUT …/mentors/<agent id>/settings/`, keeping its other tools and servers | The backend's key |
+| What was made | The ontology record `agent_connection/<name>`: agent, role, server, the key's id and twelve characters of its hash. Never the key. With `rbac` it is a row of the backend's own database | The backend's key |
+
+A step that fails takes back the ones before it, and the answer says what could not be taken
+back. Removing a connection deletes the key first, so access stops at once, then the server,
+then the record. One agent holds one connection per role. The key does not expire: removing the
+connection is what revokes it. In the audit log its calls read `ibl-key:<those twelve
+characters>` with the role `platform-key`; `GET /agent-connections` answers the same twelve as
+`fingerprint`, so a row of the log can be matched to its connection.
+
+By hand, the same thing is a platform API key in the agent's MCP dialog: the gateway's address,
+and the key as `Api-Token <key>`, `Token <token>` or behind `Bearer`. A plain administrator key
+reads everything and changes nothing.
 
 ---
 

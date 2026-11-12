@@ -20,6 +20,8 @@ health_urls = [
 
 service_urls = [
     path("services", views.ServicesView.as_view()),
+    # Before the name: a service cannot be called `databases`.
+    path("services/databases", views.ServiceDatabasesView.as_view()),
     path("services/<str:name>", views.ServiceDetailView.as_view()),
     path("services/<str:name>/runs", views.ServiceRunsView.as_view()),
     path("services/<str:name>/safety", views.ServiceSafetyView.as_view()),
@@ -61,6 +63,9 @@ misc_urls = [
     path("roles/<str:name>", views.RoleDetailView.as_view()),
     path("graph", views.GraphView.as_view()),
     path("graph/records", views.GraphRecordsView.as_view()),
+    path("agents", views.AgentsView.as_view()),
+    path("agent-connections", views.AgentConnectionsView.as_view()),
+    path("agent-connections/<str:name>", views.AgentConnectionDetailView.as_view()),
     path("counts", views.CountsView.as_view()),
     path("config", views.ConfigFilesView.as_view()),
     path("reset", views.ResetView.as_view()),

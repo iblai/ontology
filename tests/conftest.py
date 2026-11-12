@@ -43,10 +43,15 @@ def repo_config_dir(monkeypatch):
 
 class FakeDm:
     """The ibl.ai platform as the ontology calls it, in memory: the ontology records,
-    the RBAC roles and their policies, with the answers the DM's own tests pin down."""
+    the RBAC roles and their policies, the agents, their MCP servers and the API keys,
+    with the answers the DM's own tests pin down."""
 
     ORG = "acme"
     RESERVED = {"Students", "Tenant Admin"}  # the DM keeps its internal role names
+    SESSION = "an-admins-session"  # an admin's own sign-in, sent as ``Token``
+    AGENTS = (
+        "api/ai-agent/orgs/acme/users/admin"  # where agents and their MCP servers live
+    )
 
     def __init__(self):
         self.records: dict[tuple[str, str], dict] = {}  # (kind, key) -> record
@@ -56,6 +61,14 @@ class FakeDm:
         self.down = None  # a (status, body) to answer every call with
         self.refuse_policy = None  # a (status, body) to answer every policy write with
         self.platform = self.ORG  # the platform the credential belongs to
+        self.agents: list[dict] = []  # newest first, as the DM lists them
+        self.keys: dict[str, dict] = {}  # unique_id -> the key as made, and who made it
+        self.servers: dict[int, dict] = {}  # id -> the MCP server as registered
+        self.settings: dict[str, dict] = {}  # agent -> its settings as last put
+        # A (status, body) to answer with: a key made or deleted, a server registered,
+        # an agent's settings put.
+        self.refuse_key = self.refuse_key_delete = None
+        self.refuse_server = self.refuse_settings = None
 
     def sent(self, method: str | None = None) -> list[tuple[str, str]]:
         """The (method, path) of each call, or the paths of one method's calls."""
@@ -68,10 +81,26 @@ class FakeDm:
         self.calls.append(request)
         if self.down is not None:
             return httpx.Response(self.down[0], json=self.down[1])
-        assert request.headers["authorization"] == "Api-Token key"
+        sent = request.headers["authorization"]
+        own, admin = sent == "Api-Token key", sent == f"Token {self.SESSION}"
+        assert own or admin, sent
         body = json.loads(request.content) if request.content else None
-        parts = request.url.path.strip("/").split("/")
-        if parts[:3] == ["v1", "ontology", "kinds"] and parts[4] == "records":
+        path = request.url.path.strip("/")
+        parts = path.split("/")
+        if parts[:4] == ["api", "core", "platform", "api-tokens"]:
+            # As the platform routes them: the list ends in a slash, one key's address does not.
+            if request.url.path.endswith("/") == (len(parts) > 4):
+                answer = 404, {"detail": "Not found."}
+            # Only a signed-in admin makes or deletes a key: never a key, the backend's included.
+            elif admin:
+                answer = self._keys(request, (parts[4:] or [None])[0], body)
+            else:
+                answer = 403, {"detail": "Invalid token."}
+        elif path == self.AGENTS or path.startswith(self.AGENTS + "/"):
+            answer = self._agents(request, parts[6:], body)
+        elif not own:
+            answer = 403, {"detail": "Invalid token."}
+        elif parts[:3] == ["v1", "ontology", "kinds"] and parts[4] == "records":
             assert request.headers["iblai-org"] == self.ORG
             answer = self._records(request, parts[3], (parts[5:] or [None])[0], body)
         elif parts[:4] == ["api", "core", "rbac", "roles"]:
@@ -154,6 +183,61 @@ class FakeDm:
             "previous_page": page - 1 or None,
             "results": found[(page - 1) * size : page * size],
         }
+
+    # -- agents, their MCP servers and settings; api/core/platform/api-tokens ------
+
+    def add_agent(self, name: str) -> str:
+        """A new agent, listed first as the newest is; returns its unique id."""
+        unique_id = f"{len(self.agents) + 1:08d}-0000-4000-8000-000000000000"
+        self.agents.insert(0, {"unique_id": unique_id, "name": name, "slug": name})
+        return unique_id
+
+    def _agents(self, request, rest, body):
+        if not rest:
+            return 200, self._page(self.agents, request)
+        if rest[0] == "mcp-servers" and len(rest) == 1:
+            if self.refuse_server is not None:
+                return self.refuse_server
+            server = {"id": max(self.servers, default=0) + 1, **body}
+            self.servers[server["id"]] = server
+            return 201, server
+        if rest[0] == "mcp-servers":
+            return (204, None) if self.servers.pop(int(rest[1]), None) else (404, {})
+        assert rest[0] == "mentors" and rest[2] == "settings", rest
+        if request.method == "GET":
+            return 200, self.settings.get(rest[1]) or {
+                "tool_slugs": [],
+                "mcp_servers": [],
+            }
+        if self.refuse_settings is not None:
+            return self.refuse_settings
+        self.settings[rest[1]] = body
+        return 200, body
+
+    def _keys(self, request, unique_id, body):
+        if unique_id is not None:
+            if self.refuse_key_delete is not None:
+                return self.refuse_key_delete
+            return (204, None) if self.keys.pop(unique_id, None) else (404, {})
+        if self.refuse_key is not None:
+            return self.refuse_key
+        if any(key["name"] == body["name"] for key in self.keys.values()):
+            return 400, {"name": ["A key with this name already exists"]}
+        known = {policy["id"]: policy["name"] for policy in self.policies}
+        wanted = body.get("policies_to_add") or []
+        if not set(wanted) <= set(known):
+            wrong = "One or more policies do not belong to this platform"
+            return 400, {"policies": wrong}
+        made = {
+            "unique_id": f"key-{len(self.calls)}",
+            "name": body["name"],
+            "mode": body.get("mode", "owner"),
+            "policies": [{"id": p, "name": known[p]} for p in wanted],
+            # Answered once, at creation: never again.
+            "key": f"{len(self.calls):064x}",
+        }
+        self.keys[made["unique_id"]] = {**made, "by": request.headers["authorization"]}
+        return 201, made
 
     # -- api/core/rbac/roles/[<id>/] ---------------------------------------------
 
@@ -352,3 +436,13 @@ def dm(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "client", lambda: client)
     yield fake
     cache.clear()
+
+
+@pytest.fixture()
+def rbac(dm, monkeypatch):
+    """rbac mode against the same ``FakeDm``: its roles are the platform's, its records this host's."""
+    from django.conf import settings
+
+    monkeypatch.setenv("ONTOLOGY_DATA_STORE", "rbac")
+    monkeypatch.setattr(settings, "ONTOLOGY_DATA_STORE", "rbac")
+    return dm

@@ -7,6 +7,7 @@ the caller's resolved role:
     tools/list         list the tools the caller may use (with their inputSchema)
     tools/call         execute a tool (MCP Toolbox proxy / cache query / memory read)
     read-memory        read a text-memory file (role-scoped path)
+    describe-cache     the cache tables the role may query, with their columns
     query-cache        run a read-only SELECT against the cache
     get-sync-status    admin-only sync status
 
@@ -23,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from iblai_ontology.backend.identity.roles import Permissions
+from iblai_ontology.backend.mcp_server.toolbox_config import GATEWAY_TYPES
 from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
 
 # Argument names that carry a subject (person) identifier. For a self-service
@@ -56,6 +58,14 @@ BUILTIN_TOOLS = {
                 "description": "Logical path, e.g. /ontology/students/S1.md",
             }
         ],
+    },
+    "describe-ontology-cache": {
+        "name": "describe-ontology-cache",
+        "description": (
+            "List the ontology cache tables you may query, each with its columns. "
+            "Call this before query-ontology-cache."
+        ),
+        "parameters": [],
     },
     "query-ontology-cache": {
         "name": "query-ontology-cache",
@@ -158,11 +168,13 @@ class MCPHandlers:
     def list_tools(self) -> list[dict]:
         """The caller's tools: tools.yaml ones in scope, plus the gateway's own."""
         specs = {t["name"]: t for t in self.resolver.tool_specs(self.ctx.permissions)}
-        scoped = set(self.resolver.scope_for(self.ctx.permissions).tool_names)
-        # The gateway serves these itself, so its own schema wins over tools.yaml's.
+        # The gateway serves these itself: its own schema, and its own rule for who gets them.
+        cache_tools = ("describe-ontology-cache", "query-ontology-cache")
+        for name in cache_tools:
+            specs.pop(name, None)
         specs["read-memory"] = BUILTIN_TOOLS["read-memory"]
-        if "query-ontology-cache" in scoped:
-            specs["query-ontology-cache"] = BUILTIN_TOOLS["query-ontology-cache"]
+        if self.ctx.permissions.cache_tables:
+            specs |= {name: BUILTIN_TOOLS[name] for name in cache_tools}
         if self._may_see_sync_status():
             specs.setdefault("get-sync-status", BUILTIN_TOOLS["get-sync-status"])
         writing = self.resolver.writing
@@ -231,6 +243,41 @@ class MCPHandlers:
         ):
             raise PermissionDenied("path escapes the memory root")
         return real_candidate
+
+    # -- describe-cache --------------------------------------------------
+    def _require_tables(self) -> None:
+        """Deny unless the role may query some cache table: the grant is the table, not a toolset."""
+        if not self.ctx.permissions.cache_tables:
+            raise PermissionDenied(
+                f"role '{self.ctx.permissions.role}' cannot query the ontology cache"
+            )
+
+    def describe_cache(self) -> list[dict]:
+        """The cache tables the caller may query, each with its columns."""
+        from django.db import connection
+
+        from iblai_ontology.backend.sync import schedules
+
+        perms = self.ctx.permissions
+        # What the schedules fill, and what the role names itself (the two logs, say).
+        named = {
+            (sched.get("output") or {}).get("structured_cache")
+            for sched in schedules.all()
+        } | set(perms.cache_tables)
+        with connection.cursor() as cursor:
+            reader = connection.introspection
+            present = set(reader.table_names(cursor))
+            return [
+                {
+                    "table": table,
+                    "columns": [
+                        c.name for c in reader.get_table_description(cursor, table)
+                    ],
+                }
+                for table in sorted(
+                    t for t in named if t in present and perms.allows_cache_table(t)
+                )
+            ]
 
     # -- query-cache -----------------------------------------------------
     @staticmethod
@@ -385,13 +432,14 @@ class MCPHandlers:
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         # Built-in tools are served directly here but remain subject to
         # authorization: read-memory and get-sync-status carry their own checks;
-        # the cache-query aliases pass the same toolset-scope test as any tool.
+        # the cache tools need a table grant, and the query checks each table it reads.
         if name == "read-memory":
             return self.read_memory(arguments["path"])
+        if name == "describe-ontology-cache":
+            self._require_tables()
+            return self.describe_cache()
         if name in ("query-ontology-cache", "query-cache"):
-            # `query-cache` is an alias for the scoped `query-ontology-cache`
-            # tool; both are gated on that tool being in the caller's scope.
-            self._require_scoped("query-ontology-cache")
+            self._require_tables()
             return self.query_cache(
                 arguments["sql"], limit=int(arguments.get("limit", 100))
             )
@@ -411,7 +459,39 @@ class MCPHandlers:
                     "which records the call first"
                 )
             self.ctx.before_write(name, arguments)
+            # An API system's own operation is always a change, and never the Toolbox's.
+            spec = self.resolver.spec(name)
+            if spec.get("type") in GATEWAY_TYPES:
+                return self._change_at_source(spec, arguments)
         return self._proxy_to_toolbox(name, arguments)
+
+    def _change_at_source(self, spec: dict, arguments: dict[str, Any]) -> dict:
+        """Run an API system's named operation here, then hand the record to the cache.
+
+        The change is made with the system's own registry login; what the system refuses
+        is raised, and reaches the agent as the tool's error. The worker writes the cache
+        row and the memory; when it cannot be told, the answer says so and stays a success,
+        since the change already happened.
+        """
+        from iblai_ontology.backend import store
+        from iblai_ontology.backend.services import twenty
+        from iblai_ontology.backend.services.encryption import decrypt_connection_config
+        from iblai_ontology.backend.services.models import Service
+        from iblai_ontology.backend.sync import tasks
+        from iblai_ontology.catalog import get_entry
+
+        service = store.first(Service, name=spec.get("service"))
+        if service is None or service.adapter != twenty.ADAPTER:
+            raise MCPError(f"{spec['name']} names a system that is not connected")
+        config = decrypt_connection_config(service.connection_config_encrypted)
+        record, rows = twenty.call(config, get_entry(spec["type"]), spec, arguments)
+        try:
+            for plural, changed in rows.items():
+                tasks.write_rows.delay(f"{service.name}-{plural}", changed)
+            cache = "refresh queued"
+        except Exception as exc:
+            cache = f"not refreshed ({exc}); the next sync brings it in"
+        return {"record": record, "cache": cache}
 
     def _proxy_to_toolbox(self, name: str, arguments: dict[str, Any]) -> Any:
         """Call a tool on the inbound MCP Toolbox via the shared /mcp client."""

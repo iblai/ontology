@@ -4,9 +4,71 @@
 
 iblai-ontology deploys as a **Docker Compose stack** on university infrastructure. The stack contains *only* the knowledge layer — the data stores, the MCP servers, the identity gateway, and the MCP exposure endpoint. **The agent runtime is not part of the stack**; it connects remotely over MCP (see [platform-integration.md](platform-integration.md)).
 
+There are two stacks. A server that works with the ibl.ai platform and the hosted console is installed with one command, from a published image ([Install on Ubuntu](#install-on-ubuntu)). The repository's `docker-compose.yml` is the developer stack, with the MCP Toolbox and the connector containers ([The Stack](#the-stack) and everything after it).
+
+---
+
+## Install on Ubuntu
+
+For a platform's administrator who has a fresh server and no wish to clone anything. The hosted console's **Connect a backend** screen shows this command with the platform and its address filled in:
+
+```bash
+curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
+  | sudo bash -s -- \
+    --platform <platform key> \
+    --platform-url <the platform's address> \
+    --host ontology.example.edu
+```
+
+**Before.** Ubuntu 22.04 or later on amd64. A host name whose DNS record points at the server. Ports 80 and 443 open to the internet: 80 for the certificate and the redirect to https, 443 for everything else. The hosted console and the ibl.ai platform call from addresses that change, so they cannot be allow-listed; every call is guarded by sign-in instead. On the platform: ontology records (`ibl_ai_mentor.0415_ontologyrecord`) and RBAC, which keeps the roles.
+
+**What it does**, in order:
+
+1. Checks it runs as root on Ubuntu 22.04 or later, amd64, and stops with the reason otherwise.
+2. Uses the Docker that is there when `docker compose version` works. With none, installs `docker.io` and `docker-compose-v2` from Ubuntu's own archive: no repository and no key file is added. A Docker without Compose stops the script, because mixing Ubuntu's packages with Docker's own breaks both.
+3. Asks for what the three options did not give, then for **the backend's key** at a hidden prompt: the platform API key that **Connect a backend → Create key** shows once. It acts as the administrator who made it.
+4. Asks the platform two things with the key, before anything is written. First, what the key's owner may grant under `/custom/ontology/`: a key the platform refuses stops the script with the platform's words, and so does a platform whose administrators cannot grant ontology roles yet (RBAC off, or no custom namespace). Second, whether the platform keeps ontology records: where it does, the connected systems and the schedules live in the platform (`ONTOLOGY_DATA_STORE=dm`); where it does not, they live on this server and only the roles are the platform's (`rbac`). The script says which.
+5. Writes `/opt/iblai-ontology/.env`, readable by root alone: the host name, the platform, the key, where the settings live, and four secrets it generates (the database password, the search index's token, Django's secret and the key that encrypts the logins of the connected systems).
+6. Downloads `compose.yaml` of the same release beside it, pulls the images and starts them.
+7. Waits up to three minutes for `https://<host>/mcp` to answer `405`, which the gateway does before any sign-in. If it does not, the last lines of the proxy and the gateway are printed.
+8. Prints the address to paste into the console (`https://<host>`), the address agents call (`https://<host>/mcp`) and where its two files are.
+
+**What runs** (`deploy/compose.yaml`):
+
+| Service | What | Reaches |
+|---|---|---|
+| `proxy` | Caddy: gets and renews the certificate, sends http on to https | The only one that listens on the server |
+| `ontology-gateway` | The MCP gateway and the console's API | The platform, the connected systems |
+| `sync-engine` | The Celery worker with its scheduler | The platform, the connected systems |
+| `migrate` | Database migrations, once at every start | The cache database |
+| `ontology-db` | PostgreSQL 16: the synced copy, sync runs, the audit log | Nothing outside |
+| `redis` | The worker's queue, kept in memory only | Nothing outside |
+| `vector-store` | ChromaDB: the search index | Nothing outside |
+
+Not there: the MCP Toolbox and the connector containers of the developer stack. The gateway's own tools and Twenty CRM's operations do not go through them, so on such a server an agent can query the synced copy and change Twenty. A database can be connected and synced as well, since the sync reads it through its own connection, and agents query its synced copy; a tool that reads or changes the database itself goes through the Toolbox and answers an error here.
+
+**What it leaves on the server.** The Docker packages, if it installed them. `/opt/iblai-ontology` with `compose.yaml` and `.env`. Docker's volumes (the database, the memory files, the search index, the config directory, the certificates) and images. No language runtime, no source tree, nothing in a home directory, no firewall change.
+
+**Keep a copy of `.env`.** The logins of the connected systems are kept encrypted, in the platform or in this server's database, and `ONTOLOGY_CREDENTIAL_KEY` in that file is what decrypts them. Without it they must be entered again. Where the server keeps its own settings (`rbac`), the `db` volume holds the connected systems and the list of connected agents, and the `config` volume the schedules: they are this server's to back up.
+
+**Day to day.**
+
+```bash
+docker compose -f /opt/iblai-ontology/compose.yaml ps
+docker compose -f /opt/iblai-ontology/compose.yaml logs --follow ontology-gateway
+```
+
+- **Upgrade:** run the install command again. An existing `.env` is kept and nothing is asked, so where the settings live does not change; the new release's `compose.yaml` and images replace the old ones, and the migrations run.
+- **Remove:** the same command with `--uninstall`. It asks for the host name to be typed, then removes the containers, the volumes, the images and the directory. Docker itself stays, and so does what the platform keeps: the roles, the key and MCP server of each agent still connected, the backend's API key, and with `dm` the schedules, the connected systems and the backend's address. With `rbac`, remove each agent's connection in the console first: the list goes with the server.
+- **Preview:** `--dry-run` says each step and changes nothing.
+
+Then, in the console: paste the address under **Connect a backend**, add a system, and connect an agent on the **Agents** page. Connecting Twenty CRM makes the role an agent is connected as; for a database, give a role its tables and toolsets first.
+
 ---
 
 ## Prerequisites
+
+For the developer stack below.
 
 The university provides:
 
@@ -64,9 +126,17 @@ services:
     networks: [ontology-internal]
     restart: unless-stopped
 
-  # --- Sync engine (Component 2; Django + Celery) ---
+  # --- The sync worker's queue ---
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [ontology-internal]
+    restart: unless-stopped
+
+  # --- Sync engine (Component 2; Django + Celery): the one image, with the worker's command ---
   sync-engine:
-    build: ./sync-engine
+    build: .
+    command: [celery, -A, "iblai_ontology.backend.celery:app", worker, --beat, --loglevel=info, --schedule=/tmp/celerybeat-schedule]
     volumes:
       - ontology-files:/ontology
       - ./config:/app/config:ro              # the config directory, read-only
@@ -74,26 +144,28 @@ services:
       MCP_TOOLBOX_URL: http://mcp-toolbox:5000
       MCP_CANVAS_URL: http://mcp-canvas:3000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      ONTOLOGY_CELERY_BROKER: redis://redis:6379/0
       CHROMA_URL: http://vector-store:8000
       CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
-    depends_on: [mcp-toolbox, mcp-canvas, ontology-db, vector-store]
-    networks: [ontology-internal]
+    depends_on: [mcp-toolbox, mcp-canvas, ontology-db, redis, vector-store]
+    networks: [ontology-internal, ontology-exposed]   # reaches the platform and remote sources
     restart: unless-stopped
 
-  # --- MCP Outbound: exposure gateway (Component 4) ---
+  # --- MCP Outbound: exposure gateway (Component 4): the same image, its default command ---
   ontology-gateway:
-    build: ./gateway
+    build: .
     volumes:
       - ontology-files:/ontology:ro          # read-only mount
       - ./config:/app/config                 # writable: the Ontology Frontend saves through the gateway
     environment:
       MCP_TOOLBOX_URL: http://mcp-toolbox:5000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      ONTOLOGY_CELERY_BROKER: redis://redis:6379/0   # syncs asked for in the console go to the worker
       CHROMA_URL: http://vector-store:8000
       CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
-    depends_on: [mcp-toolbox, ontology-db, vector-store]
+    depends_on: [mcp-toolbox, ontology-db, redis, vector-store]
     networks: [ontology-internal, ontology-exposed]   # bridges both networks
     restart: unless-stopped
 
@@ -106,16 +178,6 @@ services:
     ports: ["443:443"]
     depends_on: [ontology-gateway]
     networks: [ontology-exposed]
-    restart: unless-stopped
-
-  # --- Admin dashboard ---
-  admin-dashboard:
-    build: ./admin-dashboard
-    environment:
-      ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
-      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
-      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
-    networks: [ontology-internal, ontology-exposed]
     restart: unless-stopped
 
 networks:
@@ -136,11 +198,11 @@ volumes:
 
 This is the heart of the on-prem security posture:
 
-- **`ontology-internal`** is marked **`internal: true`** — containers on it **cannot reach the internet**. The databases, MCP Toolbox, custom MCP servers, and sync engine all live here only.
+- **`ontology-internal`** is marked **`internal: true`** — containers on it **cannot reach the internet**. The databases, Redis, the MCP Toolbox and the custom MCP servers live here only.
 - **`ontology-exposed`** is a normal bridge that can reach outside.
-- Only **`ontology-gateway`** and **`proxy`** bridge both networks. So PeopleSoft credentials, the cache, and the memory files are never directly exposed; the only door in is the gateway, behind the firewall + Entra-token gating described in [Component 4](components/04-mcp-outbound.md).
+- **`ontology-gateway`** and **`sync-engine`** are on both: they reach the ibl.ai platform and the sources outside the stack. Only **`proxy`** publishes a port. So PeopleSoft credentials, the cache, and the memory files are never directly exposed; the only door in is the gateway, behind the firewall + Entra-token gating described in [Component 4](components/04-mcp-outbound.md).
 
-Note also the gateway mounts `ontology-files` **read-only** (`:ro`) — the exposure layer can serve memory files but never modify them.
+Note also the gateway mounts `ontology-files` **read-only** (`:ro`) — the exposure layer can serve memory files but never modify them. That is why a sync asked for in the console is queued for the worker, through Redis, instead of running in the gateway.
 
 ---
 
@@ -153,11 +215,6 @@ ontology.alasu.edu {
     reverse_proxy ontology-gateway:8080
     log { output file /var/log/caddy/access.log }
 }
-
-admin.ontology.alasu.edu {
-    reverse_proxy admin-dashboard:8080
-    log { output file /var/log/caddy/admin-access.log }
-}
 ```
 
 ---
@@ -168,7 +225,7 @@ Credentials are **split per MCP server** for isolation — each container loads 
 
 | File | Vars | Container |
 |---|---|---|
-| `.env` | `ONTOLOGY_DB_PASSWORD`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | compose `${...}` + gateway/admin |
+| `.env` | `ONTOLOGY_DB_PASSWORD`, `CHROMA_TOKEN`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | compose `${...}` + gateway |
 | `secrets/ontology_credential_key` | the registry's Fernet key, one line | ontology-gateway, mounted at `/run/secrets/ontology_credential_key` via `secrets:` |
 | `.env.mcp` | `PEOPLESOFT_DB_HOST/PORT/NAME`, `PEOPLESOFT_RO_USER/PASSWORD`, `ONTOLOGY_DB_USER`, `ONTOLOGY_DB_PASSWORD` | mcp-toolbox |
 | `.env.canvas` | `CANVAS_BASE_URL`, `CANVAS_API_TOKEN` | mcp-canvas |
@@ -220,12 +277,16 @@ ENTRA_CLIENT_ID=<iblai-ontology-app-client-id>
 
 The Ontology Frontend, the admin console, is not a service of this stack. Run one beside it (its
 `ONTOLOGY_API_URL` naming the gateway), or use the one hosted for every platform at
-`ontology.ibl.ai`: set `ONTOLOGY_DM_URL`, `IBLAI_ORG` and the platform key on the gateway, record
-the gateway's public address in your platform with
-`ontology platform address --url https://ontology.<domain>`, and let the hosted frontend through
-the firewall as you do the ibl.ai platform. Your platform's admins then sign in there. The address
-must be `https` and public, and the frontend sends each admin's platform token and nothing else
-([DEV.md](../DEV.md#one-ontology-frontend-for-every-platform)).
+`ontology.iblai.me`: set `ONTOLOGY_DM_URL`, `IBLAI_ORG` and the platform key on the gateway, and
+let the hosted frontend through the firewall as you do the ibl.ai platform. An administrator who
+signs in there connects the backend by pasting its address under **Connect a backend**;
+`ontology platform address --url https://ontology.<domain>` on the server records the same
+address. The address must be `https` and public, and the frontend sends each admin's platform
+token and nothing else ([DEV.md](../DEV.md#one-ontology-frontend-for-every-platform)).
+
+The platform keeps that address as an ontology record. For platforms that keep none yet, the
+hosted frontend runs with `ONTOLOGY_BACKEND_STORE=browser`: each administrator's browser keeps
+the address and connects once, and nothing is written to the platform.
 
 ---
 
@@ -313,20 +374,31 @@ trusts the proxy's `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`) to decide
 whether a connection is secure — keep the gateway reachable only via the proxy,
 never directly on `:8080`.
 
-**A member's own ibl.ai credential on `/mcp`** (a DM token as `Token`, a platform
-API key as `Api-Token`, either behind `Bearer`; [identity.md](identity.md#a-persons-own-iblai-credential)):
+**An ibl.ai credential on `/mcp`** (a DM token as `Token`, a platform API key as
+`Api-Token`, either behind `Bearer`; it carries its own role, and `X-Iblai-Role` sent
+with one is a `400`; [identity.md](identity.md#a-persons-own-iblai-credential)):
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `ONTOLOGY_DM_URL` | unset | Where a credential is verified. Unset, none is taken |
-| `IBLAI_ORG` / `ONTOLOGY_ADMIN_PLATFORMS` | unset | The platform whose members and admins are taken. With neither, none is |
-| `ONTOLOGY_DM_VERIFY_TTL` | `300` | Seconds a credential's verdict is kept; a revocation shows within it |
-| `ONTOLOGY_ROLES_TTL` | `60` | Seconds a member's roles are kept; a role given in the platform shows within it |
+| `ONTOLOGY_DM_URL` | unset | Where the platform is asked what a credential is granted. Unset, none is taken |
+| `IBLAI_ORG` | unset | The one platform a credential is judged on. Unset, none is taken. `ONTOLOGY_ADMIN_PLATFORMS` widens the console only |
+| `ONTOLOGY_ROLES_TTL` | `60` | Seconds a credential's grants, or its refusal, are kept: a role given, a membership ended or a key deleted shows within it |
+| `ONTOLOGY_DM_VERIFY_TTL` | `300` | Seconds the name and standing of a credential's owner are kept |
+| `ONTOLOGY_GATEWAY_URL` | unset | The address agents reach the gateway at. The console's Agents page registers it on an agent, and refuses without it |
+| `ONTOLOGY_DATA_STORE` | `local` | Where the settings live. `local`: the files and this database. `dm`: the platform keeps the roles, the schedules and the registry. `rbac`: the platform's RBAC keeps the roles and this host the rest, for a platform without ontology records. Only with `rbac` or `dm` is anyone given a role in the platform, or an agent connected |
+
+**The sync worker:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ONTOLOGY_CELERY_BROKER` | unset | A `redis://…` URL, the same on the gateway and the worker: syncs asked for in the console, and the refresh after an agent's change, are queued for the worker. Unset, a task runs where it is asked for, which fits a local backend and not a gateway whose memory files are read-only |
 
 **Tools that change data** need nothing here: the write account's variables go in
 the Toolbox's environment (`.env.mcp`) beside the read-only ones, and an `http`
 source on a private address lists it in `allowedIpRanges`
 ([components/01-mcp-inbound.md](components/01-mcp-inbound.md#tools-that-change-data)).
+Twenty CRM's operations use the key the system was connected with, kept encrypted in
+the registry.
 
 **JWT replay protection:**
 
@@ -392,10 +464,10 @@ ontology-db         running   5432/tcp
 vector-store        running   8000/tcp
 mcp-toolbox         running   5000/tcp
 mcp-canvas          running   3000/tcp
+redis               running   6379/tcp
 sync-engine         running
 ontology-gateway    running   8080/tcp
 proxy               running   0.0.0.0:443->443/tcp
-admin-dashboard     running   8080/tcp
 ```
 
 Validate the deployment with `ontology health` and `ontology config validate`.
@@ -421,7 +493,7 @@ Validate the deployment with `ontology health` and `ontology config validate`.
 **Week 3 — Connect the agent runtime and validate end-to-end.**
 9. Register iblai-ontology as an MCP Server in the ibl.ai platform and attach it to agents ([platform-integration.md](platform-integration.md)).
 10. Drive an end-to-end agent interaction: user opens chat → platform triggers in-chat OAuth → user authenticates → platform creates ConnectedService + MCPServerConnection → agent queries the gateway with the user's token → scoped data returned.
-11. Deploy the admin dashboard; cross-check ontology data against PeopleSoft reports (counts, GPAs, holds).
+11. Open the Ontology Frontend; cross-check ontology data against PeopleSoft reports (counts, GPAs, holds).
 
 ### Phase 2 — Expand sources (Weeks 3–6)
 
@@ -435,7 +507,7 @@ Validate the deployment with `ontology health` and `ontology config validate`.
 16. Add the remaining MCP servers: Navigate, LDAP/AD, and others.
 17. Build department agents (IT Help Desk, Facilities, HR).
 18. Enable vector search over text memories via ChromaDB.
-19. Build out the admin dashboard (sync monitoring, audit-log viewer, role management).
+19. Build out the Ontology Frontend where it is thin (an audit-log viewer).
 20. Production-harden: TLS certificates, backup schedules, monitoring/alerting, log aggregation.
 21. Load test concurrent users across roles; verify response times and source-system impact.
 

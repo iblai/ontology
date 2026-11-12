@@ -71,6 +71,10 @@ class RoleResolver:
         """Return the internal role names the reader defines."""
         return list(self._roles().keys())
 
+    def spec(self, role: str) -> dict:
+        """One role's spec as the reader gives it; empty for a role nothing defines."""
+        return self._roles().get(role) or {}
+
     def resolve(
         self, role: Optional[str], *, user_emplid: Optional[str] = None
     ) -> Permissions:
@@ -78,25 +82,27 @@ class RoleResolver:
         # Fall back to the default role for unknown/missing roles.
         if not role or role not in roles:
             role = DEFAULT_ROLE
-        spec = roles.get(role, {})
+        return permissions(role, roles.get(role, {}), user_emplid)
 
-        memory_paths = list(spec.get("memory_paths", []))
-        if user_emplid is not None:
-            memory_paths = [
-                p.replace("${USER_EMPLID}", user_emplid) for p in memory_paths
-            ]
 
-        return Permissions(
-            role=role,
-            display_name=spec.get("display_name", role),
-            memory_paths=memory_paths,
-            mcp_toolsets=list(spec.get("mcp_toolsets", [])),
-            cache_tables=list(spec.get("cache_tables", [])),
-            concurrency_limits=dict(spec.get("concurrency_limits", {})),
-            agents=list(spec.get("agents", [])),
-            admin_dashboard=bool(spec.get("admin_dashboard", False)),
-            self_service=bool(spec.get("self_service", False)),
-        )
+def permissions(
+    role: str, spec: dict, user_emplid: Optional[str] = None
+) -> Permissions:
+    """What one role spec lets its holder reach; ``${USER_EMPLID}`` becomes the caller's own id."""
+    memory_paths = list(spec.get("memory_paths", []))
+    if user_emplid is not None:
+        memory_paths = [p.replace("${USER_EMPLID}", user_emplid) for p in memory_paths]
+    return Permissions(
+        role=role,
+        display_name=spec.get("display_name", role),
+        memory_paths=memory_paths,
+        mcp_toolsets=list(spec.get("mcp_toolsets", [])),
+        cache_tables=list(spec.get("cache_tables", [])),
+        concurrency_limits=dict(spec.get("concurrency_limits", {})),
+        agents=list(spec.get("agents", [])),
+        admin_dashboard=bool(spec.get("admin_dashboard", False)),
+        self_service=bool(spec.get("self_service", False)),
+    )
 
 
 def resolve_permissions(

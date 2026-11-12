@@ -58,19 +58,19 @@ Generates Jinja2 templates (`templates/<entity>.md.j2`) so the sync engine can r
 
 ## Step 3 — MCP Tools Configuration
 
-Merges the generated `tools.yaml` entries (sources, tools, toolsets) into the canonical `config/tools.yaml` consumed by the MCP Toolbox ([Component 1](01-mcp-inbound.md)). Existing entries are updated in place rather than duplicated.
+Merges the generated `tools.yaml` entries (sources, tools, toolsets) into the canonical `config/tools.yaml` consumed by the MCP Toolbox ([Component 1](01-mcp-inbound.md)). Existing entries are updated in place rather than duplicated. For Twenty CRM the generated entries are its ten create and update tools and the toolset `<system>-writes`, which the gateway runs itself.
 
 ---
 
 ## Step 4 — Sync Schedules
 
-Merges the generated schedule entries into `config/sync-schedules.yaml` ([Component 2](02-knowledge-materialization.md#sync-schedulesyaml)), or with `ONTOLOGY_DATA_STORE=dm` into the ibl.ai platform's records, with cadences suggested by the LLM (or the rule-based heuristics). A database schedule names its `service` and `table`: the sync engine reads the table through the service's own connection. An API service's schedules name a `tool` on its custom MCP server (`<name>-mcp`, reached at `MCP_<NAME>_URL`). After this step, `ontology sync schedule` shows the new schedules.
+Merges the generated schedule entries into `config/sync-schedules.yaml` ([Component 2](02-knowledge-materialization.md#sync-schedulesyaml)), or with `ONTOLOGY_DATA_STORE=dm` into the ibl.ai platform's records, with cadences suggested by the LLM (or the rule-based heuristics). A database schedule names its `service` and `table`: the sync engine reads the table through the service's own connection. Twenty CRM's schedules have the same shape, `table` naming one of its objects. Any other API service's schedules name a `tool` on its custom MCP server (`<name>-mcp`, reached at `MCP_<NAME>_URL`). After this step, `ontology sync schedule` shows the new schedules, and the scheduler's next tick, at most a minute later, starts the ones that are due: nothing is restarted.
 
 ---
 
 ## Step 5 — Docker Compose Update
 
-For API-based sources, generates and wires the new custom MCP-server container (e.g. `mcp-canvas`) into the Compose stack — image/build context, env file, and placement on the internal-only network. Database sources need no container: the sync engine reads them through their own connection, and the shared `mcp-toolbox` serves their agent-facing tools.
+For API-based sources, generates and wires the new custom MCP-server container (e.g. `mcp-canvas`) into the Compose stack — image/build context, env file, and placement on the internal-only network. Database sources need no container: the sync engine reads them through their own connection, and the shared `mcp-toolbox` serves their agent-facing tools. Twenty CRM needs none either: the backend reads it itself.
 
 ---
 
@@ -94,7 +94,7 @@ If validation fails, the run is marked `failed` and you can inspect which step s
 ## Rollback and Teardown
 
 - **Rollback.** Each `ProvisioningRun` stores `rollback_data` (what was created), so a failed run can be reversed cleanly. A reversed run is marked `rolled_back`.
-- **Teardown.** `ontology service remove <name>` calls `ProvisioningEngine().teardown(name)`, which drops the service's cache tables and removes its generated configuration. The CLI confirms first unless you pass `--yes`:
+- **Teardown.** `ontology service remove <name>` (and **Remove** on the console's system page) calls `ProvisioningEngine().teardown(name)`. It removes the system's sync schedules, the tools and sources it merged into `tools.yaml`, its generated configuration, then its registry rows, in that order, so a removal that fails midway can be run again. A toolset left with no tool goes too, from the file and from every role that names it. The cache tables and memory files it filled stay. The CLI confirms first unless you pass `--yes`:
 
 ```bash
 ontology service remove peoplesoft-main          # prompts for confirmation

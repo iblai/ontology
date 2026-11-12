@@ -87,14 +87,16 @@ export function RoleDialog({
   const latest = useRef(role);
   // The role as the backend holds it: what a refused save goes back to.
   const stored = useRef(initial);
-  const [save] = useState(() =>
-    saveLatest(
-      (next: Role) =>
-        apiClient.roles.save(next).catch(() => ({ ok: false, message: tc("failed") })),
-      (next, result) => {
+  // One saver for the dialog's life, made at the first change: it sends the saves one at a time.
+  const saver = useRef<((next: Role) => Promise<void>) | null>(null);
+  function save(next: Role) {
+    saver.current ??= saveLatest(
+      (sent: Role) =>
+        apiClient.roles.save(sent).catch(() => ({ ok: false, message: tc("failed") })),
+      (sent, result) => {
         if (result.ok) {
-          stored.current = next;
-          onSaved(next);
+          stored.current = sent;
+          onSaved(sent);
           return;
         }
         toast.error(result.message);
@@ -103,8 +105,9 @@ export function RoleDialog({
         setRole(stored.current);
         setNameText(stored.current.display_name);
       },
-    ),
-  );
+    );
+    return saver.current(next);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -215,13 +218,13 @@ export function RoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-h-[85vh] overflow-y-auto", !narrow && "lg:max-w-4xl")}>
+      <DialogContent className={cn("max-h-[85vh] overflow-y-auto", !narrow && "md:max-w-4xl")}>
         <DialogHeader>
           <DialogTitle>{initial ? t("editTitle") : t("newTitle")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-4">
-          <div className={cn("grid gap-y-4", !narrow && "lg:grid-cols-2")}>
-            <div className={cn("flex min-w-0 flex-col gap-4", !narrow && "lg:pr-6")}>
+          <div className={cn("grid gap-y-4", !narrow && "md:grid-cols-2")}>
+            <div className={cn("flex min-w-0 flex-col gap-4", !narrow && "md:pr-6")}>
               {/* Three rows tall with its gap, hint or no hint: both columns' rows share lines. */}
               <div className="min-h-20">
                 <Field
@@ -257,12 +260,13 @@ export function RoleDialog({
                       <span className={cn(ASIDE, "min-w-0")}>{t("toolsHint")}</span>
                     </div>
                     <div className="flex flex-col">
-                      <label className={ROW}>
+                      <label htmlFor="role-all-toolsets" className={ROW}>
                         <span className={NAME}>
                           <span className="truncate">{t("allToolsets")}</span>
                           <span className={NOTE}>{t("allToolsetsHint")}</span>
                         </span>
                         <Switch
+                          id="role-all-toolsets"
                           aria-label={t("allToolsets")}
                           checked={all}
                           onCheckedChange={() =>
@@ -277,12 +281,13 @@ export function RoleDialog({
                         />
                       </label>
                       {toolsets.map((ts) => (
-                        <label key={ts.name} className={ROW}>
+                        <label key={ts.name} htmlFor={`role-toolset-${ts.name}`} className={ROW}>
                           <span className={NAME}>
                             <span className="truncate">{ts.name}</span>
                             <span className={NOTE}>{ts.note}</span>
                           </span>
                           <Switch
+                            id={`role-toolset-${ts.name}`}
                             aria-label={ts.name}
                             checked={ts.on}
                             onCheckedChange={() =>
@@ -325,7 +330,7 @@ export function RoleDialog({
             {domains.length > 0 && (
               <section
                 aria-labelledby="role-knowledge"
-                className="flex min-w-0 flex-col gap-1.5 lg:border-l lg:pl-6"
+                className="flex min-w-0 flex-col gap-1.5 md:border-l md:pl-6"
               >
                 <div className={cn(HEADING, "justify-between")}>
                   <h3 id="role-knowledge" className="text-sm leading-none font-medium">

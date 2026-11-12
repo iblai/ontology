@@ -11,15 +11,15 @@ app = typer.Typer(no_args_is_help=True, help="Role and permission management.")
 
 def _roles() -> tuple[dict, str]:
     """The roles the gateway resolves, and where they are kept."""
-    from iblai_ontology.config import dm_store
+    from iblai_ontology.config import platform_roles
 
-    if dm_store():
+    if platform_roles():
         from iblai_ontology.backend import bootstrap
 
         bootstrap()  # the platform's roles are cached in Django's cache
     from iblai_ontology.backend.identity import role_source
 
-    source = "the ibl.ai platform" if dm_store() else "roles.yaml"
+    source = "the ibl.ai platform" if platform_roles() else "roles.yaml"
     return role_source.reader().get_roles(), source
 
 
@@ -79,13 +79,15 @@ def validate() -> None:
 def import_roles(
     path: Path = typer.Argument(..., help="The roles.yaml to copy."),
 ) -> None:
-    """Copy a roles.yaml into the ibl.ai platform (ONTOLOGY_DATA_STORE=dm)."""
+    """Copy a roles.yaml into the ibl.ai platform (ONTOLOGY_DATA_STORE=rbac or dm)."""
     import yaml
 
-    from iblai_ontology.config import dm_store
+    from iblai_ontology.config import platform_roles
 
-    if not dm_store():
-        typer.echo("Not in dm mode: the file is the store already.", err=True)
+    if not platform_roles():
+        typer.echo(
+            "Roles are kept in the file here: it is the store already.", err=True
+        )
         raise typer.Exit(code=1)
     if not path.exists():
         typer.echo(f"{path} not found.", err=True)

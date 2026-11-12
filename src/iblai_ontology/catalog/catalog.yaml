@@ -158,8 +158,9 @@ entries:
     type: api
     adapter: twenty_api
     domain: enterprise
-    connection: {base_url_env: TWENTY_BASE_URL}
-    env: [TWENTY_API_KEY, TWENTY_BASE_URL]
+    # Read and changed by the backend itself (backend/services/twenty.py): the address and the
+    # API key are the system's registry entry, so no environment variable and no container.
+    connection: {base_url: "https://api.twenty.com"}
     default_toolset: admin-analytics-tools
     sync_defaults: {people: 1h, companies: 6h, opportunities: 1h, workspaceMembers: 24h, notes: 6h, tasks: 1h, noteTargets: 6h, taskTargets: 6h}
     # Per REST plural: the workspace table (`service map <name> --from twenty` on a self-hosted
@@ -197,8 +198,28 @@ entries:
         table: taskTarget
         entity: task_targets
         fields: {taskId: task_id, targetPersonId: person_id, targetCompanyId: organization_id, targetOpportunityId: deal_id, createdAt: created_at, updatedAt: updated_at, deletedAt: deleted_at}
+    # Per REST plural, what an agent may create or update: house column -> type. One tool
+    # each for create and update, in the toolset `<system>-writes`; `help` is said to the agent.
+    writes:
+      people:
+        fields: {first_name: string, last_name: string, primary_email: string, phone: string, job_title: string, organization_id: string}
+        help: {organization_id: "id of the person's company (organizations)"}
+      companies:
+        fields: {name: string, website: string, address_street: string, address_city: string, address_state: string, address_zip: string, address_country: string, owner_id: string}
+        help: {owner_id: "id of the workspace member who owns the account"}
+      opportunities:
+        fields: {title: string, amount_micros: integer, currency: string, expected_close_date: string, stage: string, person_id: string, organization_id: string, owner_id: string}
+        help: {amount_micros: "the amount in millionths of the currency unit: 5000000 is 5.00", currency: "ISO code, e.g. USD", expected_close_date: "ISO date or timestamp", stage: "a stage of the pipeline, e.g. NEW, SCREENING, MEETING, PROPOSAL, CUSTOMER", person_id: "id of the point of contact (persons)", organization_id: "id of the company (organizations)", owner_id: "id of the workspace member who owns it"}
+      notes:
+        fields: {title: string, body: string}
+        help: {body: "the note's text, as Markdown"}
+        targets: {object: noteTargets, owner: note_id, links: [person_id, organization_id, deal_id]}
+      tasks:
+        fields: {title: string, body: string, due_at: string, status: string, assignee_id: string}
+        help: {body: "the task's text, as Markdown", due_at: "ISO timestamp", status: "TODO, IN_PROGRESS or DONE", assignee_id: "id of the workspace member it is assigned to"}
+        targets: {object: taskTargets, owner: task_id, links: [person_id, organization_id, deal_id]}
     skill: twenty.md
-    summary: "Open-source CRM — people, companies, opportunities, notes, tasks; self-hosted (one PostgreSQL schema per workspace, read with generic-postgres) or on Twenty's cloud (REST through mcp-servers/twenty)."
+    summary: "Open-source CRM: people, companies, opportunities, notes, tasks. Connects with its address and an API key, on Twenty's cloud or self-hosted; agents can then also create and update those records. A self-hosted database can be read with generic-postgres instead."
 
   servicenow-itsm:
     display_name: "ServiceNow ITSM (enterprise)"

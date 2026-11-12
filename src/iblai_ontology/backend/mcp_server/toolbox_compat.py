@@ -15,7 +15,10 @@ from pathlib import Path
 
 import yaml
 
-from iblai_ontology.backend.mcp_server.toolbox_config import _INJECTION_RE
+from iblai_ontology.backend.mcp_server.toolbox_config import (
+    _INJECTION_RE,
+    GATEWAY_TYPES,
+)
 
 # Source types Toolbox understands (the subset we use + common ones).
 SOURCE_TYPES = {
@@ -44,10 +47,16 @@ TOOL_TYPES = {
     "trino-sql",
     "clickhouse-sql",
     "http",
+    *GATEWAY_TYPES,
 }
 
 # The gateway runs its own read-only code for these when tools.yaml leaves the statement to it.
-GATEWAY_TOOLS = {"read-memory", "query-ontology-cache", "get-sync-status"}
+GATEWAY_TOOLS = {
+    "read-memory",
+    "describe-ontology-cache",
+    "query-ontology-cache",
+    "get-sync-status",
+}
 # What a statement that only reads starts with; EXPLAIN is absent, EXPLAIN ANALYZE runs the query.
 _READ_LEAD_RE = re.compile(
     r"[\s(]*(SELECT|WITH|SHOW|DESCRIBE|DESC|VALUES|TABLE)\b", re.IGNORECASE
@@ -93,7 +102,9 @@ def writing_tools(docs: list[dict]) -> dict[str, str]:
         ):
             gateway.add(name)  # never reaches the Toolbox, whatever its source
             continue
-        if kind == "http":
+        if kind in GATEWAY_TYPES:
+            reason = f"it changes records in {tool.get('service') or 'its system'}"
+        elif kind == "http":
             method = str(tool.get("method") or "").upper()
             reason = (
                 None
@@ -194,10 +205,21 @@ def validate_tools_yaml(path: str | Path) -> ComplianceReport:
                 _err(report, f"tool '{name}' missing 'type'")
             elif ttype not in TOOL_TYPES:
                 _warn(report, f"tool '{name}' has unrecognised type '{ttype}'")
-            if not doc.get("source"):
-                _err(report, f"tool '{name}' missing 'source'")
-            if "statement" not in doc and ttype != "http":
-                _err(report, f"tool '{name}' missing 'statement'")
+            if ttype in GATEWAY_TYPES:
+                # The gateway runs it on the system itself: no Toolbox source or statement.
+                for key in ("service", "object"):
+                    if not doc.get(key):
+                        _err(report, f"{ttype} tool '{name}' missing '{key}'")
+                if doc.get("operation") not in ("create", "update"):
+                    _err(
+                        report,
+                        f"{ttype} tool '{name}' has no operation: create or update",
+                    )
+            else:
+                if not doc.get("source"):
+                    _err(report, f"tool '{name}' missing 'source'")
+                if "statement" not in doc and ttype != "http":
+                    _err(report, f"tool '{name}' missing 'statement'")
             if ttype == "http":
                 for key in ("method", "path"):
                     if not doc.get(key):

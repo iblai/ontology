@@ -1,5 +1,6 @@
 import {
   Blocks,
+  Bot,
   Boxes,
   CalendarClock,
   Database,
@@ -8,6 +9,7 @@ import {
   Plug,
   RefreshCw,
   Server,
+  ServerCog,
   Shield,
   Waypoints,
   Workflow,
@@ -24,6 +26,8 @@ export interface NavItem {
   labelKey: string;
   icon: LucideIcon;
   count?: NavCount;
+  /** A row of the hosted console alone. */
+  hosted?: boolean;
 }
 
 /** A sidebar group: a small heading over its rows (a divider in the collapsed rail). */
@@ -59,10 +63,20 @@ export const PLATFORM_SIDEBAR_SECTIONS: NavGroup[] = [
       { href: "/mcp", labelKey: "mcpGateway", icon: Server, count: "tools" },
       { href: "/roles", labelKey: "roles", icon: Shield, count: "roles" },
       { href: "/access", labelKey: "access", icon: Workflow },
+      { href: "/agents", labelKey: "agents", icon: Bot },
       { href: "/config", labelKey: "config", icon: FileCog },
+      { href: "/backend", labelKey: "backend", icon: ServerCog, hosted: true },
     ],
   },
 ];
+
+/** The groups as one console lists them: the hosted console's own rows only there. */
+export function sidebarSections(hosted: boolean): NavGroup[] {
+  return PLATFORM_SIDEBAR_SECTIONS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => hosted || !item.hosted),
+  }));
+}
 
 /** The top bar's New menu and the palette's Create group; `?new=` opens the page's dialog. `labelKey` resolves under `shell.*`. */
 export const CREATE_ACTIONS: { id: string; labelKey: string; href: string; icon: LucideIcon }[] = [

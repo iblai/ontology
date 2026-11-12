@@ -117,6 +117,16 @@ def address(
         # The frontend refuses anything else: it would send a user's token in the clear.
         typer.echo("The address must be an https URL (http for localhost).", err=True)
         raise typer.Exit(code=1)
+    from iblai_ontology.config import dm_store
+
+    if not dm_store():
+        # A row on this host would be read by no one: the console looks in the platform.
+        typer.echo(
+            "This backend's platform keeps no ontology records: connect it from the "
+            "console's Connect a backend screen instead.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     from iblai_ontology.backend import bootstrap
 
     bootstrap()

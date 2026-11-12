@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 
 from celery import Celery
@@ -16,18 +15,15 @@ app.autodiscover_tasks(
         "iblai_ontology.backend.sync",
     ]
 )
-
-
-@app.on_after_configure.connect
-def setup_periodic_tasks(sender, **kwargs):  # pragma: no cover - wiring
-    """Populate the beat schedule from the sync schedules, once, at startup."""
-    try:
-        from iblai_ontology.backend.sync.scheduler import build_beat_schedule
-
-        sender.conf.beat_schedule.update(build_beat_schedule())
-    except Exception:
-        # Still boots, with no schedule: say so instead of running nothing in silence.
-        logging.getLogger(__name__).exception("beat: could not read the sync schedules")
+# One entry: the tick reads the schedules itself, so one saved in the console needs no restart.
+app.conf.beat_schedule = {
+    "sync-tick": {
+        "task": "iblai_ontology.backend.sync.tasks.tick",
+        "schedule": 60.0,
+        # A tick the worker could not take within the minute is dropped, not piled up.
+        "options": {"expires": 55},
+    }
+}
 
 
 @app.task(bind=True)

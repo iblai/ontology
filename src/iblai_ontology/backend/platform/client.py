@@ -126,11 +126,13 @@ class PlatformClient:
         is_enabled: bool = True,
         credentials: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
+        mentor: Optional[str] = None,
     ) -> dict[str, Any]:
         """Register iblai-ontology as an MCP Server; returns the created record.
 
         ``credentials`` is the whole authorization value (``Bearer <token>``) the DM
         sends verbatim; ``extra_headers`` ride along on every call (``X-Iblai-Role``).
+        ``mentor`` is an agent's unique id: the server is then that agent's alone.
         """
         payload: dict[str, Any] = {
             "name": name,
@@ -145,7 +147,35 @@ class PlatformClient:
             payload["credentials"] = credentials
         if extra_headers:
             payload["extra_headers"] = extra_headers
+        if mentor:
+            payload["mentor"] = mentor
         return self._post("mcp-servers/", payload)
+
+    def delete_mcp_server(self, server_id: int) -> None:
+        """Remove a registered MCP Server; one already gone is no error."""
+        path = (
+            f"api/ai-agent/orgs/{self.config.org}/users/admin/mcp-servers/{server_id}/"
+        )
+        self._call("DELETE", path, ok=(404,))
+
+    # -- Agents ----------------------------------------------------------
+    def agents(
+        self, *, headers: Optional[dict[str, str]] = None
+    ) -> list[dict[str, Any]]:
+        """The platform's agents, newest first, as the DM lists them (``unique_id``, ``name``).
+
+        ``headers`` carries another credential than this client's, an admin's own sign-in.
+        """
+        # ponytail: the first 300 (ten pages of the DM's largest); search by name past that.
+        path = f"api/ai-agent/orgs/{self.config.org}/users/admin/"
+        found: list[dict[str, Any]] = []
+        for page in range(1, 11):
+            params = {"page": page, "page_size": 30}
+            body = self._call("GET", path, headers=headers or {}, params=params).json()
+            found += body["results"]
+            if not body.get("next"):
+                break
+        return found
 
     # -- MCP Server Connection ------------------------------------------
     def create_connection(

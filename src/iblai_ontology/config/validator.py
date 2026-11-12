@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from iblai_ontology.config import config_dir, dm_store
+from iblai_ontology.config import config_dir, dm_store, platform_roles
 from iblai_ontology.config.reader import ConfigReader
 
 
@@ -93,6 +93,17 @@ class ConfigValidator:
                 + (f"; missing cron: {', '.join(bad_cron)}" if bad_cron else ""),
             )
         )
+
+        if platform_roles():
+            # rbac: the roles are the platform's; `ontology roles validate` checks them.
+            result.items.append(
+                ValidationItem(
+                    "roles",
+                    True,
+                    "kept in the ibl.ai platform; roles.yaml is not read",
+                )
+            )
+            return result
 
         # roles.yaml (delegated, surfaced as one line)
         roles_result = self.validate_roles()

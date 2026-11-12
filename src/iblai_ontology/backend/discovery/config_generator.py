@@ -261,10 +261,14 @@ def api_schedules_yaml(
     display_name: str,
     sync_defaults: dict,
     mapping: dict | None = None,
+    *,
+    in_process: bool = False,
 ) -> str:
-    """Schedules for an API service: one ``list-<entity>`` tool per catalog ``sync_defaults``
-    entry, served by the service's custom MCP server, landing in a table built from the first row.
-    The catalog's ``mapping`` names the house table, column renames and template per entity."""
+    """Schedules for an API service: one per catalog ``sync_defaults`` entry, landing in a
+    table built from the first row. A system the backend reads itself (``in_process``) takes
+    the database shape, ``service`` and ``table``; another is read by the ``list-<entity>``
+    tool of its custom MCP server. The catalog's ``mapping`` names the house table, column
+    renames and template per entity."""
     schedules = []
     for entity, cadence in sync_defaults.items():
         m = (mapping or {}).get(entity) or {}
@@ -281,12 +285,16 @@ def api_schedules_yaml(
             }
         if m.get("template"):
             output["template"] = m["template"]
+        read = (
+            {"source": service_name, "service": service_name, "table": entity}
+            if in_process
+            else {"source": f"{service_name}-mcp", "tool": f"list-{entity}"}
+        )
         schedules.append(
             {
                 "name": f"{service_name}-{entity}",
                 "cron": _CADENCE_CRON.get(cadence, "0 */6 * * *"),
-                "source": f"{service_name}-mcp",
-                "tool": f"list-{entity}",
+                **read,
                 "output": output,
                 "description": f"Sync {entity} from {display_name} every {cadence}",
             }
@@ -294,6 +302,75 @@ def api_schedules_yaml(
     return yaml.dump(
         {"schedules": schedules}, default_flow_style=False, sort_keys=False
     )
+
+
+def api_tools_yaml(service_name: str, display_name: str, entry) -> str:
+    """The named operations a catalog entry's ``writes`` lets an agent run on an API system.
+
+    One tool to create and one to update each object, of the entry's own tool type (the
+    gateway runs them itself, never the Toolbox), in the one toolset ``<service>-writes``,
+    marked as changing data so only a role that names it holds them. Empty with no ``writes``.
+    """
+    docs: list[dict] = []
+    for plural, rules in (entry.writes or {}).items():
+        singular = (entry.mapping.get(plural) or {}).get("table") or plural
+        says = rules.get("help") or {}
+        fields = [
+            {
+                "name": name,
+                "type": kind,
+                "description": says.get(name) or name.replace("_", " "),
+                "required": False,
+            }
+            for name, kind in rules["fields"].items()
+        ]
+        about = [
+            {
+                "name": name,
+                "type": "string",
+                "description": f"id of a record this {singular} is about; it is linked to it",
+                "required": False,
+            }
+            for name in (rules.get("targets") or {}).get("links") or []
+        ]
+        the_id = {
+            "name": "id",
+            "type": "string",
+            "description": f"id of the {singular} to change",
+        }
+        for operation, lead, does in (
+            (
+                "create",
+                [],
+                "Give the fields you know; the new record comes back with its id.",
+            ),
+            (
+                "update",
+                [the_id],
+                "Only the fields given change; the record comes back.",
+            ),
+        ):
+            docs.append(
+                {
+                    "kind": "tool",
+                    "name": f"{service_name}-{operation}-{singular}",
+                    "type": entry.key,
+                    "service": service_name,
+                    "object": plural,
+                    "operation": operation,
+                    "description": f"{operation.capitalize()} a {singular} in {display_name}. {does}",
+                    "parameters": [*lead, *fields, *about],
+                }
+            )
+    if not docs:
+        return ""
+    toolset = {
+        "kind": "toolset",
+        "name": f"{service_name}-writes",
+        "write": True,
+        "tools": [doc["name"] for doc in docs],
+    }
+    return yaml.dump_all([*docs, toolset], default_flow_style=False, sort_keys=False)
 
 
 def apply_table_edits(

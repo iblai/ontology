@@ -385,6 +385,8 @@ class McpToolSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, default="")
     parameters = serializers.SerializerMethodField()
     statement = serializers.CharField(required=False, allow_blank=True)
+    # The system an API operation runs on: the gateway runs it there, not the Toolbox.
+    service = serializers.CharField(required=False, allow_blank=True)
 
     def get_parameters(self, obj):
         params = (obj.get("parameters") if isinstance(obj, dict) else None) or []
@@ -445,7 +447,9 @@ class CountsSerializer(serializers.Serializer):
     toolsets = serializers.IntegerField()
     roles = serializers.IntegerField()
     # Where roles, schedules and the registry live: the Config page hides what is not a file.
-    data_store = serializers.ChoiceField(choices=["local", "dm"])
+    data_store = serializers.ChoiceField(choices=["local", "rbac", "dm"])
+    # This backend's platform, by key ("" when it has none): the hosted console checks it.
+    platform = serializers.CharField(allow_blank=True)
 
 
 # ---------------------------------------------------------------------------
@@ -476,22 +480,78 @@ class McpTestResultSerializer(serializers.Serializer):
 
 
 class AddServiceSerializer(serializers.Serializer):
-    name = serializers.CharField()
+    # A name becomes a folder, a schedule prefix and a tool prefix: nothing else is taken.
+    name = serializers.RegexField(r"^[a-z0-9][a-z0-9_-]{0,62}$")
     # Optional: the chosen adapter's SERVICE_TYPE is authoritative for the stored
     # category (DiscoveryEngine.run), so this is accepted for the SPA's
     # AddServiceInput shape but not required — and never overrides the adapter.
     service_type = serializers.ChoiceField(choices=["database", "api"], required=False)
     adapter = serializers.CharField()
     host = serializers.CharField(required=False, allow_blank=True, default="")
-    port = serializers.IntegerField(required=False, allow_null=True)
+    port = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1, max_value=65535
+    )
     database = serializers.CharField(required=False, allow_blank=True, default="")
     user = serializers.CharField(required=False, allow_blank=True, default="")
     password = serializers.CharField(
         required=False, allow_blank=True, default="", write_only=True
     )
+    # An API system the backend reads itself (Twenty): its key, kept encrypted in the registry.
+    api_key = serializers.CharField(
+        required=False, allow_blank=True, default="", write_only=True
+    )
     domain = serializers.CharField(required=False, allow_blank=True, default="")
     # Engine fields for the auto-ontology connectors (warehouse, schema, http_scheme).
     options = serializers.DictField(child=serializers.CharField(), required=False)
+
+    def validate_name(self, value: str) -> str:
+        if value == "databases":  # the lookup's own path under /services
+            raise serializers.ValidationError("That name is taken by the console.")
+        return value
+
+
+class AgentSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    name = serializers.CharField(allow_blank=True)
+
+
+class AgentListSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    agents = AgentSerializer(many=True, default=list)
+
+
+class AgentConnectionSerializer(serializers.Serializer):
+    """An agent connected as a role. The key itself is never kept: only its fingerprint."""
+
+    name = serializers.CharField()
+    agent = serializers.CharField()
+    agent_name = serializers.CharField(allow_blank=True, default="")
+    role = serializers.CharField()
+    fingerprint = serializers.CharField(allow_blank=True, default="")
+    created_at = serializers.CharField(allow_blank=True, default="")
+    created_by = serializers.CharField(allow_blank=True, default="")
+
+
+class AgentConnectionInputSerializer(serializers.Serializer):
+    agent = serializers.CharField()
+    role = serializers.CharField()
+
+
+class DatabaseLookupSerializer(serializers.Serializer):
+    adapter = serializers.ChoiceField(choices=["generic-postgres", "generic-mysql"])
+    host = serializers.CharField()
+    port = serializers.IntegerField(min_value=1, max_value=65535)
+    user = serializers.CharField()
+    password = serializers.CharField(
+        required=False, allow_blank=True, default="", write_only=True
+    )
+
+
+class DatabaseListSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    databases = serializers.ListField(child=serializers.CharField(), default=list)
 
 
 # ---------------------------------------------------------------------------

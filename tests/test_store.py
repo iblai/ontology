@@ -367,3 +367,29 @@ def test_platform_config_scheme_and_empty_base_url(monkeypatch):
     monkeypatch.setenv("IBLAI_AUTH_SCHEME", "Bearer")
     with pytest.raises(RuntimeError, match="IBLAI_AUTH_SCHEME"):
         PlatformConfig.from_env()
+
+
+def test_where_the_platform_keeps_no_records_they_are_rows_on_this_host(rbac):
+    from iblai_ontology.backend import store
+
+    assert store.record("role", "Sales") is None and store.records("role") == []
+    seen = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    store.put_record("role", "Sales", {"display_name": "Sales", "seen": seen})
+    store.put_record("role", "Advisor", {"display_name": "Advisor"})
+    store.put_record("setup", "roles", {"roles": []})
+    # Plain JSON, as the platform would hold it; one kind's records, by key.
+    assert store.record("role", "Sales") == {
+        "display_name": "Sales",
+        "seen": "2026-01-02T00:00:00.000000+00:00",
+    }
+    assert [r["key"] for r in store.records("role")] == ["Advisor", "Sales"]
+    assert [r["key"] for r in store.records("role", limit=1)] == ["Advisor"]
+    store.put_record("role", "Sales", {"display_name": "Sales team"})  # replaced whole
+    assert store.record("role", "Sales") == {"display_name": "Sales team"}
+    assert store.delete_record("role", "Sales") is True
+    assert store.delete_record("role", "Sales") is False
+    assert store.record("setup", "roles") == {"roles": []}
+    # Nothing filters or orders a kind kept here: asking is refused, not ignored.
+    with pytest.raises(NotImplementedError):
+        store.records("role", where={"display_name": "Advisor"})
+    assert rbac.calls == []

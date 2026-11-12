@@ -119,52 +119,54 @@ def test_query_cache_rejects_cte_dml():
         h.query_cache("SELECT 1; DROP TABLE students")
 
 
-def test_call_tool_cache_alias_denied_for_default_role():
-    # The `default` role has no toolsets → the cache aliases must be denied,
-    # even though they are served by a built-in handler (scope-bypass regression).
-    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+class _TheToolsetOnly:
+    """A resolver whose role holds the toolset that used to gate the cache tools."""
 
-    class R(ToolsetResolver):
-        def __init__(self):
-            pass
+    writing = {}
 
-        def scope_for(self, p):
-            return ScopedTools(toolsets=[], tool_names=[])
+    def scope_for(self, p):
+        from iblai_ontology.backend.mcp_server.toolsets import ScopedTools
 
+        return ScopedTools(
+            toolsets=["admin-analytics-tools"], tool_names=["query-ontology-cache"]
+        )
+
+    def tool_specs(self, p):
+        # tools.yaml's own entry of that name: never the one a caller is shown.
+        return [{"name": "query-ontology-cache", "description": "from tools.yaml"}]
+
+
+def test_the_cache_tools_follow_the_table_grant_not_a_toolset(monkeypatch):
     from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
 
-    perms = Permissions(role="default", display_name="x", mcp_toolsets=[])
-    h = MCPHandlers(MCPContext(permissions=perms), resolver=R())
-    for alias in ("query-cache", "query-ontology-cache"):
-        with pytest.raises(PermissionDenied):
-            h.call_tool(alias, {"sql": "SELECT 1"})
+    cache_tools = {"describe-ontology-cache", "query-ontology-cache"}
 
+    def handlers(**perms):
+        ctx = MCPContext(permissions=Permissions(role="r", display_name="x", **perms))
+        return MCPHandlers(ctx, resolver=_TheToolsetOnly())
 
-def test_call_tool_cache_alias_scoped_reaches_query_cache(monkeypatch):
-    # A role that DOES have query-ontology-cache in scope passes the scope gate
-    # and reaches query_cache (which we stub to avoid needing a live DB).
-    from iblai_ontology.backend.mcp_server.handlers import MCPContext, MCPHandlers
-    from iblai_ontology.backend.mcp_server.toolsets import ScopedTools, ToolsetResolver
+    # The toolset without a table: not listed, and refused (they are served by a
+    # built-in handler, so the refusal is theirs to make).
+    h = handlers(mcp_toolsets=["admin-analytics-tools"])
+    assert not cache_tools & {t["name"] for t in h.list_tools()}
+    for name in ("query-cache", *cache_tools):
+        with pytest.raises(PermissionDenied, match="cannot query the ontology cache"):
+            h.call_tool(name, {"sql": "SELECT 1"})
 
-    class R(ToolsetResolver):
-        def __init__(self):
-            pass
-
-        def scope_for(self, p):
-            return ScopedTools(
-                toolsets=["admin-analytics-tools"],
-                tool_names=["query-ontology-cache"],
-            )
-
-    perms = Permissions(role="DataAnalyst", display_name="x")
-    h = MCPHandlers(MCPContext(permissions=perms), resolver=R())
+    # A table and no toolset: both are listed with the gateway's own schema, and run.
+    h = handlers(cache_tables=["crm_people"])
+    listed = {t["name"]: t for t in h.list_tools()}
+    assert cache_tools <= set(listed)
+    assert listed["query-ontology-cache"]["inputSchema"]["required"] == ["sql"]
+    assert listed["describe-ontology-cache"]["annotations"] == {"readOnlyHint": True}
     seen = {}
     monkeypatch.setattr(
         h, "query_cache", lambda sql, limit=100: seen.update(sql=sql) or [{"ok": 1}]
     )
-    out = h.call_tool("query-cache", {"sql": "SELECT 1"})
-    assert out == [{"ok": 1}]
+    monkeypatch.setattr(h, "describe_cache", lambda: [{"table": "crm_people"}])
+    assert h.call_tool("query-cache", {"sql": "SELECT 1"}) == [{"ok": 1}]
     assert seen["sql"] == "SELECT 1"
+    assert h.call_tool("describe-ontology-cache", {}) == [{"table": "crm_people"}]
 
 
 def test_get_sync_status_requires_admin():

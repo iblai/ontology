@@ -202,6 +202,8 @@ export interface McpTool {
   description: string;
   parameters: McpToolParameter[];
   statement?: string;
+  /** The system an API operation runs on; such a tool comes and goes with its system. */
+  service?: string;
 }
 
 export interface McpToolset {
@@ -307,13 +309,33 @@ export interface Role {
   };
 }
 
+/** One of the platform's agents, as the console picks one. */
+export interface Agent {
+  id: string;
+  name: string;
+}
+
+/** An agent that reaches this gateway with one role's reach; its key is never sent. */
+export interface AgentConnection {
+  name: string;
+  agent: string;
+  agent_name: string;
+  role: string;
+  /** Twelve characters of the key's hash: what the audit log names its calls by. */
+  fingerprint: string;
+  created_at: string;
+  created_by: string;
+}
+
 export interface QuickCounts {
   services: number;
   tools: number;
   toolsets: number;
   roles: number;
-  /** Where roles, schedules and the registry live: the backend's host, or the ibl.ai platform. */
-  data_store: "local" | "dm";
+  /** Where the settings live: the backend's host, the ibl.ai platform (dm), or only its roles there (rbac). */
+  data_store: "local" | "rbac" | "dm";
+  /** The backend's own platform, by key; empty when it names none. */
+  platform: string;
 }
 
 export interface Db {
@@ -327,6 +349,7 @@ export interface Db {
   mcp_tools: McpTool[];
   mcp_toolsets: McpToolset[];
   roles: Role[];
+  agent_connections: AgentConnection[];
   health: HealthSnapshot;
 }
 // ---- Backend configuration visibility (read-only; secrets masked server-side) ----

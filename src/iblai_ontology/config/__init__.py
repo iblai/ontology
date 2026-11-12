@@ -10,7 +10,7 @@ drive the whole system:
     services.yaml         connected services, for `ontology doctor` (Component 5)
 
 With ``ONTOLOGY_DATA_STORE=dm`` the last three live in the ibl.ai platform instead
-(:func:`dm_store`).
+(:func:`dm_store`); with ``rbac`` only the roles do (:func:`platform_roles`).
 
 All files live under the directory returned by :func:`config_dir` — the
 ``ONTOLOGY_CONFIG_DIR`` env var, or ``./config`` by default.
@@ -30,9 +30,20 @@ def config_dir() -> Path:
     return Path(os.environ.get("ONTOLOGY_CONFIG_DIR", DEFAULT_CONFIG_DIRNAME))
 
 
+def data_store() -> str:
+    """Where the settings live: ``local``, ``rbac`` or ``dm`` (``ONTOLOGY_DATA_STORE``)."""
+    return os.environ.get("ONTOLOGY_DATA_STORE") or "local"
+
+
 def dm_store() -> bool:
-    """Whether roles, sync schedules and the service registry live in the ibl.ai platform."""
-    return os.environ.get("ONTOLOGY_DATA_STORE") == "dm"
+    """Whether sync schedules, the service registry and the other records live in the ibl.ai platform."""
+    return data_store() == "dm"
+
+
+def platform_roles() -> bool:
+    """Whether roles are the ibl.ai platform's own RBAC roles: in ``dm``, and in ``rbac``,
+    for a platform that keeps no ontology records, where the rest stays on this host."""
+    return data_store() in ("rbac", "dm")
 
 
 # Default LLM models per provider (BYOK — only the default when a provider is

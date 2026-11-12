@@ -123,10 +123,12 @@ def test_every_stock_role_is_stored_as_grants_and_reads_back_the_same(dm):
         ROOT + "subjects/",
         ROOT + "tables/",
         ROOT + "toolsets/",
+        ROOT + "limits/rows/1000/",
     ]
     # A file ends in *, which stands for its .md; the caller's own id is USER_EMPLID.
     assert dm.policy("Ontology: Student")["resources"] == [
         ROOT + "toolsets/student-self-service-tools/",
+        ROOT + "limits/rows/1/",
         ROOT + "memory/courses/_index*/",
         ROOT + "memory/courses/by-dept/",
         ROOT + "memory/students/by-id/USER_EMPLID*/",
@@ -249,35 +251,80 @@ def test_a_toolset_named_beside_the_wildcard_is_kept(dm):
     assert role_source.load_roles()["Root"]["mcp_toolsets"] == ["*"]
 
 
-def test_roles_of_reads_the_policies_that_list_a_member(dm):
-    from iblai_ontology.backend.identity import role_source
-    from iblai_ontology.backend.identity.roles import RolesUnavailable
-
-    advisor = dm.add_role("Advisor", actions=["Ontology/*"])
-    dm.add_policy("Ontology: Advisor", advisor, [ROOT + "toolsets/"], users=["Max"])
-    registrar = dm.add_role("Registrar", actions=["Ontology/*"])
-    dm.add_policy("Ontology: Registrar", registrar, [ROOT + "tables/"], users=["ada"])
-    # Only a role's own policy counts, whoever another one lists.
-    dm.add_policy("Ontology: side door", registrar, [ROOT], users=["max"])
-
-    assert role_source.roles_of("max") == ["Advisor"]  # the platform ignores case
-    assert role_source.roles_of("nobody") == []
-    asked = dm.calls[-1].url.params
-    assert (asked["name"], asked["username"]) == ("Ontology:", "nobody")
-
-    # Kept for the roles' TTL; a platform that does not answer is said, never read as no role.
-    before = len(dm.calls)
-    assert role_source.roles_of("max") == ["Advisor"] and len(dm.calls) == before
-    dm.down = (500, {"detail": "boom"})
-    assert role_source.roles_of("max") == ["Advisor"]
-    with pytest.raises(RolesUnavailable):
-        role_source.roles_of("ada")
-
-
-def test_roles_of_is_empty_while_the_roles_live_in_roles_yaml():
+def test_a_row_limit_is_a_resource_too_and_reads_back_from_a_callers_grants(dm):
     from iblai_ontology.backend.identity import role_source
 
-    assert role_source.roles_of("max") == []
+    limits = {"max_records_per_query": 200, "max_export_rows": 50}
+    spec = {
+        "display_name": "Advisor",
+        "cache_tables": ["students"],
+        "concurrency_limits": limits,
+    }
+    role_source.put_role("Advisor", spec)
+    resources = dm.policy("Ontology: Advisor")["resources"]
+    # Beside the record: a caller's grants carry no role name to find the record by.
+    assert resources == [
+        ROOT + "subjects/",
+        ROOT + "tables/students/",
+        ROOT + "limits/rows/200/",
+    ]
+    assert role_source.load_roles()["Advisor"]["concurrency_limits"] == limits
+
+    # What the platform answers a caller the policy lists, read as one spec.
+    held = {"actions": ["Ontology/*"], "data_actions": []}
+    asked = {ROOT: {"actions": [], "data_actions": []}}
+    assert role_source.granted({**asked, **{r: held for r in resources}}) == {
+        "memory_paths": [],
+        "mcp_toolsets": [],
+        "cache_tables": ["students"],
+        "agents": [],
+        "concurrency_limits": {"max_records_per_query": 200},
+        "admin_dashboard": False,
+        "self_service": False,
+    }
+    # A resource held without its kind's verb grants nothing, and no grant is no reach.
+    lacking = {"actions": ["Ontology/Toolsets/action"], "data_actions": []}
+    nothing = role_source.granted({**asked, ROOT + "tables/students/": lacking})
+    assert nothing == role_source.granted(asked) == role_source.combine([])
+    assert nothing["cache_tables"] == [] and nothing["self_service"] is True
+
+    # Only a whole number above zero is a limit; a save without one takes the resource away.
+    for unusable in (0, -5, "200", 2.5, True, None):
+        changed = {**spec, "concurrency_limits": {"max_records_per_query": unusable}}
+        role_source.put_role("Advisor", changed)
+        assert dm.policy("Ontology: Advisor")["resources"] == resources[:2], unusable
+
+
+def test_roles_combine_into_every_grant_of_each():
+    from iblai_ontology.backend.identity import role_source
+
+    advisor = {
+        "memory_paths": ["/ontology/students/**"],
+        "mcp_toolsets": ["advising"],
+        "cache_tables": ["students"],
+        "agents": ["a"],
+        "concurrency_limits": {"max_records_per_query": 50},
+        "self_service": True,
+    }
+    registrar = {
+        "memory_paths": ["/ontology/students/**", "/ontology/holds/**"],
+        "mcp_toolsets": ["*", "registrar-writes"],
+        "cache_tables": ["*"],
+        "concurrency_limits": {"max_records_per_query": 200, "max_export_rows": True},
+        "admin_dashboard": True,
+    }
+    assert role_source.combine([advisor, registrar]) == {
+        "memory_paths": ["/ontology/holds/**", "/ontology/students/**"],
+        "mcp_toolsets": ["*", "advising", "registrar-writes"],
+        "cache_tables": ["*", "students"],
+        "agents": ["a"],
+        # The largest any of them names; what is no whole number is no limit.
+        "concurrency_limits": {"max_records_per_query": 200},
+        "admin_dashboard": True,
+        # Subjects stay the caller's own only while every role says so.
+        "self_service": False,
+    }
+    assert role_source.combine([advisor])["self_service"] is True
 
 
 def test_policies_of_another_platform_stop_the_read(dm):
@@ -564,6 +611,7 @@ def test_the_access_pages_requests_become_resources(empty_config, dm):
         ROOT + "tables/",
         ROOT + "toolsets/admin-analytics-tools/",
         ROOT + "toolsets/client-postgres-tools/",
+        ROOT + "limits/rows/1000/",
     ]
     # A memory domain's read switch, then its cache switch: the domain's own tables.
     role = {**listed("Executive"), "memory_paths": ["/ontology/students/**"]}
@@ -713,6 +761,13 @@ def test_the_first_console_request_writes_the_example_roles_once_a_platform(
         ROOT + "subjects/",
         ROOT + "tables/",
         ROOT + "toolsets/",
+        ROOT + "limits/rows/1000/",
+    ]
+    # Only toolsets this backend defines, here none: a role naming another could not be saved again.
+    assert dm.policy("Ontology: DataAnalyst")["resources"] == [
+        ROOT + "memory/",
+        ROOT + "subjects/",
+        ROOT + "tables/",
     ]
     # From the built-in copy: no file is read or written.
     assert list(empty_config.iterdir()) == []
@@ -800,17 +855,53 @@ def test_a_roles_yaml_in_the_config_directory_is_never_read(empty_config, dm):
 # -- sync schedules --------------------------------------------------------------------------
 
 
-def test_beat_is_built_from_the_platforms_schedules(dm):
+def test_the_tick_queues_what_is_due_among_the_platforms_schedules(dm, monkeypatch):
     pytest.importorskip("celery")
-    from iblai_ontology.backend.sync.scheduler import build_beat_schedule
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from iblai_ontology.backend.sync import tasks
+    from iblai_ontology.backend.sync.engine import SyncRunner
+    from iblai_ontology.backend.sync.models import SyncRun
 
     _schedule(dm, "nightly", **NIGHTLY)
     _schedule(dm, "paused", **NIGHTLY, enabled=False)
     _schedule(dm, "on-event", source="canvas", tool="get-activity")
-    beat = build_beat_schedule()
-    assert list(beat) == ["sync-nightly"]
-    assert beat["sync-nightly"]["args"] == ("nightly",)
-    assert dm.sent() == [("GET", "/v1/ontology/kinds/sync_schedule/records")]
+    ran = []
+
+    def fake_run(self, sched, *, force_full):
+        ran.append(sched["name"])
+        SyncRun.objects.create(
+            schedule_name=sched["name"], source_system="", started_at=timezone.now()
+        )
+        return SimpleNamespace(
+            schedule_name=sched["name"], status="success", records_processed=0
+        )
+
+    monkeypatch.setattr(SyncRunner, "_run_schedule", fake_run)
+    # One that never ran starts at the first tick; a paused or event-driven one never does.
+    assert tasks.tick() == ["nightly"] and ran == ["nightly"]
+    assert dm.sent()[0] == ("GET", "/v1/ontology/kinds/sync_schedule/records")
+    # It ran a moment ago: not due until its cron comes round.
+    assert tasks.tick() == [] and ran == ["nightly"]
+    # Two days on, its 02:00 has passed since that run.
+    SyncRun.objects.update(started_at=timezone.now() - timedelta(days=2))
+    assert tasks.tick() == ["nightly"] and ran == ["nightly", "nightly"]
+    # A second copy still waiting in the queue finds the schedule no longer due.
+    waiting = tasks.run_schedule("nightly", due_only=True)
+    assert waiting == {"schedule": "nightly", "status": "not_due"}
+    assert ran == ["nightly", "nightly"]
+
+    # A cron that cannot be read is said in the log and does not stop the others.
+    _schedule(dm, "broken", **{**NIGHTLY, "cron": "not a cron at all"})
+    SyncRun.objects.create(
+        schedule_name="broken", source_system="", started_at=timezone.now()
+    )
+    SyncRun.objects.filter(schedule_name="nightly").update(
+        started_at=timezone.now() - timedelta(days=2)
+    )
+    assert tasks.tick() == ["nightly"]
 
 
 def test_run_schedule_finds_a_platform_schedule_or_says_not_found(dm, monkeypatch):
@@ -932,6 +1023,247 @@ def test_sync_import_copies_a_file_as_written_and_prints_each_name(
     assert "the ibl.ai platform" in listed.output
 
 
+# -- agents connected as a role --------------------------------------------------------------
+
+SESSION = "Token an-admins-session"  # the header an admin's own sign-in arrives as
+GATEWAY = "https://ontology.acme.edu/mcp"
+
+
+@pytest.fixture()
+def sales(dm, monkeypatch):
+    """A role that reaches something, and two agents of one name; returns the first's id."""
+    monkeypatch.setenv("ONTOLOGY_GATEWAY_URL", GATEWAY)
+    _role(dm, "Sales", [ROOT + "tables/persons/", ROOT + "toolsets/crm-writes/"])
+    coach = dm.add_agent("Sales coach")
+    dm.add_agent("Sales coach")
+    return coach
+
+
+def test_connecting_an_agent_makes_a_key_for_the_role_and_registers_this_gateway(
+    dm, sales
+):
+    import hashlib
+
+    from iblai_ontology.backend.platform import agents
+
+    listed = agents.agents(SESSION)
+    assert [a["name"] for a in listed] == ["Sales coach", "Sales coach"]
+    assert listed[1]["id"] == sales  # the newest is listed first
+
+    made = agents.connect(SESSION, agent=sales, role="Sales", by="ada")
+    # A key limited to the role's own policy, made in the admin's name: nothing else may.
+    key = dm.keys[made["key_id"]]
+    assert (key["mode"], key["by"]) == ("token_policies", SESSION)
+    assert key["policies"] == [
+        {"id": dm.policy("Ontology: Sales")["id"], "name": "Ontology: Sales"}
+    ]
+    # This gateway, that agent's alone, with the key sent as it is on every call.
+    server = dm.servers[made["server"]]
+    assert (server["url"], server["mentor"]) == (GATEWAY, sales)
+    assert (server["auth_type"], server["auth_scope"]) == ("none", "platform")
+    assert server["credentials"] == f"Api-Token {key['key']}"
+    assert "extra_headers" not in server  # the credential carries its role
+    assert dm.settings[sales] == {
+        "tool_slugs": ["mcp"],
+        "can_use_tools": True,
+        "mcp_servers": [made["server"]],
+    }
+    # The record names them. The key is kept nowhere here: twelve characters of its hash.
+    record = dm.records["agent_connection", made["name"]]["data"]
+    assert record == {k: v for k, v in made.items() if k != "name"}
+    assert (record["agent_name"], record["role"], record["created_by"]) == (
+        "Sales coach",
+        "Sales",
+        "ada",
+    )
+    fingerprint = hashlib.sha256(key["key"].encode()).hexdigest()[:12]
+    assert record["fingerprint"] == fingerprint
+    assert key["key"] not in str(dm.records)
+    assert agents.connections() == [made]
+
+    # The same agent as the same role is one connection; another agent of that name is another.
+    with pytest.raises(agents.ConnectionRefused, match="already connected as Sales"):
+        agents.connect(SESSION, agent=sales, role="Sales")
+    other = agents.connect(SESSION, agent=listed[0]["id"], role="Sales")
+    assert other["name"] != made["name"] and len(dm.keys) == 2
+
+
+def test_a_step_that_fails_takes_back_the_ones_before_it_newest_first(dm, sales):
+    from iblai_ontology.backend.platform import agents
+
+    refused = (403, {"detail": "You do not have permission to perform this action."})
+    dm.refuse_settings = refused
+    asked = len(dm.calls)
+    with pytest.raises(agents.ConnectionRefused, match="do not have permission"):
+        agents.connect(SESSION, agent=sales, role="Sales")
+    undone = [path for method, path in dm.sent()[asked:] if method == "DELETE"]
+    assert len(undone) == 2 and "/mcp-servers/" in undone[0]
+    # One key's address has no slash at its end in the platform: with one it answers 404.
+    assert "/platform/api-tokens/" in undone[1] and not undone[1].endswith("/")
+    assert dm.keys == {} and dm.servers == {}
+    assert not [kind for kind, _ in dm.records if kind == "agent_connection"]
+
+    # What could not be taken back is said, for an admin to remove in the platform.
+    dm.refuse_key_delete = (500, {"detail": "boom"})
+    with pytest.raises(agents.ConnectionRefused) as said:
+        agents.connect(SESSION, agent=sales, role="Sales")
+    assert "Not taken back, remove it in the platform: the API key" in str(said.value)
+    assert dm.servers == {} and len(dm.keys) == 1
+
+
+def test_an_agent_is_not_connected_without_what_it_takes(dm, sales, monkeypatch):
+    from iblai_ontology.backend.platform import agents
+
+    def refused(why, authorization=SESSION, agent=sales, role="Sales"):
+        asked = len(_writes(dm))
+        with pytest.raises(agents.ConnectionRefused, match=why):
+            agents.connect(authorization, agent=agent, role=role)
+        assert len(_writes(dm)) == asked  # nothing was made
+
+    # The platform lets only a signed-in administrator make a key.
+    refused("needs your ibl.ai sign-in", authorization="")
+    refused("needs your ibl.ai sign-in", authorization="Bearer a.b.c")
+    refused("reaches nothing yet", role="Nobody")
+    _role(dm, "Empty")  # a role with no policy grants nothing to limit a key to
+    refused("reaches nothing yet", role="Empty")
+    refused("not one of this platform's", agent="no-such-agent")
+    monkeypatch.delenv("ONTOLOGY_GATEWAY_URL")
+    refused("ONTOLOGY_GATEWAY_URL")
+    monkeypatch.setenv("ONTOLOGY_GATEWAY_URL", GATEWAY)
+
+    # What the platform refuses is said in its words: here, a policy above the admin's own.
+    dm.refuse_key = (
+        400,
+        {
+            "policies": "You cannot grant policies whose permissions exceed your own: Ontology: Sales"
+        },
+    )
+    with pytest.raises(
+        agents.ConnectionRefused, match="exceed your own: Ontology: Sales"
+    ):
+        agents.connect(SESSION, agent=sales, role="Sales")
+    assert dm.servers == {} and dm.keys == {}
+
+    # On this host's own settings there is no such thing as a connection.
+    monkeypatch.delenv("ONTOLOGY_DATA_STORE")
+    asked = len(dm.calls)
+    assert agents.connections() == []
+    for refuses in (
+        lambda: agents.agents(SESSION),
+        lambda: agents.connect(SESSION, agent=sales, role="Sales"),
+    ):
+        with pytest.raises(
+            agents.ConnectionRefused, match="kept in the ibl.ai platform"
+        ):
+            refuses()
+    assert len(dm.calls) == asked
+
+
+def test_removing_a_connection_deletes_its_key_first(dm, sales):
+    from iblai_ontology.backend.platform import agents
+
+    made = agents.connect(SESSION, agent=sales, role="Sales")
+    with pytest.raises(agents.ConnectionRefused, match="needs your ibl.ai sign-in"):
+        agents.disconnect("", made["name"])
+    with pytest.raises(agents.ConnectionRefused, match="No connection named"):
+        agents.disconnect(SESSION, "nope")
+
+    # A key that cannot be deleted still works: nothing else is touched, and it is said.
+    dm.refuse_key_delete = (500, {"detail": "boom"})
+    with pytest.raises(agents.ConnectionRefused, match="still works"):
+        agents.disconnect(SESSION, made["name"])
+    assert len(dm.servers) == 1 and agents.connections() == [made]
+    dm.refuse_key_delete = None
+
+    asked = len(dm.calls)
+    agents.disconnect(SESSION, made["name"])
+    removed = [path for method, path in dm.sent()[asked:] if method == "DELETE"]
+    # Access stops at once; then the server, then the record.
+    assert len(removed) == 3
+    assert ["api-tokens", "mcp-servers", "records"] == [
+        part
+        for part, path in zip(("api-tokens", "mcp-servers", "records"), removed)
+        if part in path
+    ]
+    assert dm.keys == {} and dm.servers == {} and agents.connections() == []
+
+    # A key someone already deleted in the platform does not keep the rest from going.
+    made = agents.connect(SESSION, agent=sales, role="Sales")
+    dm.keys.clear()
+    agents.disconnect(SESSION, made["name"])
+    assert dm.servers == {} and agents.connections() == []
+
+
+def test_the_console_connects_and_removes_an_agent_in_the_admins_name(
+    dm, sales, monkeypatch
+):
+    from django.conf import settings
+    from rest_framework.test import APIRequestFactory
+
+    from iblai_ontology.backend.api import auth
+    from iblai_ontology.backend.api.views import (
+        AgentConnectionDetailView,
+        AgentConnectionsView,
+        AgentsView,
+    )
+    from iblai_ontology.backend.identity.models import AuditLog
+
+    ada = auth.PlatformMember(
+        user_id="7", username="ada", email="ada@acme.edu", admin=True, member=True
+    )
+    monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "https://dm.test")
+    monkeypatch.setattr(auth, "platform_member", lambda scheme, credential: ada)
+
+    def call(view, method="get", data=None, **kwargs):
+        factory = getattr(APIRequestFactory(), method)
+        sent = {"HTTP_AUTHORIZATION": SESSION}
+        raw = (
+            factory("/x", data, format="json", **sent)
+            if data
+            else factory("/x", **sent)
+        )
+        raw.ontology = None
+        resp = view.as_view()(raw, **kwargs)
+        resp.render()
+        return resp.data
+
+    listed = call(AgentsView)
+    assert listed["ok"] is True and [a["id"] for a in listed["agents"]][1] == sales
+    connected = call(AgentConnectionsView, "post", {"agent": sales, "role": "Sales"})
+    assert dict(connected) == {
+        "ok": True,
+        "message": "Sales coach is connected as Sales.",
+    }
+    (shown,) = call(AgentConnectionsView)
+    # What the console is sent names no key and no server.
+    assert set(shown) == {
+        "name",
+        "agent",
+        "agent_name",
+        "role",
+        "fingerprint",
+        "created_at",
+        "created_by",
+    }
+    assert (shown["role"], shown["created_by"]) == ("Sales", "ada")
+    again = call(AgentConnectionsView, "post", {"agent": sales, "role": "Sales"})
+    assert again["ok"] is False and "already connected" in again["message"]
+
+    removed = call(AgentConnectionDetailView, "delete", name=shown["name"])
+    assert removed["ok"] is True and dm.keys == {} and call(AgentConnectionsView) == []
+    rows = AuditLog.objects.filter(action__startswith="agent.").order_by("timestamp")
+    assert [(r.user_id, r.action, r.allowed) for r in rows] == [
+        ("7", "agent.connect", True),
+        ("7", "agent.connect", False),
+        ("7", "agent.disconnect", True),
+    ]
+
+    # Without a sign-in to make the key with, the console is told why.
+    without = _run(AgentConnectionsView, "post", {"agent": sales, "role": "Sales"}).data
+    assert without["ok"] is False and "needs your ibl.ai sign-in" in without["message"]
+    assert "needs your ibl.ai sign-in" in _run(AgentsView).data["message"]
+
+
 # -- connected services, counts, the map -----------------------------------------------------
 
 
@@ -949,13 +1281,16 @@ def test_doctor_checks_the_environment_of_the_platforms_services(
 ):
     from iblai_ontology.commands.doctor import run_checks
 
-    monkeypatch.setenv("TWENTY_API_KEY", "k")
-    monkeypatch.delenv("TWENTY_BASE_URL", raising=False)
+    monkeypatch.setenv("CANVAS_API_TOKEN", "k")
+    monkeypatch.delenv("CANVAS_BASE_URL", raising=False)
+    _service("lms", "canvas")
     _service("crm", "twenty")
     _service("homegrown", "not-in-the-catalog")
     checks = {c.name: c for c in run_checks()}
-    assert checks["env:crm"].ok is False
-    assert checks["env:crm"].detail == "missing: TWENTY_BASE_URL"
+    assert checks["env:lms"].ok is False
+    assert checks["env:lms"].detail == "missing: CANVAS_BASE_URL"
+    # Twenty's login is the registry's, not the environment's: nothing to check.
+    assert "env:crm" not in checks
     assert "env:homegrown" not in checks and "services" not in checks
 
     # A registry that cannot be read is a line of its own, not a silent skip.
@@ -1036,3 +1371,129 @@ def test_counts_and_the_map_read_the_platform(empty_config, dm):
     dm.down = (502, {"detail": "bad gateway"})
     graph = _run(GraphView).data
     assert graph["ok"] is False and "502" in graph["message"]
+
+
+# -- rbac: the platform's roles, this host's records ------------------------------------------
+
+
+def _record_calls(dm):
+    """The calls that reached the platform's ontology records: none where it keeps none."""
+    return [path for _, path in dm.sent() if path.startswith("/v1/ontology/")]
+
+
+def test_rbac_keeps_roles_in_the_platform_and_what_else_they_hold_here(
+    rbac, empty_config
+):
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.identity import role_source
+    from iblai_ontology.backend.services.models import Service
+
+    spec = {
+        "display_name": "Sales",
+        "memory_paths": ["/ontology/persons/**"],
+        "mcp_toolsets": ["crm-writes"],
+        "cache_tables": ["deals", "persons"],
+        "agents": ["sales-agent"],
+        "concurrency_limits": {"max_records_per_query": 50},
+    }
+    role_source.put_role("Sales", spec)
+    # The role and its one policy are the platform's; what it holds besides is a row here.
+    assert rbac.role("Sales")["actions"] == ["Ontology/*"]
+    assert rbac.policy("Ontology: Sales")["resources"] == [
+        ROOT + "subjects/",
+        ROOT + "memory/persons/",
+        ROOT + "tables/deals/",
+        ROOT + "tables/persons/",
+        ROOT + "toolsets/crm-writes/",
+        ROOT + "limits/rows/50/",
+    ]
+    assert store.record("role", "Sales") == {
+        "display_name": "Sales",
+        "agents": ["sales-agent"],
+        "concurrency_limits": {"max_records_per_query": 50},
+    }
+    assert role_source.load_roles() == {"Sales": _as_read("Sales", spec)}
+    assert role_source.reader().get_roles()["Sales"]["cache_tables"] == [
+        "deals",
+        "persons",
+    ]
+
+    # The registry is this host's database: no model is the platform's.
+    store.create(
+        Service, name="crm", display_name="CRM", service_type="api", adapter="x"
+    )
+    assert store.count(Service) == Service.objects.count() == 1
+
+    assert role_source.delete_role("Sales") is True
+    assert rbac.role("Sales") is None and store.record("role", "Sales") is None
+    # Nothing was read from or written to records the platform does not keep.
+    assert rbac.records == {} and _record_calls(rbac) == []
+
+
+def test_rbac_writes_the_example_roles_once_and_marks_it_here(
+    rbac, empty_config, monkeypatch
+):
+    from django.core.cache import cache
+
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.identity import role_source
+
+    names = list(role_source.EXAMPLE_ROLES)
+    assert _first_request(monkeypatch) == names
+    assert [role["name"] for role in rbac.roles] == names
+    assert store.record("setup", "roles") == {"roles": names}
+
+    # An admin deletes them all: another process finds the mark here and writes nothing.
+    rbac.roles.clear()
+    rbac.policies.clear()
+    cache.clear()
+    asked = len(rbac.calls)
+    assert _first_request(monkeypatch) == []
+    assert _writes(rbac, asked) == []
+    assert rbac.records == {} and _record_calls(rbac) == []
+
+
+def test_rbac_connects_and_removes_an_agent_with_its_record_here(rbac, sales):
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.platform import agents
+
+    made = agents.connect(SESSION, agent=sales, role="Sales")
+    assert agents.connections() == [made]
+    assert store.record("agent_connection", made["name"])["key_id"] == made["key_id"]
+    assert len(rbac.keys) == 1 and len(rbac.servers) == 1
+    with pytest.raises(agents.ConnectionRefused, match="already connected as Sales"):
+        agents.connect(SESSION, agent=sales, role="Sales")
+
+    agents.disconnect(SESSION, made["name"])
+    assert rbac.keys == {} and rbac.servers == {} and agents.connections() == []
+    with pytest.raises(agents.ConnectionRefused, match="No connection named"):
+        agents.disconnect(SESSION, made["name"])
+    assert rbac.records == {} and _record_calls(rbac) == []
+
+
+def test_a_backend_with_its_roles_in_a_file_connects_no_agent(rbac, sales, monkeypatch):
+    from iblai_ontology.backend.platform import agents
+
+    monkeypatch.setenv("ONTOLOGY_DATA_STORE", "local")
+    assert agents.connections() == []
+    with pytest.raises(agents.ConnectionRefused, match="roles in a file"):
+        agents.connect(SESSION, agent=sales, role="Sales")
+    with pytest.raises(agents.ConnectionRefused, match="roles in a file"):
+        agents.agents(SESSION)
+    assert rbac.keys == {}
+
+
+def test_counts_name_the_store_and_the_address_command_needs_records(
+    rbac, empty_config
+):
+    from iblai_ontology.backend.api.views import ConfigFilesView, CountsView
+    from django.conf import settings
+
+    settings.ONTOLOGY_API_DEV_ALLOW_ANON = True
+    assert _run(CountsView).data["data_store"] == "rbac"
+    # roles.yaml stands for nothing here; the schedules are still this host's file.
+    sent = {f["id"] for f in _run(ConfigFilesView).data["files"]}
+    assert "roles" not in sent and "schedules" in sent
+    refused = _cli("platform", "address", "--url", "https://ontology.acme.test")
+    assert refused.exit_code == 1 and "keeps no ontology records" in refused.output
+    assert rbac.records == {} and _record_calls(rbac) == []

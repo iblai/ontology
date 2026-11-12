@@ -1,4 +1,6 @@
 import type {
+  Agent,
+  AgentConnection,
   BackendConfigSnapshot,
   ComplianceReport,
   GatewayHealth,
@@ -18,22 +20,34 @@ import type {
   SyncSchedule,
   TableEdit,
 } from "./types";
+import { resolveAppTenant } from "@/lib/iblai/tenant";
 
 /** Same-origin route handlers; the server decides between the mock and a real backend. */
 const BASE = "/api/ontology";
+/** The hosted console's own routes: they speak to the ibl.ai platform, not to a backend. */
+const HOSTED = "/api/hosted";
 const enc = encodeURIComponent;
 
 type Ok = { ok: boolean; message: string };
+type Refused = { ok: false; message: string };
+
+/** Where this browser keeps its platform's backend address, while the platform keeps no record of it. */
+const backendAt = () => `ontology_backend:${resolveAppTenant()}`;
 
 /**
  * The ibl.ai SSO flow stores the DM token in localStorage; the route handler forwards
  * it to a real backend as `Authorization: Token <dm_token>`, the one credential a
- * backend is sent. Browser-only (SSR has no localStorage); no token sends nothing.
+ * backend is sent. The hosted console is also told the backend this browser keeps for its
+ * platform, if any. Browser-only (SSR has no localStorage); no token sends nothing.
  */
 function authHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const dmToken = window.localStorage.getItem("dm_token");
-  return dmToken ? { Authorization: `Token ${dmToken}` } : {};
+  const backend = window.localStorage.getItem(backendAt());
+  return {
+    ...(dmToken ? { Authorization: `Token ${dmToken}` } : {}),
+    ...(backend ? { "X-Ontology-Backend": backend } : {}),
+  };
 }
 
 /** A refused call: its HTTP status, with the server's own words in the message. */
@@ -46,8 +60,8 @@ export class ApiError extends Error {
   }
 }
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+async function http<T>(path: string, init?: RequestInit, base = BASE): Promise<T> {
+  const res = await fetch(`${base}${path}`, {
     cache: "no-store",
     ...init,
     headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
@@ -91,8 +105,18 @@ export const apiClient = {
       database?: string;
       user?: string;
       password?: string;
+      /** An API system the backend reads itself (Twenty): its key. */
+      api_key?: string;
       domain: string;
     }): Promise<Ok> => post("/services", input),
+    // The databases a PostgreSQL or MySQL login may open, so the form offers the name.
+    databases: (login: {
+      adapter: string;
+      host: string;
+      port: number;
+      user: string;
+      password: string;
+    }): Promise<Ok & { databases: string[] }> => post("/services/databases", login),
     updateTables: (name: string, body: TableEdit): Promise<Ok & { updated: number }> =>
       http(`/services/${enc(name)}/tables`, { method: "PATCH", body: JSON.stringify(body) }),
   },
@@ -138,9 +162,33 @@ export const apiClient = {
     save: (role: Role): Promise<Ok> => put(`/roles/${enc(role.name)}`, role),
     remove: (name: string): Promise<Ok> => del(`/roles/${enc(name)}`),
   },
+  agents: {
+    // The platform's agents; not ok says why they could not be listed.
+    list: (): Promise<Ok & { agents: Agent[] }> => http("/agents"),
+    connections: (): Promise<AgentConnection[]> => http("/agent-connections"),
+    connect: (input: { agent: string; role: string }): Promise<Ok> =>
+      post("/agent-connections", input),
+    disconnect: (name: string): Promise<Ok> => del(`/agent-connections/${enc(name)}`),
+  },
   config: {
     // Mock mode renders the files from its state; a backend sends its own, masked on its host.
     snapshot: (): Promise<BackendConfigSnapshot> => http("/config"),
   },
   counts: (): Promise<QuickCounts> => http("/counts"),
+  // Hosted mode only: where the platform keeps its backend, and the key a new one is installed with.
+  hosted: {
+    backend: (): Promise<{ url: string | null }> => http("/backend", undefined, HOSTED),
+    connect: async (url: string): Promise<{ ok: true; url: string } | Refused> => {
+      const res = await http<{ ok: true; url: string; browser?: true } | Refused>(
+        "/backend",
+        { method: "PUT", body: JSON.stringify({ url }) },
+        HOSTED,
+      );
+      // The console says when the address is this browser's to keep, not the platform's.
+      if (res.ok && res.browser) window.localStorage.setItem(backendAt(), res.url);
+      return res;
+    },
+    key: (): Promise<{ ok: true; key: string } | Refused> =>
+      http("/backend/key", { method: "POST" }, HOSTED),
+  },
 };

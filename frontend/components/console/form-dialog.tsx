@@ -51,6 +51,14 @@ export function FormDialog({
   );
 }
 
+/** What a field that is not prose turns off: capitals, corrections, saved values. */
+export const PLAIN = {
+  autoCapitalize: "none",
+  autoCorrect: "off",
+  autoComplete: "off",
+  spellCheck: false,
+} as const;
+
 /** A label over a control, with the validation message or a hint under it. */
 export function Field({
   label,

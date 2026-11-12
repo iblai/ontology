@@ -17,9 +17,10 @@ In this repo the gateway runs as the `ontology-gateway` container, behind a Cadd
 The outbound MCP server exposes, **all scoped by the caller's role**:
 
 1. **All inbound toolsets** from the MCP Toolbox (PeopleSoft queries, cache queries, etc.). A toolset marked `write: true` is exposed only to a role that names it; `"*"` is every toolset that only reads.
-2. **Text memory file access** — read-only, restricted to the role's allowed path globs.
-3. **Structured cache queries** — restricted to the role's allowed tables, and to the role's row limit (`max_records_per_query`).
-4. **Sync status and audit-log queries** — for admin roles only.
+2. **The operations of a connected application.** Connecting Twenty CRM adds the toolset `<system>-writes` (`twenty-writes` for a system named `twenty`): create and update for people, companies, opportunities, notes and tasks, ten tools, no delete. The gateway runs them itself with the key the system was connected with; they do not go through the Toolbox ([02-knowledge-materialization.md](02-knowledge-materialization.md#an-application-read-over-its-api)).
+3. **Text memory file access** — read-only, restricted to the role's allowed path globs.
+4. **Structured cache queries** — `describe-ontology-cache` lists the tables the role may query, each with its columns, and `query-ontology-cache` runs one `SELECT` over them, up to the role's row limit (`max_records_per_query`). Both are offered to a role that may query any table; no toolset has to name them.
+5. **Sync status and audit-log queries** — for admin roles only.
 
 `tools/list` gives each tool MCP's `annotations`: `{"readOnlyHint": true}` for a tool that reads, `{"readOnlyHint": false, "destructiveHint": true}` for one that can change data, so a client may ask its user before it calls one. A tool that changes data is recorded in the audit log *before* it runs, with its arguments; if that row cannot be written, the call is refused ([../authorization-model.md](../authorization-model.md#toolsets-that-change-data)).
 
@@ -41,6 +42,8 @@ The gateway runs behind an HTTPS reverse proxy (Caddy) on the university's netwo
 
 The university's firewall allows inbound HTTPS on port 443 **only** from authorized IP ranges: ibl.ai's infrastructure IPs, and the university's own VPN for remote staff. Everything else is dropped before it reaches the gateway.
 
+A server used from the hosted console (`deploy/install.sh`) cannot have such a list: the hosted console and the ibl.ai platform call from addresses that change. There ports 80 and 443 are open to the internet, 80 only for the certificate and the redirect, and Level 2 guards every call.
+
 ### Level 2 — Authentication (Entra ID tokens)
 
 Every MCP request must carry a credential the gateway can verify. The first kind is an Entra ID access token. The gateway validates it — signature via Entra's JWKS, plus `aud`/`iss`/`exp` checks — before executing any tool, then resolves the caller's role from the `X-Iblai-Role` header against `roles.yaml` (with `ONTOLOGY_DATA_STORE=dm`, against the roles kept in the ibl.ai platform; while those cannot be read the gateway answers `503`, never with the `default` role). See [../identity.md](../identity.md) for the full validation logic.
@@ -50,10 +53,11 @@ Three other credentials end in the same place, a role:
 | `Authorization` | Who | Role |
 |---|---|---|
 | `Bearer <ONTOLOGY_SERVICE_TOKEN>` | The ibl.ai platform itself | The one `X-Iblai-Role` names |
-| `Token <dm_token>` | A member of the platform, with their sign-in token | One the platform's policy `Ontology: <role>` gives them |
-| `Api-Token <key>` | The same, with a platform API key that acts as its owner | As above |
+| `Token <dm_token>` | A member of the platform, with their sign-in token | Every role the platform's policies `Ontology: <role>` list them on, combined |
+| `Api-Token <key>` | A platform API key that acts as its owner | As above |
+| `Api-Token <key>` | A key limited to its own policies, as the console's Agents page makes for an agent | Exactly the roles attached to the key |
 
-A client that can send only `Bearer` may put a DM token or an API key behind it: the gateway works out which it was given. The rules, the statuses and how a person is given a role are in [../identity.md](../identity.md#a-persons-own-iblai-credential).
+The last three carry their role: the gateway asks the platform what the credential is granted, and answers `400` to an `X-Iblai-Role` sent with one. An administrator's token or key reads everything and changes nothing, unless a role that lists them names a toolset that changes data. A client that can send only `Bearer` may put a DM token or an API key behind it: the gateway works out which it was given. The rules, the statuses and how a person is given a role are in [../identity.md](../identity.md#a-persons-own-iblai-credential).
 
 Because the two levels are independent, a leaked token is useless from an un-allowlisted network, and a connection from an allowlisted IP is still useless without a valid, role-scoped token.
 
@@ -102,9 +106,9 @@ Text memories are read through a `read-memory` tool, whose path is normalised be
 
 ## How It Holds Together
 
-- **With Entra ID tokens the gateway never needs to know about the ibl.ai platform.** It only validates the token and resolves roles. Whether a token came from the platform, a university app, or a direct client is irrelevant — the same validation and scoping apply. This is exactly what makes Option B (any MCP client connecting directly) possible later without changing the gateway. Only a person's own ibl.ai credential makes it ask the platform: who the credential belongs to, and which roles they hold.
-- **Network isolation backs the trust model.** On the Docker side, the gateway is the only service (besides the proxy) that bridges the `internal` and `exposed` networks. The databases, MCP Toolbox, and sync engine cannot be reached from outside at all.
-- **Scoping is centralized.** Toolset/memory/table access all flow from one place, `roles.yaml` (or with `ONTOLOGY_DATA_STORE=dm` the platform's roles, each with one policy under `/custom/ontology/`), so there is a single place to audit what any role can do.
+- **With Entra ID tokens the gateway never needs to know about the ibl.ai platform.** It only validates the token and resolves roles. Whether a token came from the platform, a university app, or a direct client is irrelevant — the same validation and scoping apply. This is exactly what makes Option B (any MCP client connecting directly) possible later without changing the gateway. Only an ibl.ai credential makes it ask the platform: what that credential is granted, and whose it is.
+- **Network isolation backs the trust model.** On the Docker side, only the proxy listens on the host. The gateway and the sync engine bridge the `internal` and `exposed` networks, to reach the platform and the connected systems; the databases, Redis and the MCP Toolbox cannot be reached from outside at all.
+- **Scoping is centralized.** Toolset/memory/table access all flow from one place, `roles.yaml` (or with `ONTOLOGY_DATA_STORE=rbac` or `dm` the platform's roles, each with one policy under `/custom/ontology/`), so there is a single place to audit what any role can do.
 
 ---
 

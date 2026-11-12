@@ -1,0 +1,11 @@
+# ============================================================
+# tools.yaml — the sources, tools and toolsets of this backend
+#
+# Empty to start with: agents are offered the gateway's own tools (read a memory,
+# describe and query the synced copy, the sync status) and nothing that cannot
+# run here. Connecting a system in the console adds its tools below; the
+# console's MCP page edits this file too.
+#
+# Multi-document YAML: kind: source | tool | toolset. A hand-written tool that
+# reads a database goes through the MCP Toolbox, which this install does not run.
+# ============================================================

@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from iblai_ontology.config import config_dir, dm_store
+from iblai_ontology.config import config_dir, dm_store, platform_roles
 
 # Keys whose values are secrets and must be redacted when displayed.
 _SECRET_KEY_RE = re.compile(
@@ -105,29 +105,30 @@ class ConfigReader:
 
     @staticmethod
     def _in_platform() -> dict[str, Any]:
-        """What dm mode keeps in the ibl.ai platform, in the shape of the three files."""
+        """What the ibl.ai platform keeps, in the shape of the files it stands in for:
+        the roles in rbac and dm, the schedules and the registry in dm alone."""
         from iblai_ontology.backend import bootstrap
 
         bootstrap()
         from iblai_ontology.backend.identity import role_source
-        from iblai_ontology.backend.services.registry import export_services_yaml
-        from iblai_ontology.backend.sync import schedules
 
-        return {
-            "roles": {"roles": role_source.load_roles()},
-            "sync_schedules": {"schedules": schedules.all()},
-            "services": yaml.safe_load(export_services_yaml()),
-        }
+        stored: dict[str, Any] = {"roles": {"roles": role_source.load_roles()}}
+        if dm_store():
+            from iblai_ontology.backend.services.registry import export_services_yaml
+            from iblai_ontology.backend.sync import schedules
+
+            stored["sync_schedules"] = {"schedules": schedules.all()}
+            stored["services"] = yaml.safe_load(export_services_yaml())
+        return stored
 
     def show_all(self, *, redact: bool = True) -> str:
-        if dm_store():
-            stored = self._in_platform()
-        else:
-            stored = {
-                "roles": self._load("roles.yaml"),
-                "sync_schedules": self._load("sync-schedules.yaml"),
-                "services": self._load("services.yaml"),
-            }
+        stored = {
+            "roles": self._load("roles.yaml"),
+            "sync_schedules": self._load("sync-schedules.yaml"),
+            "services": self._load("services.yaml"),
+        }
+        if platform_roles():
+            stored |= self._in_platform()
         merged = {
             "ontology": self.main(),
             "tools": self._load_tools_docs(),

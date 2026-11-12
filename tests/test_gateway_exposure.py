@@ -115,6 +115,7 @@ def test_tools_list_carries_input_schema_and_the_builtins(backend):
     listing = _post({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, _resolved())
     tools = {t["name"]: t for t in json.loads(listing.content)["result"]["tools"]}
     assert {
+        "describe-ontology-cache",
         "query-ontology-cache",
         "read-memory",
         "get-sync-status",
@@ -343,48 +344,126 @@ def test_a_cache_query_returns_at_most_the_roles_rows(backend):
         assert len(rows("Executive")) == 3, unusable
 
 
-# --- a person's own ibl.ai credential ------------------------------------------
+def test_describe_lists_the_tables_a_role_may_query_with_their_columns(backend):
+    import yaml
+    from django.db import connection
 
-ADMIN, MEMBER, OUTSIDER, KEY = "a" * 64, "m" * 64, "o" * 64, "k" * 64
+    schedules = [
+        {"name": "crm-people", "output": {"structured_cache": "crm_people"}},
+        {"name": "crm-deals", "output": {"structured_cache": "crm_deals"}},
+        {"name": "never-ran", "output": {"structured_cache": "crm_notes"}},
+        {"name": "memory-only", "output": {"text_memories": "/ontology/notes/"}},
+    ]
+    path = backend / "config" / "sync-schedules.yaml"
+    path.write_text(yaml.safe_dump({"schedules": schedules}))
+    with connection.cursor() as cursor:
+        for table, column in (
+            ("crm_people", "first_name"),
+            ("crm_deals", "amount"),
+            ("crm_tasks", "title"),
+        ):
+            cursor.execute(
+                f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, {column} TEXT)"
+            )
+
+    def described(role):
+        call = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "describe-ontology-cache", "arguments": {}},
+        }
+        return json.loads(_post(call, _resolved(role)).content)
+
+    def tables(role):
+        return json.loads(described(role)["result"]["content"][0]["text"])
+
+    # What the schedules fill and is there: never the backend's own tables.
+    assert tables("Executive") == [
+        {"table": "crm_deals", "columns": ["id", "amount"]},
+        {"table": "crm_people", "columns": ["id", "first_name"]},
+    ]
+    # A role limited to some tables sees those, one no schedule fills included.
+    named = ["crm_people", "crm_tasks", "not_there"]
+    _edit_roles(
+        backend, lambda roles: roles["IblaiOntologyAdmin"].update(cache_tables=named)
+    )
+    assert [t["table"] for t in tables("IblaiOntologyAdmin")] == [
+        "crm_people",
+        "crm_tasks",
+    ]
+    # No table grant, no tool.
+    assert described("default")["error"]["code"] == -32003
+
+
+# --- a caller's own ibl.ai credential ------------------------------------------
+
+ADMIN, MEMBER, OUTSIDER, GUEST = "a" * 64, "m" * 64, "o" * 64, "g" * 64
+# A key that acts as its owner, and one limited to its own policies.
+KEY, LIMITED = "k" * 64, "l" * 64
 VERIFY, PLATFORMS = "/api/core/token/verify/", "/api/core/users/platforms/"
+GRANTS = "/v1/rbac/permissions/"
+ROOT = "/custom/ontology/"
+# How a role the ontology made holds each resource of its policy.
+HELD = {"actions": ["Ontology/*"], "data_actions": []}
+NO_OWNER = "You do not have permission to perform this action."
+WRONG_PLATFORM = "iblai-org does not match the token's platform."
 
 
-def _platform(monkeypatch, roles_of=None):
-    """The ibl.ai platform as the gateway asks it about a credential; returns what it was asked."""
+def _platform(monkeypatch, grants=None):
+    """The ibl.ai platform as the gateway asks it about a credential; returns what it was asked.
+
+    ``grants`` is what its RBAC holds per credential under the ontology's namespace.
+    """
     from django.conf import settings
     from django.core.cache import cache
-
-    from iblai_ontology.backend.identity import role_source
 
     known = {
         ("Token", ADMIN): {"username": "ada", "is_admin": True},
         ("Token", MEMBER): {"username": "max"},
         ("Token", OUTSIDER): {"username": "eve", "key": "other-co"},
+        # A member here who runs another platform.
+        ("Token", GUEST): {"username": "gus", "runs": "other-co"},
         ("Api-Token", KEY): {"username": "ada", "is_admin": True},
+        ("Api-Token", LIMITED): None,  # the platform names no owner for it
     }
-    cache.clear()  # verdicts are kept per credential
+    cache.clear()  # verdicts and grants are kept per credential
     monkeypatch.setattr(settings, "ONTOLOGY_DM_URL", "http://dm.test")
+    monkeypatch.setattr(settings, "IBLAI_ORG", "acme")
     monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", {"acme"})
     monkeypatch.setattr(settings, "SECURITY_REQUIRE_HTTPS", False)
+    held = grants or {}
     asked = []
 
     def get(url, params=None, headers=None, timeout=None):
         path = url.removeprefix("http://dm.test")
         asked.append((path, headers["Authorization"]))
         scheme, _, credential = headers["Authorization"].partition(" ")
-        who = known.get((scheme, credential))
-        if who is None:  # the DM answers every bad credential the same way
+        if (scheme, credential) not in known:
+            # The DM answers every bad credential the same way.
             return httpx.Response(403, json={"detail": "Invalid token."})
+        who = known[scheme, credential]
+        if path == GRANTS:
+            assert params == {"resource_paths": ROOT, "recursive": "true"}
+            assert headers["iblai-org"] == "acme"
+            if who and who.get("key", "acme") != "acme":
+                return httpx.Response(403, json={"detail": WRONG_PLATFORM})
+            # The path asked about is always answered, with whatever is held at it.
+            nothing = {ROOT: {"actions": [], "data_actions": []}}
+            return httpx.Response(200, json={**nothing, **held.get(credential, {})})
+        if who is None:
+            return httpx.Response(403, json={"detail": NO_OWNER})
         name = who["username"]
         if path == VERIFY:
             user = {"user_id": 7, "username": name, "email": f"{name}@uni.edu"}
             return httpx.Response(200, json=user)
         link = {"username": name, "key": "acme", "active": True, "is_admin": False}
-        return httpx.Response(200, json=[{**link, **who}])
+        links = [{**link, **who}]
+        if "runs" in who:
+            links.append({**link, "key": who["runs"], "is_admin": True})
+        return httpx.Response(200, json=links)
 
     monkeypatch.setattr("iblai_ontology.backend.api.auth.httpx.get", get)
-    held = roles_of or {}
-    monkeypatch.setattr(role_source, "roles_of", lambda name: held.get(name, []))
     return asked
 
 
@@ -397,62 +476,172 @@ def _call(authorization, role=None, **extra):
     return resp.status_code, json.loads(resp.content)
 
 
-def _tools(authorization, role=None):
-    status, body = _call(authorization, role)
+def _tools(authorization):
+    status, body = _call(authorization)
     assert status == 200, body
     return {t["name"] for t in body["result"]["tools"]}
 
 
-def test_a_persons_own_credential_runs_as_a_role_the_platform_gives_them(
-    backend, monkeypatch
-):
-    asked = _platform(monkeypatch, roles_of={"max": ["DataAnalyst"]})
-
-    # An admin of the platform names any defined role, and without a header is the default.
-    assert "search-students" in _tools(f"Token {ADMIN}", "Executive")
-    assert _tools(f"Token {ADMIN}") == {"read-memory"}
-    # A member runs as the one role their policy gives them, named or not.
-    assert "search-students" in _tools(f"Token {MEMBER}")
-    assert "search-students" in _tools(f"Token {MEMBER}", "DataAnalyst")
-    assert _tools(f"Token {MEMBER}", "default") == {"read-memory"}
-    # A platform API key acts as its owner.
-    assert "search-students" in _tools(f"Api-Token {KEY}", "Executive")
-
-    # Behind Bearer the gateway finds out which of the two it was given.
-    del asked[:]
-    assert "search-students" in _tools(f"Bearer {MEMBER}")
-    assert asked == []  # a token it already verified: asked nothing
-    from django.core.cache import cache
-
-    cache.clear()
-    assert "search-students" in _tools(f"Bearer {KEY}", "Executive")
-    assert asked == [
-        (VERIFY, f"Token {KEY}"),
-        (VERIFY, f"Api-Token {KEY}"),
-        (PLATFORMS, f"Api-Token {KEY}"),
-    ]
-
-
-def test_the_audit_log_names_the_person_behind_a_credential(backend, monkeypatch):
-    from iblai_ontology.backend.identity.models import AuditLog
-
-    _platform(monkeypatch)
+def _ask(authorization, name, **arguments):
+    """tools/call with a credential of the caller's own: the JSON-RPC answer."""
     call = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": "tools/call",
-        "params": {"name": "get-sync-status", "arguments": {}},
+        "params": {"name": name, "arguments": arguments},
     }
-    answer = _post(
-        call, HTTP_AUTHORIZATION=f"Api-Token {KEY}", HTTP_X_IBLAI_ROLE="Executive"
-    )
-    assert "result" in json.loads(answer.content)
-    row = AuditLog.objects.get(resource="get-sync-status")
+    return json.loads(_post(call, HTTP_AUTHORIZATION=authorization).content)
+
+
+def test_a_credential_reaches_what_the_platform_grants_it(backend, monkeypatch):
+    from django.core.cache import cache
+
+    analytics = ROOT + "toolsets/admin-analytics-tools/"
+    postgres = ROOT + "toolsets/client-postgres-tools/"
+    grants = {
+        # Two roles list the member, one policy each: the platform answers both.
+        MEMBER: {analytics: HELD, postgres: HELD},
+        LIMITED: {analytics: HELD},
+    }
+    asked = _platform(monkeypatch, grants)
+    index = "/ontology/courses/_index.md"  # the default role reads it
+
+    # An admin reaches everything that only reads, with no role and no header.
+    admin = _tools(f"Token {ADMIN}")
+    assert {
+        "search-students",
+        "list-postgres-tables",
+        "describe-ontology-cache",
+        "query-ontology-cache",
+        "get-sync-status",
+    } <= admin
+    # A platform API key acts as its owner.
+    assert _tools(f"Api-Token {KEY}") == admin
+    # A member holds every role that lists them, combined, and the default role.
+    member = _tools(f"Token {MEMBER}")
+    assert {"search-students", "list-postgres-tables"} <= member
+    assert "query-ontology-cache" not in member  # a toolset is not a table
+    refused = _ask(f"Token {MEMBER}", "read-memory", path=index).get("error", {})
+    assert refused.get("code") != -32003
+    # A key limited to its own policies holds exactly those, without the default role.
+    limited = _tools(f"Api-Token {LIMITED}")
+    assert "search-students" in limited and "list-postgres-tables" not in limited
+    refused = _ask(f"Api-Token {LIMITED}", "read-memory", path=index)["error"]
+    assert refused["code"] == -32003
+
+    # Behind Bearer the gateway finds out which of the two it was given, once.
+    cache.clear()
+    del asked[:]
+    assert _tools(f"Bearer {KEY}") == admin
+    assert asked == [
+        (GRANTS, f"Token {KEY}"),
+        (GRANTS, f"Api-Token {KEY}"),
+        (VERIFY, f"Api-Token {KEY}"),
+        (PLATFORMS, f"Api-Token {KEY}"),
+    ]
+    assert _tools(f"Bearer {LIMITED}") == limited
+    assert asked[4:] == [
+        (GRANTS, f"Token {LIMITED}"),
+        (GRANTS, f"Api-Token {LIMITED}"),
+        (VERIFY, f"Api-Token {LIMITED}"),
+    ]
+    # Kept: the grants, the refusal under the other scheme, and a key having no owner.
+    del asked[:]
+    assert _tools(f"Bearer {KEY}") == admin and _tools(f"Bearer {LIMITED}") == limited
+    assert asked == []
+
+
+def test_a_resource_counts_only_where_it_is_held_with_its_verb(backend, monkeypatch):
+    tables = {"actions": ["Ontology/Tables/read"], "data_actions": []}
+    analytics = ROOT + "toolsets/admin-analytics-tools/"
+    grants = {
+        MEMBER: {analytics: tables, ROOT + "tables/": tables},
+        LIMITED: {analytics: tables},
+    }
+    _platform(monkeypatch, grants)
+    member = _tools(f"Token {MEMBER}")
+    # The tables count; the toolset does not, its verb is not held there.
+    assert "query-ontology-cache" in member and "search-students" not in member
+    # A credential that reaches nothing is told so, not shown an empty list.
+    status, body = _call(f"Api-Token {LIMITED}")
+    assert status == 403 and "no ontology grant" in body["error"]
+
+
+def test_a_toolset_that_writes_needs_a_role_that_names_it_even_for_an_admin(
+    backend, monkeypatch
+):
+    sent = _with_writes(backend, monkeypatch)
+    _platform(monkeypatch, {MEMBER: {ROOT + "toolsets/": HELD}})
+    # An admin no role lists: everything that only reads.
+    assert "release-hold" not in _tools(f"Token {ADMIN}")
+    refused = _ask(f"Token {ADMIN}", "release-hold", hold_id=7)
+    assert refused["error"]["code"] == -32003
+    # Every toolset, as a role holds it, is every toolset that only reads.
+    assert "release-hold" not in _tools(f"Token {MEMBER}")
+    assert sent == []
+
+    # The same admin, now listed on a role that names the toolset.
+    _platform(monkeypatch, {ADMIN: {ROOT + "toolsets/registrar-writes/": HELD}})
+    assert "release-hold" in _tools(f"Token {ADMIN}")
+    assert "result" in _ask(f"Token {ADMIN}", "release-hold", hold_id=7)
+    assert sent == [("release-hold", {"hold_id": 7}, 1)]
+
+
+def test_the_row_limit_travels_with_the_grants(backend, monkeypatch):
+    def limit(rows):
+        return ROOT + f"limits/rows/{rows}/"
+
+    grants = {
+        # Two roles that each name a limit: the largest applies.
+        MEMBER: {ROOT + "tables/": HELD, limit(1): HELD, limit(2): HELD},
+        ADMIN: {limit(1): HELD},
+    }
+    _platform(monkeypatch, grants)
+    sql = "SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3"
+
+    def rows(authorization):
+        answer = _ask(authorization, "query-ontology-cache", sql=sql)
+        return json.loads(answer["result"]["content"][0]["text"])
+
+    assert rows(f"Token {MEMBER}") == [{"n": 1}, {"n": 2}]
+    # An admin reads everything, whatever a role that lists them says.
+    assert len(rows(f"Token {ADMIN}")) == 3
+
+
+def test_an_admin_of_another_listed_platform_is_a_member_here(backend, monkeypatch):
+    from django.conf import settings
+
+    from iblai_ontology.backend.api.auth import platform_member
+
+    _platform(monkeypatch)
+    # The console may trust several platforms' admins; the gateway asks about its own.
+    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", {"acme", "other-co"})
+    who = platform_member("Token", GUEST)
+    assert (who.admin, who.admin_here) == (True, False)
+    assert _tools(f"Token {GUEST}") == {"read-memory"}
+
+
+def test_the_audit_log_names_who_is_behind_a_credential(backend, monkeypatch):
+    import hashlib
+
+    from iblai_ontology.backend.identity.models import AuditLog
+
+    _platform(monkeypatch, {LIMITED: {ROOT + "console/": HELD}})
+    for authorization in (f"Api-Token {KEY}", f"Bearer {LIMITED}"):
+        assert "result" in _ask(authorization, "get-sync-status")
+    assert "error" in _ask(f"Token {MEMBER}", "get-sync-status")
+
     # Prefixed: no member's name can pass for the service account's.
-    assert (row.user_id, row.user_email, row.user_role) == (
-        "ibl:ada",
-        "ada@uni.edu",
-        "Executive",
+    row = AuditLog.objects.get(user_id="ibl:ada")
+    assert (row.user_email, row.user_role) == ("ada@uni.edu", "platform-admin")
+    row = AuditLog.objects.get(user_id="ibl:max")
+    assert (row.user_role, row.allowed) == ("platform-user", False)
+    # A key with no knowable owner is named by twelve characters of its hash, never itself.
+    name = hashlib.sha256(LIMITED.encode()).hexdigest()[:12]
+    row = AuditLog.objects.get(user_id=f"ibl-key:{name}")
+    assert (row.user_email, row.user_role) == ("", "platform-key")
+    assert LIMITED not in json.dumps(
+        list(AuditLog.objects.values("user_id", "details"))
     )
 
 
@@ -461,67 +650,76 @@ def test_a_credential_the_gateway_does_not_take_is_refused_with_the_reason(
 ):
     from django.conf import settings
 
-    from iblai_ontology.backend.identity import middleware, role_source
-    from iblai_ontology.backend.identity.roles import RolesUnavailable
+    from iblai_ontology.backend.identity import middleware
+    from iblai_ontology.backend.identity.roles import RoleResolver, RolesUnavailable
 
-    held = {"max": ["DataAnalyst", "IblaiOntologyAdmin"]}
-    asked = _platform(monkeypatch, roles_of=held)
+    asked = _platform(monkeypatch)
 
-    # A credential the platform rejects: 401, and Bearer has tried it both ways.
-    assert _call("Token nope")[0] == 401
+    # A credential the platform refuses: 401 with the platform's own words, and Bearer
+    # has tried it both ways.
+    status, body = _call("Token nope")
+    assert status == 401 and body["error"].endswith("this token: Invalid token.")
     status, body = _call("Api-Token nope")
-    assert status == 401 and "limited to its own policies" in body["error"]
-    assert _call("Bearer nope")[0] == 401
-    assert asked[-2:] == [(VERIFY, "Token nope"), (VERIFY, "Api-Token nope")]
-    # A token under the other scheme is rejected: the scheme says what it is.
+    assert status == 401 and body["error"].endswith("this API key: Invalid token.")
+    status, body = _call("Bearer nope")
+    assert status == 401 and body["error"].count("Invalid token.") == 2
+    assert asked == [(GRANTS, "Token nope"), (GRANTS, "Api-Token nope")]
+    # A token under the other scheme is refused: the scheme says what it is.
     assert _call(f"Api-Token {ADMIN}")[0] == 401
     # A JWT behind Bearer is Entra's, and no other scheme is anyone's.
     assert _call("Bearer a.b.c") == (401, {"error": "authentication required"})
     assert _call("Basic abc") == (401, {"error": "authentication required"})
 
-    # A member of another platform.
+    # A token signed in to another platform: the platform itself says so.
     status, body = _call(f"Token {OUTSIDER}")
-    assert status == 403 and "not a member of this platform" in body["error"]
-    # A role the member does not hold, and one nobody defined.
-    assert _call(f"Token {MEMBER}", "Executive")[0] == 403
-    assert _call(f"Token {ADMIN}", "NoSuchRole")[0] == 403
-    # Two roles and none named: the default one, never a pick.
-    assert _tools(f"Token {MEMBER}") == {"read-memory"}
-    assert "search-students" in _tools(f"Token {MEMBER}", "DataAnalyst")
+    assert status == 401 and WRONG_PLATFORM in body["error"]
+    # The credential carries its own role: naming one is refused, not ignored.
+    status, body = _call(f"Token {ADMIN}", "Executive")
+    assert status == 400 and "carries its own role" in body["error"]
 
-    # The platform not saying which roles a member holds is a 503, never the default role.
-    def silent(username):
+    # A default role that cannot be read is a 503 for a member, never an empty role.
+    def silent(self, role):
         raise RolesUnavailable("down")
 
-    monkeypatch.setattr(role_source, "roles_of", silent)
-    assert _call(f"Token {MEMBER}") == (503, {"error": middleware.ROLES_UNAVAILABLE})
-    assert (
-        _call(f"Token {ADMIN}", "Executive")[0] == 200
-    )  # an admin's roles are not asked
+    with monkeypatch.context() as patched:
+        patched.setattr(RoleResolver, "spec", silent)
+        unavailable = {"error": middleware.ROLES_UNAVAILABLE}
+        assert _call(f"Token {MEMBER}") == (503, unavailable)
+        assert _call(f"Token {ADMIN}")[0] == 200  # an admin's reach is not a role's
 
     # Over cleartext a credential is refused before it is looked at.
     monkeypatch.setattr(settings, "SECURITY_REQUIRE_HTTPS", True)
-    status, body = _call(f"Token {ADMIN}", "Executive")
+    status, body = _call(f"Token {ADMIN}")
     assert status == 403 and "cleartext" in body["error"]
-    assert _call(f"Token {ADMIN}", "Executive", secure=True)[0] == 200
+    assert _call(f"Token {ADMIN}", secure=True)[0] == 200
 
     # A backend that does not know its platform takes no personal credential at all.
-    monkeypatch.setattr(settings, "ONTOLOGY_ADMIN_PLATFORMS", set())
-    status, body = _call(f"Token {ADMIN}", "Executive", secure=True)
+    monkeypatch.setattr(settings, "IBLAI_ORG", "")
+    status, body = _call(f"Token {ADMIN}", secure=True)
     assert status == 401 and "IBLAI_ORG" in body["error"]
 
 
 def test_a_platform_that_does_not_answer_is_a_503_not_a_bad_credential(
     backend, monkeypatch
 ):
-    _platform(monkeypatch)
+    asked = _platform(monkeypatch)
 
     def down(url, params=None, headers=None, timeout=None):
+        asked.append("down")
         raise httpx.ConnectError("no route to the platform")
 
     monkeypatch.setattr("iblai_ontology.backend.api.auth.httpx.get", down)
     status, body = _call(f"Bearer {'z' * 64}")
     assert status == 503 and "unavailable" in body["error"]
+    # Never kept: the next call asks again.
+    assert _call(f"Bearer {'z' * 64}")[0] == 503 and asked == ["down", "down"]
+
+    # Throttled by the platform says nothing about the credential either.
+    def throttled(url, params=None, headers=None, timeout=None):
+        return httpx.Response(429, json={"detail": "Request was throttled."})
+
+    monkeypatch.setattr("iblai_ontology.backend.api.auth.httpx.get", throttled)
+    assert _call(f"Token {ADMIN}")[0] == 503
 
 
 def test_service_token_resolves_the_role_from_the_header(backend, monkeypatch):

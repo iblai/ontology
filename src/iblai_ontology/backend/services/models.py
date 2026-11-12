@@ -83,3 +83,18 @@ class ServiceTable(models.Model):
 
     class Meta:
         ordering = ["position"]
+
+
+class Record(models.Model):
+    """A setting the ibl.ai platform keeps as an ontology record, kept here where it has none."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=100)
+    key = models.CharField(max_length=255)
+    data = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["kind", "key"]
+        constraints = [
+            models.UniqueConstraint(fields=["kind", "key"], name="record_kind_key")
+        ]

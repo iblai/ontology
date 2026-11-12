@@ -102,6 +102,47 @@ def test_a_source_one_tool_writes_through_makes_its_other_tools_writes():
     assert why["looks-like-a-read"] == "it shares the source 'rw' with 'release-hold'"
 
 
+def test_an_api_systems_operations_are_writes_the_gateway_runs_itself(tmp_path):
+    from iblai_ontology.backend.discovery.config_generator import api_tools_yaml
+    from iblai_ontology.catalog import get_entry
+
+    entry = get_entry("twenty")
+    text = api_tools_yaml("crm", entry.display_name, entry)
+    docs = list(yaml.safe_load_all(text))
+    tools = [d for d in docs if d["kind"] == "tool"]
+    assert len(tools) == 10 and {d["type"] for d in tools} == {"twenty"}
+    assert docs[-1] == {
+        "kind": "toolset",
+        "name": "crm-writes",
+        "write": True,
+        "tools": [d["name"] for d in tools],
+    }
+    update = next(d for d in tools if d["name"] == "crm-update-opportunity")
+    assert (update["service"], update["object"]) == ("crm", "opportunities")
+    assert update["parameters"][0]["name"] == "id"
+    assert "required" not in update["parameters"][0]  # required, as a parameter is
+    assert all(p["required"] is False for p in update["parameters"][1:])
+    # Each is a write by its type, whatever it holds: only a toolset marked so lends it.
+    why = writing_tools(docs)
+    assert set(why) == {d["name"] for d in tools}
+    assert why["crm-create-person"] == "it changes records in crm"
+
+    path = tmp_path / "tools.yaml"
+    path.write_text(text)
+    assert validate_tools_yaml(
+        path
+    ).ok  # no Toolbox source or statement is asked of them
+    path.write_text(text.replace("write: true\n", ""))
+    assert not validate_tools_yaml(path).ok
+    # What the gateway needs to run one is.
+    lacking = {k: v for k, v in tools[1].items() if k != "service"}
+    path.write_text(yaml.dump_all([{**tools[0], "operation": "delete"}, lacking]))
+    said = " ".join(i.message for i in validate_tools_yaml(path).issues)
+    assert "no operation: create or update" in said and "missing 'service'" in said
+    # An entry with nothing to change gets no tools at all.
+    assert api_tools_yaml("lms", "Canvas", get_entry("canvas")) == ""
+
+
 def test_no_stock_tool_writes():
     for name in ("tools.yaml", "tools.higher-ed.example.yaml"):
         path = REPO_ROOT / "config" / name

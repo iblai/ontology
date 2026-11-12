@@ -16,7 +16,7 @@ import {
 import { apiClient } from "@/lib/ontology/api-client";
 import { CATALOG } from "@/lib/ontology/catalog";
 import type { Service } from "@/lib/ontology/types";
-import { CREATE_ACTIONS, PLATFORM_SIDEBAR_SECTIONS } from "./nav-config";
+import { CREATE_ACTIONS, sidebarSections } from "./nav-config";
 
 const PaletteContext = createContext({ open: () => {} });
 
@@ -26,7 +26,13 @@ export function useCommandPalette() {
 }
 
 /** ⌘K / Ctrl+K anywhere: jump to a page, a service or a connector, or create something. */
-export function CommandPaletteProvider({ children }: { children: ReactNode }) {
+export function CommandPaletteProvider({
+  hosted,
+  children,
+}: {
+  hosted: boolean;
+  children: ReactNode;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const open = useCallback(() => setIsOpen(true), []);
 
@@ -44,7 +50,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   return (
     <PaletteContext.Provider value={{ open }}>
       {children}
-      <CommandPalette open={isOpen} onOpenChange={setIsOpen} />
+      <CommandPalette hosted={hosted} open={isOpen} onOpenChange={setIsOpen} />
     </PaletteContext.Provider>
   );
 }
@@ -54,9 +60,11 @@ function Kbd({ children }: { children: ReactNode }) {
 }
 
 function CommandPalette({
+  hosted,
   open,
   onOpenChange,
 }: {
+  hosted: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -94,16 +102,18 @@ function CommandPalette({
       <CommandList>
         <CommandEmpty>{t("empty")}</CommandEmpty>
         <CommandGroup heading={t("goTo")}>
-          {PLATFORM_SIDEBAR_SECTIONS.flatMap((g) => g.items).map((item) => (
-            <CommandItem
-              key={item.href}
-              value={`go ${tn(item.labelKey)}`}
-              onSelect={() => go(item.href)}
-            >
-              <item.icon />
-              {tn(item.labelKey)}
-            </CommandItem>
-          ))}
+          {sidebarSections(hosted)
+            .flatMap((g) => g.items)
+            .map((item) => (
+              <CommandItem
+                key={item.href}
+                value={`go ${tn(item.labelKey)}`}
+                onSelect={() => go(item.href)}
+              >
+                <item.icon />
+                {tn(item.labelKey)}
+              </CommandItem>
+            ))}
         </CommandGroup>
         {searching && services.length > 0 && (
           <CommandGroup heading={t("services")}>

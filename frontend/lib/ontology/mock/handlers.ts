@@ -1,4 +1,6 @@
 import type {
+  Agent,
+  AgentConnection,
   BackendConfigSnapshot,
   ComplianceReport,
   GraphData,
@@ -25,11 +27,31 @@ import { configFromTexts } from "../config-files";
 
 type Ok = { ok: boolean; message: string };
 
+/** The demo platform's agents; two share a name, as agents may. */
+const AGENTS: Agent[] = [
+  { id: "3f2a9c10-0000-4000-8000-000000000001", name: "Admissions assistant" },
+  { id: "7b61e4d2-0000-4000-8000-000000000002", name: "Advising coach" },
+  { id: "c05d8e77-0000-4000-8000-000000000003", name: "Advising coach" },
+];
+
 /** Upsert by `name`; the mock keeps insertion order like the YAML files do. */
 function upsert<T extends { name: string }>(list: T[], item: T): T[] {
   const i = list.findIndex((x) => x.name === item.name);
   return i === -1 ? [...list, item] : list.map((x, j) => (j === i ? item : x));
 }
+
+/** The tables Twenty fills, as the backend's catalog names them. */
+const TWENTY_TABLES = [
+  "persons",
+  "organizations",
+  "deals",
+  "workspace_members",
+  "notes",
+  "tasks",
+  "note_targets",
+  "task_targets",
+];
+const twentyMemory = TWENTY_TABLES.map((table) => `/ontology/${table}/**`);
 
 export const mockApi = {
   reset(): void {
@@ -227,6 +249,21 @@ export const mockApi = {
         db.provisioning_runs = db.provisioning_runs.filter((r) => r.service_name !== name);
         db.safety_reports = db.safety_reports.filter((r) => r.service_name !== name);
         db.sync_schedules = db.sync_schedules.filter((s) => s.source !== name);
+        // What connecting it gave goes with it: its toolset from every role, its reach from its own.
+        const writes = `${name}-writes`;
+        if (db.mcp_toolsets.some((t) => t.name === writes)) {
+          db.mcp_toolsets = db.mcp_toolsets.filter((t) => t.name !== writes);
+          db.roles = db.roles.flatMap((r) => {
+            const left = { ...r, mcp_toolsets: r.mcp_toolsets.filter((t) => t !== writes) };
+            if (r.name !== name) return [left];
+            left.cache_tables = left.cache_tables.filter((t) => !TWENTY_TABLES.includes(t));
+            left.memory_paths = left.memory_paths.filter((p) => !twentyMemory.includes(p));
+            const reaches =
+              left.mcp_toolsets.length + left.cache_tables.length + left.memory_paths.length;
+            // A role left reaching nothing is removed.
+            return reaches || left.admin_dashboard ? [left] : [];
+          });
+        }
         return { ok: true, message: `${name} removed.` };
       });
     },
@@ -239,17 +276,22 @@ export const mockApi = {
       database?: string;
       user?: string;
       password?: string;
+      api_key?: string;
       domain: string;
     }): { ok: boolean; message: string } {
       return mutate((db) => {
         const exists = db.services.some((s) => s.name === input.name);
         if (exists) return { ok: false, message: `Service '${input.name}' already exists.` };
+        // Twenty's key is tried at once, so it needs no review: connected, and syncing.
+        const twenty = input.adapter === "twenty_api";
+        if (twenty && input.api_key === "wrong")
+          return { ok: false, message: "Twenty refused the API key: Token invalid." };
         const svc: Service = {
           name: input.name,
-          display_name: input.name,
+          display_name: twenty ? "Twenty CRM" : input.name,
           service_type: input.service_type,
           adapter: input.adapter,
-          status: "pending",
+          status: twenty ? "active" : "pending",
           host: input.host,
           port: input.port,
           database: input.database,
@@ -258,18 +300,54 @@ export const mockApi = {
             ...(input.port !== undefined ? { port: String(input.port) } : {}),
             ...(input.database ? { database: input.database } : {}),
             ...(input.user ? { user: input.user } : {}),
-            ...(input.password ? { password: input.password } : {}),
+            ...(input.password ? { password: "********" } : {}),
+            ...(input.api_key ? { api_key: "********" } : {}),
           },
           safety_status: "pending",
-          sync_status: "never_run",
+          sync_status: twenty ? "running" : "never_run",
           tables_synced: 0,
           rows_synced: 0,
           domain: input.domain as Service["domain"],
           last_discovery_at: now(),
         };
         db.services = [...db.services, svc];
-        return { ok: true, message: `${input.name} added. Discovery running.` };
+        if (twenty) {
+          // As the backend: its operations are one toolset that changes data, and the role of its name reaches it.
+          const writes = `${input.name}-writes`;
+          db.mcp_toolsets = upsert(db.mcp_toolsets, {
+            kind: "toolset",
+            name: writes,
+            tools: [],
+            write: true,
+          });
+          const held = db.roles.find((r) => r.name === input.name);
+          db.roles = upsert(db.roles, {
+            name: input.name,
+            display_name: svc.display_name,
+            admin_dashboard: false,
+            agents: [],
+            ...held,
+            mcp_toolsets: [...new Set([...(held?.mcp_toolsets ?? []), writes])],
+            memory_paths: [...new Set([...(held?.memory_paths ?? []), ...twentyMemory])],
+            cache_tables: [...new Set([...(held?.cache_tables ?? []), ...TWENTY_TABLES])],
+          });
+        }
+        const message = twenty
+          ? `'${input.name}' is connected. Its records are on their way.`
+          : `${input.name} added. Discovery running.`;
+        return { ok: true, message };
       });
+    },
+    /** A server whose login `wrong` is refused and any other may open three databases. */
+    databases(login: { user: string; password: string }): Ok & { databases: string[] } {
+      if (login.password === "wrong")
+        return {
+          ok: false,
+          message: `password authentication failed for user "${login.user}"`,
+          databases: [],
+        };
+      const databases = ["analytics", "crm", "warehouse"];
+      return { ok: true, message: `${databases.length} database(s).`, databases };
     },
   },
 
@@ -587,6 +665,50 @@ export const mockApi = {
     },
   },
 
+  agents: {
+    list(): Ok & { agents: Agent[] } {
+      return { ok: true, message: "", agents: AGENTS };
+    },
+    connections(): AgentConnection[] {
+      return query((db) => [...db.agent_connections]);
+    },
+    connect(input: { agent: string; role: string }): Ok {
+      return mutate((db) => {
+        const agent = AGENTS.find((a) => a.id === input.agent);
+        if (!agent) return { ok: false, message: "That agent is not one of this platform's." };
+        if (!db.roles.some((r) => r.name === input.role))
+          return { ok: false, message: `Role '${input.role}' reaches nothing yet.` };
+        const name = `${agent.id.slice(0, 8)}-${input.role.toLowerCase()}`;
+        if (db.agent_connections.some((c) => c.name === name))
+          return {
+            ok: false,
+            message: `${agent.name} is already connected as ${input.role}. Remove that connection first.`,
+          };
+        db.agent_connections = [
+          {
+            name,
+            agent: agent.id,
+            agent_name: agent.name,
+            role: input.role,
+            fingerprint: uid().padEnd(12, "0"),
+            created_at: now(),
+            created_by: "demo",
+          },
+          ...db.agent_connections,
+        ];
+        return { ok: true, message: `${agent.name} is connected as ${input.role}.` };
+      });
+    },
+    disconnect(name: string): Ok {
+      return mutate((db) => {
+        if (!db.agent_connections.some((c) => c.name === name))
+          return { ok: false, message: `No connection named '${name}'.` };
+        db.agent_connections = db.agent_connections.filter((c) => c.name !== name);
+        return { ok: true, message: "The connection is removed and its key deleted." };
+      });
+    },
+  },
+
   counts() {
     return query((db) => ({
       services: db.services.length,
@@ -594,6 +716,7 @@ export const mockApi = {
       toolsets: db.mcp_toolsets.length,
       roles: db.roles.length,
       data_store: "local" as const,
+      platform: "",
     }));
   },
 };

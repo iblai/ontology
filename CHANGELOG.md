@@ -6,12 +6,90 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-11-13
+
 ### Added
+- One command installs a backend on a fresh Ubuntu server (22.04 or later, amd64):
+  `deploy/install.sh`, attached to every release. It uses the Docker that is there or installs
+  `docker.io` and `docker-compose-v2` from Ubuntu's own archive, asks for the platform, its
+  address, the host name and, hidden, the backend's platform key. Before anything is written it
+  asks the platform two things with that key: whether its administrators can grant ontology
+  roles (a refused key, RBAC switched off or a platform without the custom namespace stops it,
+  with the platform's words), and whether the platform keeps ontology records, which decides
+  where the settings live (`ONTOLOGY_DATA_STORE=dm`, or `rbac` on this server). It writes
+  `/opt/iblai-ontology/.env` (mode 600, that choice and four generated secrets) beside the
+  release's `compose.yaml`, starts the stack and waits for `https://<host>/mcp` to answer 405.
+  Run again it upgrades and keeps the choice; `--uninstall` removes it; `--dry-run` says what
+  would happen.
+- `deploy/compose.yaml`, the server stack: PostgreSQL, Redis, ChromaDB, a migration that runs
+  before the gateway and the worker, the gateway, the sync worker and Caddy
+  (`caddy reverse-proxy`, ports 80 and 443). Settings come from one `.env`; a missing one stops
+  compose with its name. It runs no MCP Toolbox and no connector container. The image carries a
+  neutral starting config (`deploy/config/`) that fills a new config volume.
+- One image, `ghcr.io/iblai/ontology:<version>`, built from the root `Dockerfile` by
+  `.github/workflows/release.yml` when a release is published. The workflow refuses a tag that
+  is not `v` plus the version in `pyproject.toml`, and stamps the version into `install.sh` and
+  `compose.yaml` before attaching them.
+- **Connect a backend** on the hosted Ontology Frontend: a platform without a backend lands on
+  one screen with the install command filled in, a button that makes the backend's platform key
+  (shown once) and a field for the backend's address. Connect takes a public `https` address
+  that answers `GET /counts` with the admin's own token, and keeps it in the platform with
+  `iblai-org` set to the backend's platform, so an address that is another platform's backend is
+  refused there. A **Backend** page (hosted console only) shows the address and replaces it.
+  `GET /counts` gains `platform`.
+- `ONTOLOGY_BACKEND_STORE=browser` on the hosted Ontology Frontend, for platforms that keep no
+  ontology records yet: Connect makes the same checks and writes nothing, the administrator's
+  browser keeps the address (`localStorage`, per platform) and names it on every call, and the
+  frontend uses a named address once the platform knows the sign-in and the address answers
+  `GET /counts` as a backend that takes it, kept a minute per sign-in and address. Each browser
+  connects once; the gate says "This browser does not know this platform's backend yet".
+- `ONTOLOGY_DATA_STORE=rbac`, for a platform that keeps no ontology records: the roles are the
+  platform's RBAC roles as in `dm`, so a credential still carries its role and an agent is still
+  connected with a key limited to one, while the registry, the schedules, a role's display name
+  and limits, the example-roles mark and the agent connections stay on this host (a small table,
+  `services.Record`, holds what has no model). The backend makes no call to the platform's
+  ontology records in this mode. `GET /counts` names the store, and `ontology platform address`
+  refuses outside `dm`.
+- Connecting Twenty CRM gives the role of the system's name what the system brings: its tables,
+  their memory folders and the toolset of its operations. A role of that name is made when there
+  is none and added to when there is one; a role the platform refuses leaves the system
+  connected and is said in the answer. Removing the system takes back what it gave, and a role
+  left reaching nothing goes with it. **Connect an agent** offers first the first role that can
+  change data.
+- `frontend/.vercelignore` and `frontend/vercel.json`, so a deploy from a checkout uploads no
+  local settings, test sessions or second build directories.
+- **Add a system** is one page: a searchable list of what connects from the console (Twenty CRM
+  and the nine database engines), then that system's own fields. A port takes digits only, a
+  password is never autofilled, and for PostgreSQL and MySQL the database is picked from the
+  list the login may open (`POST /services/databases`), with the server's own words under the
+  field when it refuses. The Catalog page marks each of its 72 entries "Connects from here" or
+  "No connector yet".
+- Twenty CRM connects from the console with its address and an API key, on Twenty's cloud or
+  self-hosted. The backend reads it itself (`backend/services/twenty.py`), so there is no
+  connector container and no environment variable. Connect checks the key, approves the system
+  and queues the first sync. A self-hosted Twenty's database is still a `generic-postgres`
+  service; both paths share one mapping onto the house tables.
+- Twenty's operations: connecting it adds the toolset `<system>-writes` (`write: true`) with ten
+  tools of the new type `twenty`, create and update for people, companies, opportunities, notes
+  and tasks, generated from the catalog's new `writes`. The gateway runs them itself, after the
+  audit row: unknown or mistyped fields are refused, a note or a task is linked to the person,
+  organization or deal it names, Twenty's refusal comes back as the tool's error, and the answer
+  is the record in house column names. The changed record is handed to the worker, which
+  refreshes the cache row and the memory file. No tool deletes.
+- `describe-ontology-cache`: the gateway's own tool that lists the cache tables a role may
+  query, each with its columns.
+- **Agents** page and `GET /agents`, `GET|POST /agent-connections`,
+  `DELETE /agent-connections/<name>` (roles kept in the platform: `rbac` or `dm`): pick an agent
+  and a role, and the backend
+  makes a platform API key limited to that role's policy (with the admin's own sign-in),
+  registers the gateway as an MCP server of that agent alone with the key as its credential,
+  switches the agent's MCP tool on and keeps the record `agent_connection/<name>` (never the
+  key). A step that fails takes back the ones before it; removing deletes the key first.
 - Twenty CRM as a source, both ways: a self-hosted Twenty is a `generic-postgres` service (one
   PostgreSQL schema per workspace, read with a role granted on the CRM tables only); a workspace
-  on Twenty's cloud is the new `twenty` catalog entry, served by `mcp-servers/twenty` (REST,
-  one `list-<object>` tool per synced object, paging `/rest/<plural>`, composite fields
-  flattened to Twenty's own column names so both paths share one mapping).
+  on Twenty's cloud, or a self-hosted one over REST, is the new `twenty` catalog entry (paging
+  `/rest/<plural>`, composite fields flattened to Twenty's own column names so both paths share
+  one mapping).
 - Catalog entries carry a vendor `mapping` (workspace table, house entity and column renames
   per synced object): API schedules are generated from it, and `ontology service map <name>
   --from <key>` applies it to a discovered database without an LLM call. The house model
@@ -66,10 +144,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `default` role, when it has none and the platform does not answer. `GET /counts` gains
   `data_store`. `IBLAI_AUTH_SCHEME=Api-Token` lets the platform client use a platform API key.
 - One Ontology Frontend for every platform (`ONTOLOGY_MULTI_PLATFORM=true`, as at
-  `ontology.ibl.ai`): each call goes to the backend of the signed-in admin's own platform, whose
-  address the backend records there with the new `ontology platform address --url …` and the
-  frontend reads with that admin's token. The address must be `https` and public; a platform
-  without one, and a member who is not its admin, see one notice instead of the pages.
+  `ontology.iblai.me`): each call goes to the backend of the signed-in admin's own platform,
+  whose address the platform keeps (set on **Connect a backend**, or with the new
+  `ontology platform address --url …` on the server) and the frontend reads with that admin's
+  token. The address must be `https` and public; a member who is not the platform's admin sees
+  one notice instead of the pages.
 - `GET /config`: the backend sends its own configuration files and the catalog as text, secrets
   masked on its host, so the Configuration page no longer needs the frontend to sit beside the
   backend's checkout (`ONTOLOGY_ROOT` is gone).
@@ -90,10 +169,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the Service row plus one schedule per catalog `sync_defaults` entry, each naming a `list-<entity>`
   tool on the service's custom MCP server. The sync engine reads a `<name>-mcp` source at
   `MCP_<NAME>_URL` and creates the cache table from the first row (`output.create_table`).
+  Twenty CRM is the exception: its schedules name `service` and `table` like a database's.
 - The MCP gateway speaks to a standard client: `initialize`, `ping` and notifications (202),
   `tools/list` items carry `inputSchema` and include the gateway's own tools (`read-memory`,
-  `query-ontology-cache`, `get-sync-status`) per role, batches are answered in order, GET is
-  405, and every `tools/call` writes an audit row. The ibl.ai platform's `streamable_http`
+  `describe-ontology-cache`, `query-ontology-cache`, `get-sync-status`) per role, batches are
+  answered in order, GET is 405, and every `tools/call` writes an audit row. The ibl.ai platform's `streamable_http`
   connector (and OpenAI's hosted MCP tool) can now use it through a tunnel such as ngrok.
 - `ONTOLOGY_SERVICE_TOKEN`: the platform calls the gateway as itself with
   `Authorization: Bearer <token>` and the role in `X-Iblai-Role` (principal `platform-service`),
@@ -112,21 +192,58 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A write is recorded before it runs: an audit row `mcp.tools/call.write` with the arguments
   (4,000 characters), and the call is refused when that row cannot be written. Every
   `mcp.tools/call` row now says in `details` whether the tool failed (`isError`).
-- A member's own ibl.ai credential on `/mcp`: a DM token (`Authorization: Token`), a platform API
-  key (`Api-Token`), or either behind `Bearer`, which the gateway tells apart. An admin of the
-  backend's platform names any defined role with `X-Iblai-Role`; a member runs as a role the
-  platform's policy `Ontology: <role>` lists them on (their only one without the header). The
-  audit log and the rate limit see `ibl:<username>`. Needs `ONTOLOGY_DM_URL` and `IBLAI_ORG`.
+- An ibl.ai credential on `/mcp`: a DM token (`Authorization: Token`), a platform API key
+  (`Api-Token`), or either behind `Bearer`, which the gateway tells apart. It carries its role:
+  the gateway asks the platform what the credential is granted under `/custom/ontology/`
+  (`GET /v1/rbac/permissions/` with the credential itself and `iblai-org`). A member gets every
+  role the policies `Ontology: <role>` list them on, combined, plus `default`; a key limited to
+  its own policies gets exactly those roles; an admin of the platform reads everything, and
+  holds a toolset that changes data only through a role that names it and lists them; a
+  credential that reaches nothing is a 403. `X-Iblai-Role` sent with one is a 400. The audit log
+  and the rate limit see `ibl:<username>`, or `ibl-key:<12 hex digits of the key's hash>` for a
+  key with no owner to name, with the role `platform-admin`, `platform-user` or `platform-key`.
+  Needs `ONTOLOGY_DM_URL` and `IBLAI_ORG`; the answer, a refusal included, is kept for
+  `ONTOLOGY_ROLES_TTL` seconds.
 - `concurrency_limits.max_records_per_query` is enforced: `query-ontology-cache` returns at most
   that many rows. The console's role editor offers it as "Rows per cache query" (100, 1,000,
-  10,000, No limit; a new role starts at 1,000).
+  10,000, No limit; a new role starts at 1,000). In the platform store it is also a resource of
+  the role's policy, `/custom/ontology/limits/rows/<n>/`, so a credential's grants carry it; of
+  several roles' limits the largest applies, and an admin has none. A role saved by an earlier
+  version gets the resource when it is saved once more.
 - The console's role editor has one text field, the name. Toolsets, memory domains (Read, Query
   data) and console access are switches; the technical name is derived from the name and
   numbered when taken; a domain a role reads only in part is shown as such and left as it is.
   A role that exists is saved with every change and closed with Done; a new one is saved by
-  Create. From 1024 px of width the editor is two columns, short enough not to scroll.
+  Create. From 768 px of width the editor is two columns and about half as tall.
 
 ### Changed
+- Syncs run on the worker. "Sync now" and "Run all" in the console queue their work
+  (`ONTOLOGY_CELERY_BROKER`, which has no default any more: unset, a task runs where it is asked
+  for), so a long sync never holds a web request and the gateway never writes a memory file. The
+  scheduler holds one entry, a tick every minute that queues each schedule whose cron has come
+  due since its last run: a schedule saved in the console starts by itself, one that never ran
+  starts at the next tick, and nothing is restarted. `celery[redis]` brings the Redis client.
+- `query-ontology-cache` and `describe-ontology-cache` are offered to a role that may query any
+  cache table. They no longer need the toolset `admin-analytics-tools`, which would hand a role
+  every other tool in it, and a `tools.yaml` entry of either name is not listed.
+- `mcp-servers/twenty`, its compose service and `MCP_TWENTY_URL` are gone: the backend reads
+  Twenty itself. A `twenty` system registered before must be removed and added again; its old
+  schedules fail saying so.
+- One `Dockerfile` at the repo root replaces `gateway/Dockerfile` and `sync-engine/Dockerfile`;
+  `docker-compose.yml` builds both services from it, gives the worker its command, adds Redis
+  and loses `admin-dashboard`, which never existed, as does `config/Caddyfile`.
+- Removing a system also removes its sync schedules and the tools and sources it merged into
+  `tools.yaml`; a toolset left empty goes too, from the file and from every role that names it.
+  A removal that fails now says so instead of reporting success.
+- A system's name is lowercase letters, digits, `-` and `_` (at most 63, starting with a letter
+  or a digit) when added through the console API, and cannot be `databases`.
+- The example roles a new platform gets are written with only the toolsets the backend's
+  `tools.yaml` defines: a role naming a toolset the backend lacks could not be saved again.
+- On `/mcp`, `ONTOLOGY_ADMIN_PLATFORMS` no longer admits members of the platforms it lists: an
+  ibl.ai credential is judged on `IBLAI_ORG` alone. A token signed in to another platform, or
+  issued before tokens recorded a platform, is refused there (sign in again).
+- The hosted Ontology Frontend no longer keeps "this platform has no backend" for a minute, so
+  a backend that was just connected is found at once.
 - `mcp_toolsets: ["*"]` means every toolset that only reads. The gateway decides what writes and
   fails closed (`toolbox_compat.writing_tools`): a tool reads only if it is an `http` `GET`/`HEAD`
   or one fixed `*-sql` statement that starts with a reading keyword and holds no `;` and no write
@@ -147,7 +264,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The sync engine reads a database source straight through the service's own connection
   (`SyncRunner.pull_table`; the generated schedule names `service` and `table`) instead of a
   Toolbox tool, so "Sync now" works without a Toolbox that knows the source. The Toolbox serves
-  agent-facing tools only. The sync-engine image installs the `auto-ontology` connectors and the
+  agent-facing tools only. The image installs the `auto-ontology` connectors and the
   compose stack hands it the registry key.
 - Generated cache tables have bare names (no `cache.` schema), portable DDL
   (`DEFAULT CURRENT_TIMESTAMP`), the mapping's names, and approve applies the DDL to the cache
@@ -162,16 +279,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A failed audit write is logged (`iblai_ontology.audit`) instead of dropped silently.
 - `chromadb` is pinned `>=0.6,<0.7` to match the `chromadb/chroma:0.6.3` server image (1.x
   dropped the built-in server token auth the compose stack relies on).
-- A schedule with `enabled: false` in `sync-schedules.yaml` is now skipped by Celery beat,
+- A schedule with `enabled: false` in `sync-schedules.yaml` is now skipped by the scheduler,
   `run_all_due` and manual syncs (it was read by the API only).
-- Python 3.13 is the only supported version (`requires-python >=3.13,<3.14`, CI, both
-  images) because auto-ontology requires 3.12–3.13. `pydantic` moved from `==2.13.3` to
+- Python 3.13 is the only supported version (`requires-python >=3.13,<3.14`, CI, the
+  image) because auto-ontology requires 3.12–3.13. `pydantic` moved from `==2.13.3` to
   `>=2.13.5,<3`.
 - uv project: `uv.lock` pins every dependency, the dev tools are a `dev` dependency group
-  (pytest, pytest-cov, ruff 0.14.14), and CI and both images install with `uv sync
-  --locked`. `DEV.md` replaces `dev.sh`. Both images now build from the repo root, as their
-  Dockerfiles expect, and a `.dockerignore` keeps `.env*`, `.venv` and `frontend/` out of
-  them.
+  (pytest, pytest-cov, ruff 0.14.14), and CI and the image install with `uv sync
+  --locked`. `DEV.md` replaces `dev.sh`. The image builds from the repo root, and a
+  `.dockerignore` keeps `.env*`, `.venv` and `frontend/` out of it.
 - The console moved to its own repository; its CI job left with it.
 - Signing in to the console with an ibl.ai platform token takes that token alone: the backend
   reads the caller's own memberships from the platform with it. The `X-Edx-Jwt` header,

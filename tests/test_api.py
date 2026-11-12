@@ -462,7 +462,14 @@ def test_roles_and_counts_shapes(api):
     _make_service("c1")
     counts = _run(CountsView, _dispatch(CountsView, "get", "/counts"))
     assert counts.status_code == 200
-    assert set(counts.data) == {"services", "tools", "toolsets", "roles", "data_store"}
+    assert set(counts.data) == {
+        "services",
+        "tools",
+        "toolsets",
+        "roles",
+        "data_store",
+        "platform",
+    }
     assert (counts.data["services"], counts.data["data_store"]) == (1, "local")
 
 
@@ -906,6 +913,115 @@ def test_role_crud_roundtrip(api, cfg):
     assert (
         _run(RoleDetailView, raw, name="x").status_code == 400
     )  # display_name required
+
+
+def test_the_database_lookup_lists_what_a_login_may_open(api, monkeypatch):
+    import json
+
+    from iblai_ontology.backend.api.views import ServiceDatabasesView
+    from iblai_ontology.backend.discovery import engine
+
+    seen = []
+
+    class Connection:
+        closed = 0
+
+        def cursor(self):
+            return self
+
+        def execute(self, sql):
+            seen.append(sql)
+
+        def fetchall(self):
+            return [("crm",), ("analytics",), ("mysql",), ("sys",), ("postgres",)]
+
+        def close(self):
+            Connection.closed += 1
+
+    def connect(adapter, config):
+        seen.append((adapter, dict(config)))
+        if config["password"] == "wrong":
+            raise RuntimeError(
+                'connection to server at "db.edu" failed:\n'
+                'FATAL:  password authentication failed for user "ro"'
+            )
+        return Connection()
+
+    monkeypatch.setattr(engine, "create_connection", connect)
+
+    def lookup(**changed):
+        login = {"host": "db.edu", "port": 3306, "user": "ro", "password": "pw"}
+        body = {"adapter": "generic-mysql", **login, **changed}
+        raw = _dispatch(ServiceDatabasesView, "post", "/services/databases", data=body)
+        return _run(ServiceDatabasesView, raw)
+
+    # MySQL's own databases are left out; the login is used once and closed.
+    found = lookup().data
+    assert dict(found) == {
+        "ok": True,
+        "message": "3 database(s).",
+        "databases": ["analytics", "crm", "postgres"],
+    }
+    opened = {
+        "db_type": "mysql",
+        "host": "db.edu",
+        "port": 3306,
+        "database": None,
+        "username": "ro",
+        "password": "pw",
+    }
+    assert seen == [("generic-mysql", opened), "SHOW DATABASES"]
+    assert Connection.closed == 1
+    # PostgreSQL is asked through its `postgres` database, which it offers too.
+    found = lookup(adapter="generic-postgres", port=5432).data
+    assert found["databases"] == ["analytics", "crm", "mysql", "postgres", "sys"]
+    assert seen[2][1]["database"] == "postgres" and "pg_database" in seen[3]
+
+    # A refusal is the driver's own words on one line, for the form to show.
+    refused = lookup(password="wrong").data
+    assert dict(refused) == {
+        "ok": False,
+        "message": 'connection to server at "db.edu" failed: FATAL: password '
+        'authentication failed for user "ro"',
+        "databases": [],
+    }
+    # Two engines have such a list, and a port is a port.
+    for changed in ({"adapter": "generic-oracle"}, {"port": 70000}, {"port": "x"}):
+        assert lookup(**changed).status_code == 400, changed
+    assert "password" not in json.dumps(dict(lookup().data))
+
+
+def test_sync_now_is_handed_to_a_task_which_runs_here_without_a_broker(
+    api, monkeypatch
+):
+    from iblai_ontology.backend.api.views import ServiceSyncView, SyncRunAllView
+    from iblai_ontology.backend.sync import tasks
+    from iblai_ontology.backend.sync.engine import SyncRunner
+
+    _make_service("svc")
+    ran = []
+    monkeypatch.setattr(
+        SyncRunner, "run_service", lambda self, name: ran.append(name) or []
+    )
+    monkeypatch.setattr(SyncRunner, "run_all_due", lambda self: ran.append("*") or [])
+
+    def post(view, **kwargs):
+        return _run(view, _dispatch(view, "post"), **kwargs).data
+
+    # No broker in the tests: the task runs inside the request, as before.
+    assert post(ServiceSyncView, name="svc")["ok"] is True
+    assert post(SyncRunAllView)["ok"] is True
+    assert ran == ["svc", "*"]
+    assert post(ServiceSyncView, name="nope")["ok"] is False and ran == ["svc", "*"]
+
+    # What the view calls is the task's `delay`: a broker that is down is said, not a 500.
+    def down(*args, **kwargs):
+        raise ConnectionError("the broker refused the connection")
+
+    monkeypatch.setattr(tasks.run_service, "delay", down)
+    refused = post(ServiceSyncView, name="svc")
+    assert refused == {"ok": False, "message": "the broker refused the connection"}
+    assert ran == ["svc", "*"]
 
 
 def test_schedule_toggle_preserves_fields_and_validates(api, cfg):

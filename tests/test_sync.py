@@ -27,24 +27,22 @@ def test_infer_mode():
     assert scheduler.infer_mode("0 2 * * *") == "full"
 
 
-def test_build_beat_schedule(tmp_path, monkeypatch):
-    cfg = tmp_path / "config"
-    cfg.mkdir()
-    (cfg / "sync-schedules.yaml").write_text(
-        "schedules:\n"
-        "  - name: students-full\n"
-        "    cron: '0 2 * * *'\n"
-        "    source: peoplesoft\n"
-        "    tool: get-all-students\n"
-        "  - name: event-only\n"
-        "    source: canvas\n"
-        "    tool: webhook\n"  # no cron -> skipped
-    )
-    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
-    beat = scheduler.build_beat_schedule()
-    assert "sync-students-full" in beat
-    assert "sync-event-only" not in beat  # no cron
-    assert beat["sync-students-full"]["args"] == ("students-full",)
+def test_beat_holds_one_entry_the_tick():
+    pytest.importorskip("celery")
+    pytest.importorskip("django")
+    from iblai_ontology.backend.celery import app
+    from iblai_ontology.backend.sync import tasks
+
+    # No entry per schedule: the tick reads them each minute, so none waits for a restart.
+    assert app.conf.beat_schedule == {
+        "sync-tick": {
+            "task": tasks.tick.name,
+            "schedule": 60.0,
+            "options": {"expires": 55},
+        }
+    }
+    # With no broker named a task runs where it is called, and its error is the caller's.
+    assert app.conf.task_always_eager and app.conf.task_eager_propagates
 
 
 def test_runner_pull_invokes_toolbox(monkeypatch):
@@ -198,7 +196,9 @@ def test_write_memories_stops_indexing_after_the_first_failure(tmp_path, caplog)
     assert "vector index unavailable" in caplog.text
 
 
-def test_disabled_schedule_skipped_by_beat_and_run_all_due(tmp_path, monkeypatch):
+def test_disabled_schedule_skipped_by_run_all_due_and_run_service(
+    tmp_path, monkeypatch
+):
     cfg = tmp_path / "config"
     cfg.mkdir()
     (cfg / "sync-schedules.yaml").write_text(
@@ -214,9 +214,6 @@ def test_disabled_schedule_skipped_by_beat_and_run_all_due(tmp_path, monkeypatch
         "    enabled: false\n"
     )
     monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
-    beat = scheduler.build_beat_schedule()
-    assert "sync-alpha" in beat and "sync-beta" not in beat
-
     ran: list[str] = []
     runner = SyncRunner()
     monkeypatch.setattr(

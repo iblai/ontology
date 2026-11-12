@@ -38,6 +38,10 @@ class ToolsetResolver:
         """The tools that can change data, each with why."""
         return writing_tools(self._tools)
 
+    def spec(self, name: str) -> dict:
+        """One tool's own document in tools.yaml; empty for a name it does not hold."""
+        return next((t for t in self._tools if t.get("name") == name), {})
+
     def scope_for(self, permissions: Permissions) -> ScopedTools:
         """The toolsets and tools the permissions allow.
 

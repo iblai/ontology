@@ -123,7 +123,9 @@ export default function McpPage() {
       accessorKey: "source",
       header: sortableHeader(t("tools.colSource")),
       cell: ({ row }) => (
-        <span className="text-muted-foreground text-xs">{row.original.source}</span>
+        <span className="text-muted-foreground text-xs">
+          {row.original.source || row.original.service}
+        </span>
       ),
     },
     {
@@ -136,12 +138,14 @@ export default function McpPage() {
     {
       id: "actions",
       header: () => <span className="sr-only">{tc("actions")}</span>,
-      cell: ({ row }) => (
-        <ConfirmDelete
-          name={row.original.name}
-          onConfirm={() => act(apiClient.mcp.removeTool(row.original.name))}
-        />
-      ),
+      // A connected system's operation is not edited or removed here: it goes with its system.
+      cell: ({ row }) =>
+        row.original.service ? null : (
+          <ConfirmDelete
+            name={row.original.name}
+            onConfirm={() => act(apiClient.mcp.removeTool(row.original.name))}
+          />
+        ),
     },
   ];
 
@@ -279,7 +283,7 @@ export default function McpPage() {
                     {addTool}
                   </>
                 }
-                onRowClick={(tool) => setEditingTool(tool)}
+                onRowClick={(tool) => !tool.service && setEditingTool(tool)}
                 pageSize={15}
               />
             )}

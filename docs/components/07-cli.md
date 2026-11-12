@@ -73,6 +73,15 @@ ontology skill list                      # every vendored skill
 
 `service add --skill` registers the service and prints the skill's connection variables and read-only operations (suggested MCP tools). Its data is then read through a custom MCP server (`mcp-servers/`) that you point `MCP_<NAME>_URL` at.
 
+**C. Twenty CRM** — an application the backend reads itself, with an address and an API key:
+
+```bash
+ontology service add --name crm --from twenty --host https://crm.example.edu   # asks for the API key, hidden
+ontology service approve crm                                                   # 8 schedules, the toolset crm-writes
+```
+
+The address and the key are checked before anything is saved (a wrong key is refused with Twenty's words). Without `--host` the address is asked for, with Twenty's cloud offered. The console's **Add a system** does both steps at once and queues the first sync.
+
 ### 2 · Interpret the schema & see the connection
 
 ```bash
@@ -141,7 +150,7 @@ ontology platform attach   <agent-id> --server 14
 | `financial-services` | Bloomberg Terminal, FactSet, Workiva | [iblai/financial-services-agents](https://github.com/iblai/financial-services-agents) |
 | `medical-healthcare` | Epic (FHIR), Oracle Cerner (FHIR), PubMed | [iblai/medical-healthcare-agents](https://github.com/iblai/medical-healthcare-agents) |
 
-Two entries are databases (`peoplesoft`, `snowflake`); the rest are API systems, each seeded from a SKILL.md vendored under `src/iblai_ontology/catalog/skills/`. An API system is synced through a custom MCP server, and `mcp-servers/` ships five: Canvas, Slate, Navigate, LDAP and Twenty. Twenty's cloud is the `twenty` entry; a self-hosted one is a `generic-postgres` database ([DEV.md](../../DEV.md#a-crm-source-twenty)).
+Two entries are databases (`peoplesoft`, `snowflake`); the rest are API systems, each seeded from a SKILL.md vendored under `src/iblai_ontology/catalog/skills/`. An API system is synced through a custom MCP server, and `mcp-servers/` ships four: Canvas, Slate, Navigate and LDAP. Twenty CRM is the exception: the backend reads and changes it itself through the `twenty` entry, on Twenty's cloud or self-hosted; a self-hosted one's database can also be read as a `generic-postgres` source ([DEV.md](../../DEV.md#a-crm-source-twenty)). The console's **Add a system** offers what connects from there, Twenty and the nine database engines; its Catalog page lists all 72 entries and marks the rest "No connector yet".
 
 ```bash
 ontology catalog show snowflake     # connection shape, env, default toolset, cadences, skill
@@ -164,14 +173,14 @@ ontology mcp validate    # tools.yaml: every type, source and toolset member res
 
 | Command | What it does | Key args / options |
 |---|---|---|
-| `add` | Full discovery → safety → introspect → (LLM) → provision pipeline. | Prompts: `--name`, `--service-type`, `--host`, `--port`, `--database`, `--user`, `--password`. Flags: `--llm-discover/--no-llm-discover` (default on), `--skip-safety` (not recommended), `--option KEY=VALUE` (repeatable; engine fields such as `warehouse`, `schema`, `http_scheme` for the auto-ontology connectors). |
+| `add` | Full discovery → safety → introspect → (LLM) → provision pipeline. With `--from twenty`: checks the address and the API key, then registers the system. | Prompts: `--name`, `--service-type`, `--host`, `--port`, `--database`, `--user`, `--password`; for Twenty the API key, hidden. Flags: `--llm-discover/--no-llm-discover` (default on), `--skip-safety` (not recommended), `--option KEY=VALUE` (repeatable; engine fields such as `warehouse`, `schema`, `http_scheme` for the auto-ontology connectors). |
 | `list` | List all integrated services with status. | — |
 | `status <name>` | Connectivity + read-only verified + latency for one service. | `name` (arg) |
 | `test <name>` | Run the 7-test read-only safety suite; exits non-zero on failure. | `name` (arg) |
 | `discover <name>` | Re-run schema discovery on an existing service. | `name` (arg); `--llm/--no-llm` (default on) |
 | `approve <name>` | Approve generated config and provision the service. | `name` (arg) |
 | `sync <name>` | Trigger a manual sync for one service. | `name` (arg) |
-| `remove <name>` | Teardown — drop cache tables and remove config. | `name` (arg); `--yes` to skip the prompt |
+| `remove <name>` | Teardown — remove the system's schedules, the tools it merged, its generated config and its registry rows. The cache tables it filled stay. | `name` (arg); `--yes` to skip the prompt |
 
 `--service-type` accepts: `peoplesoft`, `banner`, `workday`, `canvas`, `slate`, `navigate`, `generic-oracle`, `generic-postgres`, `generic-mysql`, `generic-mssql`, `snowflake`, `generic-trino`, `generic-clickhouse` (the last three need the `auto-ontology` extra).
 
@@ -198,7 +207,7 @@ See [Component 5](05-service-discovery.md) and [Component 6](06-provisioning.md)
 | `show [section]` | Display current config, redacting secrets. | `section` (optional arg) |
 | `set <key> <value>` | Set a config value via dot-notation. | `key`, `value` (args) |
 | `llm` | Configure the BYOK LLM provider + key. | Prompts: `--provider` (`anthropic`/`openai`), `--api-key`; `--model` optional override |
-| `validate` | Validate all config files; exits non-zero on error. With `ONTOLOGY_DATA_STORE=dm` it leaves `roles.yaml` and `sync-schedules.yaml` out: both are kept in the ibl.ai platform, and `ontology roles validate` checks the roles there. | — |
+| `validate` | Validate all config files; exits non-zero on error. With `ONTOLOGY_DATA_STORE=dm` it leaves `roles.yaml` and `sync-schedules.yaml` out (with `rbac`, `roles.yaml` alone): both are kept in the ibl.ai platform, and `ontology roles validate` checks the roles there. | — |
 
 ```bash
 ontology config init /opt/iblai-ontology
@@ -224,7 +233,7 @@ Default LLM models (BYOK): `anthropic` → `claude-opus-4-8`, `openai` → `gpt-
 
 | Command | What it does | Key args / options |
 |---|---|---|
-| `run [service]` | Run syncs now. Omit `service` to run all *due* syncs. | `service` (optional arg); `--schedule <name>`; `--full` (force full refresh) |
+| `run [service]` | Run syncs now, in this process. Omit `service` to run all *due* syncs. The running stack needs none of it: the worker's scheduler starts every due schedule within a minute. | `service` (optional arg); `--schedule <name>`; `--full` (force full refresh) |
 | `status` | Latest run per schedule (schedule, service, status, last run, duration, records). | — |
 | `history [service]` | Sync run history. | `service` (optional arg); `--limit` (default 20) |
 | `schedule` | Show configured schedules from `sync-schedules.yaml`, or from the ibl.ai platform with `ONTOLOGY_DATA_STORE=dm`. | — |
@@ -245,9 +254,9 @@ ontology sync schedule
 
 | Command | What it does | Key args / options |
 |---|---|---|
-| `list` | List roles from `roles.yaml`, or from the ibl.ai platform with `ONTOLOGY_DATA_STORE=dm` (name, display name, toolsets, memory-path count, cache tables). | — |
+| `list` | List roles from `roles.yaml`, or from the ibl.ai platform with `ONTOLOGY_DATA_STORE=rbac` or `dm` (name, display name, toolsets, memory-path count, cache tables). | — |
 | `show <role>` | Full YAML for one role; exits non-zero if not found. | `role` (arg) |
-| `validate` | Check that each role's toolsets exist in `tools.yaml`: the roles of `roles.yaml`, or the ibl.ai platform's with `ONTOLOGY_DATA_STORE=dm`. | — |
+| `validate` | Check that each role's toolsets exist in `tools.yaml`: the roles of `roles.yaml`, or the ibl.ai platform's with `ONTOLOGY_DATA_STORE=rbac` or `dm`. | — |
 | `import <path>` | Copy a `roles.yaml` into the ibl.ai platform's roles; prints each name, and a role the platform cannot keep with the reason (then exits non-zero). `dm` only. | `path` (arg, required: no file is read by default) |
 
 ```bash

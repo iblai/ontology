@@ -2,9 +2,10 @@
 
 Exposes iblai-ontology as an MCP server. Every request is authenticated: by the
 identity middleware (an Entra ID JWT, or the platform service token, plus
-``X-Iblai-Role``), or here for a person's own ibl.ai credential (a DM token as
-``Token``, a platform API key as ``Api-Token``, either one as ``Bearer``). The
-dispatched handlers scope all results to the caller's role.
+``X-Iblai-Role``), or here for a caller's own ibl.ai credential (a DM token as
+``Token``, a platform API key as ``Api-Token``, either one as ``Bearer``), which
+carries its own role and takes no header. The dispatched handlers scope all results
+to the caller's role.
 
 One POST carries one JSON-RPC message (or a batch); the answer is JSON. There is
 no server-initiated stream and no session, so a standard client's ``initialize``,
@@ -29,7 +30,7 @@ ARGUMENTS_MAX = 4000  # characters of a write's arguments kept in its audit row
 
 
 def _platform_caller(request):
-    """Resolve a person's own ibl.ai credential, or answer why not: ``(resolved, response)``."""
+    """Resolve a caller's own ibl.ai credential, or answer why not: ``(resolved, response)``."""
     from django.conf import settings
     from django.http import JsonResponse
 
@@ -39,7 +40,7 @@ def _platform_caller(request):
         CredentialRefused,
         resolve_platform_request,
     )
-    from iblai_ontology.backend.identity.roles import RoleNotPermitted, RolesUnavailable
+    from iblai_ontology.backend.identity.roles import RolesUnavailable
 
     word, _, token = request.headers.get("Authorization", "").partition(" ")
     scheme, token = _PLATFORM_SCHEMES.get(word.lower()), token.strip()
@@ -51,14 +52,14 @@ def _platform_caller(request):
             {"error": "token rejected over cleartext connection; use HTTPS"},
             status=403,
         )
+    if request.headers.get(ROLE_HEADER):
+        # Refused, not ignored: a caller who names a role would otherwise believe it applied.
+        reason = f"{ROLE_HEADER} is not taken with an ibl.ai token or API key: the credential carries its own role."
+        return None, JsonResponse({"error": reason}, status=400)
     try:
-        resolved = resolve_platform_request(
-            scheme, token, request.headers.get(ROLE_HEADER)
-        )
+        resolved = resolve_platform_request(scheme, token)
     except CredentialRefused as exc:
         return None, JsonResponse({"error": str(exc)}, status=exc.status)
-    except RoleNotPermitted as exc:
-        return None, JsonResponse({"error": str(exc)}, status=403)
     except RolesUnavailable:
         return None, JsonResponse({"error": ROLES_UNAVAILABLE}, status=503)
     return resolved, None

@@ -32,6 +32,9 @@ import yaml
 # Toolbox (which binds parameters positionally as $1, $2, ...) cannot represent.
 _INJECTION_RE = re.compile(r"\$\{[A-Za-z0-9_]+\}")
 
+# Tool types the gateway runs itself: an API system's named operations (services/twenty.py).
+GATEWAY_TYPES = {"twenty"}
+
 # DSL keys that are consumed by the translation itself rather than copied through.
 _DROP_KEYS = {"kind", "name", "type"}
 
@@ -92,18 +95,22 @@ def build_toolbox_config(tools_path: str | Path) -> ToolboxBuildResult:
             sources[name] = _source_entry(doc)
         elif kind == "tool":
             statement = doc.get("statement", "")
-            if isinstance(statement, str) and _INJECTION_RE.search(statement):
+            if doc.get("type") in GATEWAY_TYPES or (
+                isinstance(statement, str) and _INJECTION_RE.search(statement)
+            ):
                 native.append(name)  # gateway-native; not representable in Toolbox
                 continue
             tools[name] = _passthrough(doc)
         elif kind == "toolset":
             toolsets[name] = list(doc.get("tools", []) or [])
 
-    # Never reference a native (omitted) tool from a generated toolset.
+    # Never reference a native (omitted) tool from a generated toolset; one left with
+    # none (an API system's writes) is the gateway's alone and goes too.
     native_set = set(native)
     toolsets = {
-        ts: [t for t in members if t not in native_set]
+        ts: kept
         for ts, members in toolsets.items()
+        if (kept := [t for t in members if t not in native_set]) or not members
     }
 
     config = {"sources": sources, "tools": tools, "toolsets": toolsets}

@@ -1,0 +1,20 @@
+# ============================================================
+# ontology.yaml — main iblai-ontology configuration
+#
+# Roles, sync schedules and the connected systems are kept in the ibl.ai
+# platform (ONTOLOGY_DATA_STORE=dm); this file holds what stays on the server.
+# ============================================================
+
+# ------------------------------------------------------------
+# LLM (bring your own key), used when a database's tables are mapped.
+#
+# Leave provider null to map without one. "iblai" uses the ibl.ai platform's
+# own model with the backend's platform key, and sends it a few sample rows
+# per table; "anthropic" and "openai" need an api_key.
+# ------------------------------------------------------------
+llm:
+  provider: null          # "iblai" | "anthropic" | "openai" | null
+  api_key: null
+  model: null             # null = the provider's default
+  max_tokens: 4096
+  temperature: 0.2

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { CATALOG, DOMAINS } from "@/lib/ontology/catalog";
+import { connectable } from "@/lib/ontology/connectable";
 import type { CatalogEntry } from "@/lib/ontology/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortableHeader } from "@/components/shared/data-table";
@@ -55,6 +56,17 @@ export default function CatalogPage() {
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">{row.original.default_toolset}</span>
       ),
+    },
+    {
+      id: "connector",
+      header: t("colConnector"),
+      // By adapter: the catalog's `banner` is its REST API, not the Oracle engine of that name.
+      cell: ({ row }) =>
+        connectable(row.original.adapter) ? (
+          <span className="text-foreground text-xs">{t("connects")}</span>
+        ) : (
+          <span className="text-muted-foreground text-xs">{t("noConnector")}</span>
+        ),
     },
     {
       accessorKey: "skill",

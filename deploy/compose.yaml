@@ -1,0 +1,211 @@
+# ============================================================
+# deploy/compose.yaml — the ontology backend on one server
+#
+# deploy/install.sh puts this file and a .env beside it in /opt/iblai-ontology
+# and starts it; docker-compose.yml at the repo root is the developer stack.
+#
+# Settings come from that .env: a missing one stops compose with its name.
+# The roles live in the ibl.ai platform. The sync schedules and the connected
+# systems live there too where the platform keeps ontology records
+# (ONTOLOGY_DATA_STORE=dm), and on this server where it does not (rbac); the
+# install script asks the platform which. This server always keeps the synced
+# copy, the memory files, the search index, the audit log and the key that
+# decrypts the systems' logins.
+#
+# Only `proxy` listens on the server (80 for the certificate and the redirect,
+# 443 for everything else). The database, Redis and the search index sit on a
+# network with no way out; the gateway and the sync worker are also on one that
+# reaches the ibl.ai platform and the connected systems.
+#
+# Not here: the MCP Toolbox and the connector containers of the developer
+# stack. The gateway's own tools and a connected application's operations do
+# not go through them.
+# ============================================================
+name: iblai-ontology
+
+x-logging: &logging
+  driver: local # rotates by itself
+
+x-backend: &backend
+  # The release workflow stamps the version here and in install.sh.
+  image: ghcr.io/iblai/ontology:dev
+  restart: unless-stopped
+  logging: *logging
+  environment: &backend-env
+    ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD:?missing in .env}@ontology-db:5432/ontology
+    ONTOLOGY_SECRET_KEY: ${ONTOLOGY_SECRET_KEY:?missing in .env}
+    # Decrypts the logins of the connected systems, which are kept encrypted.
+    ONTOLOGY_CREDENTIAL_KEY: ${ONTOLOGY_CREDENTIAL_KEY:?missing in .env}
+    ONTOLOGY_CELERY_BROKER: redis://redis:6379/0
+    CHROMA_URL: http://vector-store:8000
+    CHROMA_TOKEN: ${CHROMA_TOKEN:?missing in .env}
+    # The ibl.ai platform: what a sign-in or a key is checked against, and where the roles live.
+    # dm: it keeps the systems and the schedules too; rbac: this server does.
+    ONTOLOGY_DATA_STORE: ${ONTOLOGY_DATA_STORE:?missing in .env}
+    ONTOLOGY_DM_URL: ${IBLAI_BASE_URL:?missing in .env}
+    IBLAI_BASE_URL: ${IBLAI_BASE_URL:?missing in .env}
+    IBLAI_ORG: ${IBLAI_ORG:?missing in .env}
+    IBLAI_ADMIN_TOKEN: ${IBLAI_ADMIN_TOKEN:?missing in .env}
+    IBLAI_AUTH_SCHEME: Api-Token
+
+services:
+  ontology-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ontology
+      POSTGRES_USER: ontology
+      POSTGRES_PASSWORD: ${ONTOLOGY_DB_PASSWORD:?missing in .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ontology -d ontology"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *logging
+
+  # The sync worker's queue; nothing in it outlives a restart.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *logging
+
+  vector-store:
+    image: chromadb/chroma:0.6.3
+    volumes:
+      - vectors:/chroma/chroma
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      # A token, so no other container on the network reads or writes the index.
+      CHROMA_SERVER_AUTHN_PROVIDER: chromadb.auth.token_authn.TokenAuthenticationServerProvider
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_TOKEN:?missing in .env}
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *logging
+
+  # Runs once at every start, before the gateway and the worker; it also fills a new config volume.
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "iblai_ontology.backend.manage", "migrate", "--no-input"]
+    restart: "no"
+    volumes:
+      - config:/app/config
+    depends_on:
+      ontology-db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  ontology-gateway:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      # The address agents reach it at: "Connect an agent" registers this one.
+      ONTOLOGY_GATEWAY_URL: https://${ONTOLOGY_HOST:?missing in .env}/mcp
+      ONTOLOGY_ALLOWED_HOSTS: ${ONTOLOGY_HOST:?missing in .env},127.0.0.1
+    volumes:
+      # Memory files are the worker's to write.
+      - memory:/ontology:ro
+      # Writable: connecting a system and the console's MCP page change tools.yaml.
+      - config:/app/config
+    healthcheck:
+      # No sign-in needed: the gateway answers GET /mcp with 405.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.error, urllib.request
+          try:
+              urllib.request.urlopen("http://127.0.0.1:8080/mcp", timeout=3)
+          except urllib.error.HTTPError as answer:
+              sys.exit(0 if answer.code == 405 else 1)
+          sys.exit(1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      vector-store:
+        condition: service_started
+    networks:
+      - internal
+      - exposed
+
+  # The Celery worker with its scheduler: one tick a minute queues every schedule that is due.
+  sync-engine:
+    <<: *backend
+    command:
+      - celery
+      - -A
+      - iblai_ontology.backend.celery:app
+      - worker
+      - --beat
+      - --loglevel=info
+      - --concurrency=2
+      # The scheduler's state, outside the read-only config.
+      - --schedule=/tmp/celerybeat-schedule
+    volumes:
+      - memory:/ontology
+      - config:/app/config:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      vector-store:
+        condition: service_started
+    networks:
+      - internal
+      - exposed
+
+  # Gets and renews the certificate for ONTOLOGY_HOST, and sends http on to https.
+  proxy:
+    image: caddy:2-alpine
+    command:
+      - caddy
+      - reverse-proxy
+      - --from
+      - ${ONTOLOGY_HOST:?missing in .env}
+      - --to
+      - ontology-gateway:8080
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certificates:/data
+    depends_on:
+      ontology-gateway:
+        condition: service_healthy
+    networks:
+      - exposed
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  internal:
+    internal: true # no way out to the internet
+  exposed:
+
+volumes:
+  db:
+  memory:
+  vectors:
+  config:
+  certificates:

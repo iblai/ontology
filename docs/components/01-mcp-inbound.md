@@ -13,6 +13,8 @@ Every API source ends up behind the same kind of MCP interface, so the sync engi
 
 A custom MCP server that feeds the sync engine exposes one `list-<entity>` tool per entity in the catalog's `sync_defaults` (`list-contacts`, `list-deals`), returning a JSON array of flat objects that carry an `id`; the sync engine creates the cache table from the first row. The server runs stateless streamable HTTP on port 3000 and is reached at `MCP_<NAME>_URL` (`MCP_CANVAS_URL` in the compose stack).
 
+One application needs neither: the backend reads and changes **Twenty CRM** itself, with the address and API key entered when it is connected ([Component 2](02-knowledge-materialization.md#an-application-read-over-its-api)). It is the only API system the console connects without a container on the server.
+
 ---
 
 ## Google MCP Toolbox for Databases
@@ -243,6 +245,7 @@ tools:
 - **`http` tools are written in the YAML editor** (console → MCP → tools.yaml). The tool dialog has no method or body fields.
 - The Toolbox does not add a `Content-Type`: set it on the tool, as above.
 - Not available: a tool where the agent writes the SQL (`*-execute-sql`). It would count as a write, and it is not a named operation.
+- **A connector can ship its operations.** A tool of type `twenty` is generated when Twenty CRM is connected and runs in the gateway, not the Toolbox: `ontology mcp build` leaves it out of the Toolbox's config, and the console's MCP page lists it under its system without an editor. Its toolset, `<system>-writes`, is granted like any other that changes data.
 
 ---
 

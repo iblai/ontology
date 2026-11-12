@@ -90,12 +90,30 @@ with the mark, `ontology mcp build`, a Toolbox restart, then the role's switch o
 the Access page. [components/01-mcp-inbound.md](components/01-mcp-inbound.md#tools-that-change-data)
 has the YAML.
 
+A connector can ship its operations instead. Connecting Twenty CRM adds the toolset
+`<system>-writes`, already marked, with ten tools of type `twenty` that the gateway
+runs itself with the system's own key: create and update, no delete. The same
+guards apply, since any type the gateway cannot tell to be a read is a write. The
+key's own permissions in Twenty are the outer limit
+([components/02-knowledge-materialization.md](components/02-knowledge-materialization.md#an-application-read-over-its-api)).
+
+## Querying the cache
+
+`describe-ontology-cache` and `query-ontology-cache` are the gateway's own tools.
+They are offered to a role that may query at least one table (`cache_tables`), not
+through a toolset: a role given a CRM's tables is not handed every other tool of a
+shared toolset with them. The first lists the tables the role may query, with their
+columns; the second runs one `SELECT` on them in a read-only transaction.
+
 ## Row limit
 
 `concurrency_limits.max_records_per_query` caps what `query-ontology-cache`
 returns to the role, whatever `limit` the agent passes. It must be a whole number
 above zero; absent is no limit. The console offers 100, 1,000, 10,000 and "No
-limit", and a new role starts at 1,000.
+limit", and a new role starts at 1,000. In the platform store it is also a resource
+of the role's policy (`/custom/ontology/limits/rows/<n>/`), because a caller with an
+ibl.ai credential is judged by its grants, which carry no role name: of several
+roles' limits the largest applies, and an administrator of the platform has none.
 
 ## Adding a role
 

@@ -24,7 +24,7 @@ from rest_framework.views import APIView
 
 from iblai_ontology.backend import store
 from iblai_ontology.backend.services.models import Service, ServiceHealth
-from iblai_ontology.config import dm_store
+from iblai_ontology.config import data_store, dm_store, platform_roles
 from iblai_ontology.config.reader import ConfigReader, _redact
 
 from .serializers import (
@@ -176,10 +176,17 @@ class ServicesView(ConsoleAPIView):
             from iblai_ontology.backend.discovery.engine import DiscoveryEngine
 
             if get_adapter(v["adapter"]).SERVICE_TYPE == "api":
+                from iblai_ontology.backend.services import twenty
+
                 # No database to introspect: the Service row and its catalog schedules.
-                DiscoveryEngine().register_api(
-                    name=name, adapter=v["adapter"], host=v.get("host", "")
+                service = DiscoveryEngine().register_api(
+                    name=name,
+                    adapter=v["adapter"],
+                    host=v.get("host", ""),
+                    api_key=v.get("api_key", ""),
                 )
+                if service.adapter == twenty.ADAPTER:
+                    return self._connect_now(request, name, service.display_name)
             else:
                 DiscoveryEngine().run(
                     name=name,
@@ -198,6 +205,72 @@ class ServicesView(ConsoleAPIView):
         self._audit(request, action="service.add", resource=name)
         return _envelope(True, f"Service '{name}' added.")
 
+    def _connect_now(self, request, name: str, display_name: str):
+        """A system whose key was just tried needs no review: approve it, give the role of
+        its name what it brings, and start its first sync."""
+        from iblai_ontology.backend.identity import role_source
+        from iblai_ontology.backend.provisioning.pipeline import ProvisioningEngine
+        from iblai_ontology.backend.sync import tasks
+
+        engine = ProvisioningEngine()
+        try:
+            engine.provision(name)
+        except Exception:
+            try:  # nothing half-connected is left to refuse the next try
+                engine.teardown(name)
+            except Exception:
+                logger.exception("service.add: %s could not be undone", name)
+            raise
+        self._audit(request, action="service.add", resource=name)
+        self._audit(request, action="service.approve", resource=name)
+        said = [f"'{name}' is connected."]
+        try:
+            tasks.run_service.delay(name)
+            said.append("Its records are on their way.")
+        except Exception as exc:
+            why = " ".join(str(exc).split())[:200]
+            said.append(f"Its first sync did not start ({why}): use Sync now.")
+        try:
+            # The role an agent is connected as: this system's tables, memory and operations.
+            role_source.extend_role(name, engine.reach(name), display_name)
+            self._audit(request, action="role.upsert", resource=name)
+        except Exception as exc:
+            # The system is connected all the same; the role is one to make on Access.
+            why = " ".join(str(exc).split())[:300]
+            said.append(f"No role was made for it: {why}")
+        return _envelope(True, " ".join(said))
+
+
+class ServiceDatabasesView(ConsoleAPIView):
+    """The databases a login may open, so the form offers the name instead of asking for it."""
+
+    def post(self, request):
+        from .serializers import DatabaseListSerializer, DatabaseLookupSerializer
+
+        form = DatabaseLookupSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        v = form.validated_data
+        try:
+            from iblai_ontology.backend.discovery.engine import list_databases
+
+            found = list_databases(
+                v["adapter"],
+                host=v["host"],
+                port=v["port"],
+                user=v["user"],
+                password=v["password"],
+            )
+        except Exception as exc:
+            # A driver's error runs over several lines; its first words are the reason.
+            why = " ".join(str(exc).split())[:300]
+            return _envelope(False, why, serializer=DatabaseListSerializer)
+        return _envelope(
+            True,
+            f"{len(found)} database(s).",
+            extra={"databases": found},
+            serializer=DatabaseListSerializer,
+        )
+
 
 class ServiceDetailView(ConsoleAPIView):
     def get(self, request, name):
@@ -212,10 +285,11 @@ class ServiceDetailView(ConsoleAPIView):
         try:
             from iblai_ontology.backend.provisioning.pipeline import ProvisioningEngine
 
-            ProvisioningEngine().teardown(name)  # best-effort de-provision
-        except Exception:
-            pass
-        store.delete(Service, name=name)  # cascades to health, runs, steps and tables
+            # Its schedules and tools first, its registry rows last: what fails can be tried again.
+            ProvisioningEngine().teardown(name)
+        except Exception as exc:
+            why = " ".join(str(exc).split())[:400]
+            return _envelope(False, f"'{name}' was not removed: {why}")
         self._audit(request, action="service.delete", resource=name)
         return _envelope(True, f"Service '{name}' removed.")
 
@@ -271,6 +345,12 @@ class ServiceTestView(ConsoleAPIView):
         service = store.first(Service, name=name)
         if not service:
             return _envelope(False, f"Service '{name}' not found.")
+        if service.service_type == "api":
+            return _envelope(
+                False,
+                "An API system has no read-only test: what an agent may change through "
+                "it is the toolset its role is granted.",
+            )
         from iblai_ontology.backend.discovery.engine import create_connection
         from iblai_ontology.backend.discovery.models import (
             SafetyReport as SafetyReportModel,
@@ -328,8 +408,14 @@ class ServiceTestView(ConsoleAPIView):
 
 class ServiceDiscoverView(ConsoleAPIView):
     def post(self, request, name):
-        if not store.count(Service, name=name):
+        service = store.first(Service, name=name)
+        if not service:
             return _envelope(False, f"Service '{name}' not found.")
+        if service.service_type == "api":
+            return _envelope(
+                False,
+                "An API system has no schema to discover: what it syncs is the catalog's list.",
+            )
         try:
             from iblai_ontology.backend.discovery.engine import DiscoveryEngine
 
@@ -397,12 +483,11 @@ class ServiceSyncView(ConsoleAPIView):
     def post(self, request, name):
         if not store.count(Service, name=name):
             return _envelope(False, f"Service '{name}' not found.")
-        from iblai_ontology.backend.sync.engine import SyncRunner
+        from iblai_ontology.backend.sync import tasks
 
         try:
-            # ponytail: inline sync (records SyncRun rows). Swap to the celery
-            # run_schedule task when a worker fleet is deployed.
-            SyncRunner().run_service(name)
+            # On the worker when a broker is configured, here when none is.
+            tasks.run_service.delay(name)
         except Exception as exc:
             return _envelope(False, str(exc)[:500])
         self._audit(request, action="service.sync", resource=name)
@@ -416,11 +501,10 @@ class ServiceSyncView(ConsoleAPIView):
 
 class SyncRunAllView(ConsoleAPIView):
     def post(self, request):
-        from iblai_ontology.backend.sync.engine import SyncRunner
+        from iblai_ontology.backend.sync import tasks
 
         try:
-            # ponytail: inline; celery run_all_due.delay() when a fleet exists.
-            SyncRunner().run_all_due()
+            tasks.run_all_due.delay()
         except Exception as exc:
             return _envelope(False, str(exc)[:500])
         self._audit(request, action="sync.run", resource="all")
@@ -578,9 +662,82 @@ class CountsView(ConsoleAPIView):
             "tools": len(reader.get_tools()),
             "toolsets": len(reader.get_toolsets()),
             "roles": len(RoleResolver().role_names()),
-            "data_store": "dm" if dm_store() else "local",
+            "data_store": data_store(),
+            "platform": settings.IBLAI_ORG,
         }
         return Response(CountsSerializer(payload).data)
+
+
+# ---------------------------------------------------------------------------
+# Agents connected to this gateway (platform store)
+# ---------------------------------------------------------------------------
+
+
+def _authorization(request) -> str:
+    """The caller's own Authorization header: the platform is asked in their name."""
+    return request.META.get("HTTP_AUTHORIZATION", "")
+
+
+class AgentsView(ConsoleAPIView):
+    def get(self, request):
+        from iblai_ontology.backend.platform import agents
+
+        from .serializers import AgentListSerializer
+
+        try:
+            found = agents.agents(_authorization(request))
+        except Exception as exc:
+            why = " ".join(str(exc).split())[:400]
+            return _envelope(False, why, serializer=AgentListSerializer)
+        return _envelope(
+            True, "", extra={"agents": found}, serializer=AgentListSerializer
+        )
+
+
+class AgentConnectionsView(ConsoleAPIView):
+    def get(self, request):
+        from iblai_ontology.backend.platform import agents
+
+        from .serializers import AgentConnectionSerializer
+
+        return Response(AgentConnectionSerializer(agents.connections(), many=True).data)
+
+    def post(self, request):
+        from iblai_ontology.backend.platform import agents
+
+        from .serializers import AgentConnectionInputSerializer
+
+        form = AgentConnectionInputSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        v = form.validated_data
+        try:
+            made = agents.connect(
+                _authorization(request),
+                agent=v["agent"],
+                role=v["role"],
+                by=getattr(request.user, "username", "") or "",
+            )
+        except Exception as exc:
+            self._audit(
+                request, action="agent.connect", resource=v["agent"], allowed=False
+            )
+            return _envelope(False, " ".join(str(exc).split())[:500])
+        self._audit(request, action="agent.connect", resource=made["name"])
+        return _envelope(True, f"{made['agent_name']} is connected as {made['role']}.")
+
+
+class AgentConnectionDetailView(ConsoleAPIView):
+    def delete(self, request, name):
+        from iblai_ontology.backend.platform import agents
+
+        if not _NAME_RE.match(name):
+            return _envelope(False, "Invalid name.")
+        try:
+            agents.disconnect(_authorization(request), name)
+        except Exception as exc:
+            return _envelope(False, " ".join(str(exc).split())[:500])
+        self._audit(request, action="agent.disconnect", resource=name)
+        return _envelope(True, "The connection is removed and its key deleted.")
 
 
 # The config directory's files the Configuration page shows, under the page's own ids.
@@ -591,7 +748,13 @@ _CONFIG_FILES = {
     "tools": "tools.yaml",
     "caddyfile": "Caddyfile",
 }
-_IN_PLATFORM = {"schedules", "roles"}  # dm keeps these in the ibl.ai platform
+
+
+def _in_platform(file_id: str) -> bool:
+    """Whether the ibl.ai platform keeps what this file would hold: roles in rbac and dm, schedules in dm."""
+    return (file_id == "roles" and platform_roles()) or (
+        file_id == "schedules" and dm_store()
+    )
 
 
 class ConfigFilesView(ConsoleAPIView):
@@ -610,7 +773,7 @@ class ConfigFilesView(ConsoleAPIView):
         paths = {
             file_id: root / name
             for file_id, name in _CONFIG_FILES.items()
-            if not (dm_store() and file_id in _IN_PLATFORM)
+            if not _in_platform(file_id)
         }
         paths["catalog"] = Path(catalog.__file__).with_name("catalog.yaml")
         files = []
@@ -864,12 +1027,10 @@ class SyncScheduleDetailView(ConsoleAPIView):
         refused = SyncRunner.refuses(str(merged.get("tool") or ""))
         if refused:
             return _envelope(False, refused)
-        # ponytail: beat reads the yaml at start; restart it for cron/enabled changes.
         gen.apply(yaml.safe_dump({"schedules": [merged]}, sort_keys=False))
         self._audit(request, action="schedule.upsert", resource=name)
-        return _envelope(
-            True, f"Schedule '{name}' saved. Restart the sync scheduler to apply it."
-        )
+        # The scheduler reads the schedules every minute: nothing to restart.
+        return _envelope(True, f"Schedule '{name}' saved.")
 
     def delete(self, request, name):
         from iblai_ontology.backend.sync import schedules

@@ -26,7 +26,7 @@ import { CATALOG } from "@/lib/ontology/catalog";
 import type { QuickCounts } from "@/lib/ontology/types";
 import { cn } from "@/lib/utils";
 import { NavRow } from "./nav-row";
-import { PLATFORM_SIDEBAR_SECTIONS } from "./nav-config";
+import { sidebarSections } from "./nav-config";
 
 /**
  * The console sidebar, built on the ibl.ai SDK's `PlatformSidebar`.
@@ -44,11 +44,13 @@ import { PLATFORM_SIDEBAR_SECTIONS } from "./nav-config";
  * built-in link (https://ibl.ai/docs).
  */
 export function PlatformAppSidebar({
+  hosted,
   isAdmin,
   tenantKey,
   username,
   email,
 }: {
+  hosted: boolean;
   isAdmin: boolean;
   tenantKey: string;
   username: string;
@@ -71,7 +73,7 @@ export function PlatformAppSidebar({
     );
   }, [pathname]);
 
-  const sections: PlatformSidebarSectionConfig[] = PLATFORM_SIDEBAR_SECTIONS.map((group, i) => ({
+  const sections: PlatformSidebarSectionConfig[] = sidebarSections(hosted).map((group, i) => ({
     type: "custom" as const,
     id: group.id,
     render: (ctx) => (

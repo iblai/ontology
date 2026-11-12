@@ -841,6 +841,7 @@ export function buildSeed(): Db {
     mcp_tools: buildMcpTools(),
     mcp_toolsets: buildMcpToolsets(),
     roles: buildRoles(),
+    agent_connections: [],
     health: buildHealth(),
   };
 }

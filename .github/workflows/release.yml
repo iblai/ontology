@@ -1,0 +1,53 @@
+name: Release
+
+# Publishing a release builds its image and attaches the two files a server installs from,
+# so https://github.com/iblai/ontology/releases/latest/download/install.sh never changes.
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach install.sh and compose.yaml to the release
+      packages: write # push the image to ghcr.io
+    env:
+      IMAGE: ghcr.io/iblai/ontology
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Refuse a tag that is not the version in pyproject.toml
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+          if [ -z "$version" ] || [ "v$version" != "$TAG" ]; then
+            echo "::error::The tag $TAG is not v$version, the version in pyproject.toml."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build and push the image (amd64)
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          docker build --tag "$IMAGE:$VERSION" .
+          docker push "$IMAGE:$VERSION"
+
+      - name: Stamp the version into the install files and attach them
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sed -i "s/^VERSION=\"dev\"$/VERSION=\"$VERSION\"/" deploy/install.sh
+          sed -i "s|$IMAGE:dev|$IMAGE:$VERSION|" deploy/compose.yaml
+          # A stamp that matched nothing would ship files that install nothing.
+          grep -qx "VERSION=\"$VERSION\"" deploy/install.sh
+          grep -q "image: $IMAGE:$VERSION\$" deploy/compose.yaml
+          gh release upload "$TAG" deploy/install.sh deploy/compose.yaml --clobber

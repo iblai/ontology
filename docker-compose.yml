@@ -4,9 +4,13 @@
 # This stack does NOT include the agent runtime. It includes only the
 # knowledge layer, the identity gateway, and the MCP exposure endpoint.
 #
+# This is the developer stack, with the MCP Toolbox and the connector
+# containers. A server is installed from deploy/compose.yaml by
+# deploy/install.sh, with the published image.
+#
 # Networking: the `ontology-internal` network is `internal: true`, so the
-# MCP servers, database, vector store, and sync engine cannot reach the
-# internet. Only `ontology-gateway` and `proxy` bridge to `ontology-exposed`.
+# MCP servers, database, Redis and vector store cannot reach the internet.
+# `ontology-gateway`, `sync-engine` and `proxy` bridge to `ontology-exposed`.
 # ============================================================
 version: "3.9"
 
@@ -60,13 +64,6 @@ services:
       - ontology-internal
     restart: unless-stopped
 
-  mcp-twenty:
-    build: ./mcp-servers/twenty
-    env_file: .env.twenty
-    networks:
-      - ontology-internal
-    restart: unless-stopped
-
   # --- Knowledge Store ---
   ontology-db:
     image: postgres:16-alpine
@@ -96,11 +93,27 @@ services:
       - ontology-internal
     restart: unless-stopped
 
+  # The sync worker's queue; nothing in it outlives a restart.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - ontology-internal
+    restart: unless-stopped
+
   # --- Sync Engine ---
+  # The Celery worker with its scheduler: one tick a minute queues every schedule that is due.
   sync-engine:
-    build:
-      context: .
-      dockerfile: sync-engine/Dockerfile
+    build: .
+    command:
+      - celery
+      - -A
+      - iblai_ontology.backend.celery:app
+      - worker
+      - --beat
+      - --loglevel=info
+      # The scheduler's state, outside the read-only config.
+      - --schedule=/tmp/celerybeat-schedule
     volumes:
       - ontology-files:/ontology
       # The config directory the backend reads (/app/config): schedules, tools, generated/.
@@ -112,8 +125,8 @@ services:
       MCP_SLATE_URL: http://mcp-slate:3000
       MCP_NAVIGATE_URL: http://mcp-navigate:3000
       MCP_LDAP_URL: http://mcp-ldap:3000
-      MCP_TWENTY_URL: http://mcp-twenty:3000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      ONTOLOGY_CELERY_BROKER: redis://redis:6379/0
       CHROMA_URL: http://vector-store:8000
       CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
       # Database sources are read through their own connection, so the sync engine
@@ -130,19 +143,18 @@ services:
       - mcp-toolbox
       - mcp-canvas
       - ontology-db
+      - redis
       - vector-store
     networks:
       - ontology-internal
-      # The DM (ONTOLOGY_DATA_STORE=dm) and remote source databases are reached from here,
-      # as docker-compose.override.example.yml documents for the Toolbox.
+      # The DM (ONTOLOGY_DATA_STORE=dm), remote source databases and an application read over
+      # its API (Twenty) are reached from here.
       - ontology-exposed
     restart: unless-stopped
 
   # --- MCP Outbound: Exposure Gateway ---
   ontology-gateway:
-    build:
-      context: .
-      dockerfile: gateway/Dockerfile
+    build: .
     volumes:
       - ontology-files:/ontology:ro
       # Writable: the Ontology Frontend saves roles, schedules and tools through the gateway.
@@ -150,6 +162,8 @@ services:
     environment:
       MCP_TOOLBOX_URL: http://mcp-toolbox:5000
       ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
+      # Syncs asked for in the console are queued for the sync engine: memory files are read-only here.
+      ONTOLOGY_CELERY_BROKER: redis://redis:6379/0
       CHROMA_URL: http://vector-store:8000
       CHROMA_TOKEN: ${CHROMA_TOKEN:?set CHROMA_TOKEN in .env}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
@@ -166,6 +180,7 @@ services:
     depends_on:
       - mcp-toolbox
       - ontology-db
+      - redis
       - vector-store
     networks:
       - ontology-internal
@@ -183,18 +198,6 @@ services:
     depends_on:
       - ontology-gateway
     networks:
-      - ontology-exposed
-    restart: unless-stopped
-
-  # --- Admin Dashboard ---
-  admin-dashboard:
-    build: ./admin-dashboard
-    environment:
-      ONTOLOGY_DB_URL: postgresql://ontology:${ONTOLOGY_DB_PASSWORD}@ontology-db:5432/ontology
-      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
-      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
-    networks:
-      - ontology-internal
       - ontology-exposed
     restart: unless-stopped
 

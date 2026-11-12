@@ -97,6 +97,26 @@ def test_toolset_drops_native_tools(tmp_path):
     assert result.config["toolsets"]["client-db-tools"] == ["list-tables"]
 
 
+def test_an_api_systems_operations_are_left_out_of_the_toolbox(tmp_path):
+    path = tmp_path / "tools.yaml"
+    path.write_text(
+        DSL + "\n---\nkind: tool\nname: crm-create-person\ntype: twenty\nservice: crm\n"
+        "object: people\noperation: create\n"
+        "---\nkind: toolset\nname: crm-writes\nwrite: true\ntools:\n  - crm-create-person\n"
+        "---\nkind: toolset\nname: mixed\nwrite: true\n"
+        "tools:\n  - list-tables\n  - crm-create-person\n"
+        "---\nkind: toolset\nname: none-yet\ntools: []\n"
+    )
+    result = build_toolbox_config(path)
+    # The gateway runs them on the system itself: the Toolbox has no such tool kind.
+    assert "crm-create-person" in result.native_tools
+    assert "crm-create-person" not in result.config["tools"]
+    # A toolset of nothing else is the gateway's alone; a mixed one keeps its own tools.
+    assert "crm-writes" not in result.config["toolsets"]
+    assert result.config["toolsets"]["mixed"] == ["list-tables"]
+    assert result.config["toolsets"]["none-yet"] == []
+
+
 def test_tools_are_a_map_keyed_by_name(tmp_path):
     result = build_toolbox_config(_write(tmp_path))
     tool = result.config["tools"]["list-tables"]

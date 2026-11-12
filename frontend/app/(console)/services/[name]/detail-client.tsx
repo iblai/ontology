@@ -81,7 +81,7 @@ function ServiceDetail({ service }: { service: Service }) {
           apiClient.services.runs(service.name),
           apiClient.services.safetyReport(service.name),
         ]);
-        setProbe(health);
+        setProbe(health && "connected" in health ? health : null);
         setRuns(serviceRuns);
         setSafety(safety);
         setLatestSync(syncHistory[0]);
@@ -96,8 +96,13 @@ function ServiceDetail({ service }: { service: Service }) {
 
   async function runProbe() {
     const r = await apiClient.services.status(service.name);
-    setProbe(r);
-    toast.success(ts("runStatusProbe"));
+    // A check that could not be made answers with why, not with a probe.
+    if (r && "connected" in r) {
+      setProbe(r);
+      toast.success(ts("runStatusProbe"));
+    } else {
+      toast.error((r as { message?: string } | null)?.message ?? tc("failed"));
+    }
   }
 
   async function runSafety() {
@@ -108,7 +113,8 @@ function ServiceDetail({ service }: { service: Service }) {
 
   async function discover() {
     const r = await apiClient.services.discover(service.name);
-    toast.success(r.message);
+    if (r.ok) toast.success(r.message);
+    else toast.error(r.message);
   }
 
   async function proposeMapping() {
@@ -143,6 +149,8 @@ function ServiceDetail({ service }: { service: Service }) {
   }
 
   const connectionRows = Object.entries(redactConnectionConfig(service.connection_config));
+  // An API system has no schema to discover and no read-only login to test.
+  const api = service.service_type === "api";
 
   return (
     <div className="flex flex-col gap-6">
@@ -157,7 +165,7 @@ function ServiceDetail({ service }: { service: Service }) {
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="connection">{t("tabConnection")}</TabsTrigger>
           <TabsTrigger value="schema">{t("tabSchema")}</TabsTrigger>
-          <TabsTrigger value="safety">{t("tabSafety")}</TabsTrigger>
+          {!api && <TabsTrigger value="safety">{t("tabSafety")}</TabsTrigger>}
           <TabsTrigger value="pipeline">{t("tabPipeline")}</TabsTrigger>
           <TabsTrigger value="sync">{t("tabSync")}</TabsTrigger>
         </TabsList>
@@ -175,10 +183,12 @@ function ServiceDetail({ service }: { service: Service }) {
                 <Database className="mr-2 size-3.5" />
                 {ts("runStatusProbe")}
               </Button>
-              <Button size="sm" variant="outline" onClick={discover}>
-                <RefreshCw className="mr-2 size-3.5" />
-                {ts("discover")}
-              </Button>
+              {!api && (
+                <Button size="sm" variant="outline" onClick={discover}>
+                  <RefreshCw className="mr-2 size-3.5" />
+                  {ts("discover")}
+                </Button>
+              )}
               {service.service_type === "database" && (
                 <Button size="sm" variant="outline" onClick={proposeMapping}>
                   <Sparkles className="mr-2 size-3.5" />
@@ -207,18 +217,22 @@ function ServiceDetail({ service }: { service: Service }) {
                     label={t("overview.host")}
                     value={<span className="text-xs">{service.host}</span>}
                   />
-                  <FactRow
-                    label={t("overview.lastDiscovery")}
-                    value={fmtDateTime(service.last_discovery_at)}
-                  />
-                  <FactRow
-                    label={t("overview.safetyStatus")}
-                    value={<StatusBadge kind="safety" value={service.safety_status} />}
-                  />
-                  <FactRow
-                    label={t("overview.lastSafetyCheck")}
-                    value={fmtDateTime(service.last_safety_check_at)}
-                  />
+                  {!api && (
+                    <>
+                      <FactRow
+                        label={t("overview.lastDiscovery")}
+                        value={fmtDateTime(service.last_discovery_at)}
+                      />
+                      <FactRow
+                        label={t("overview.safetyStatus")}
+                        value={<StatusBadge kind="safety" value={service.safety_status} />}
+                      />
+                      <FactRow
+                        label={t("overview.lastSafetyCheck")}
+                        value={fmtDateTime(service.last_safety_check_at)}
+                      />
+                    </>
+                  )}
                   <FactRow
                     label={t("overview.lastSync")}
                     value={service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")}
@@ -256,16 +270,18 @@ function ServiceDetail({ service }: { service: Service }) {
                         </StatusPill>
                       }
                     />
-                    <FactRow
-                      label={t("overview.probeReadOnly")}
-                      value={
-                        <StatusPill tone={probe.read_only ? "success" : "error"}>
-                          {probe.read_only
-                            ? t("overview.probeReadOnly")
-                            : t("overview.probeReadWrite")}
-                        </StatusPill>
-                      }
-                    />
+                    {!api && (
+                      <FactRow
+                        label={t("overview.probeReadOnly")}
+                        value={
+                          <StatusPill tone={probe.read_only ? "success" : "error"}>
+                            {probe.read_only
+                              ? t("overview.probeReadOnly")
+                              : t("overview.probeReadWrite")}
+                          </StatusPill>
+                        }
+                      />
+                    )}
                     <FactRow
                       label={t("overview.probeLatency")}
                       value={<span className="tabular-nums">{probe.latency_ms} ms</span>}

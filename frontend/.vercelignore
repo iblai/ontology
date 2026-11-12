@@ -1,0 +1,17 @@
+# The Vercel CLI reads this file, not .gitignore: keep secrets, test sessions,
+# local state and the native shell off an upload (a Git deploy never has them).
+.env
+.env.*
+!.env.example
+e2e/.env*
+iblai.env*
+playwright/
+playwright-report/
+test-results/
+coverage/
+src-tauri/
+.claude/
+CLAUDE.local.md
+# This console's own: the build directories of a second dev server or the journeys.
+.next-*/
+.selfcheck/

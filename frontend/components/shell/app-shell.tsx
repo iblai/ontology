@@ -16,11 +16,14 @@ import { cn } from "@/lib/utils";
 export function AppShell({
   defaultSidebarOpen,
   demo,
+  hosted,
   children,
 }: {
   defaultSidebarOpen: boolean;
   /** No backend configured: the console serves its mock data. */
   demo: boolean;
+  /** One console for every platform: each finds, and may connect, its own backend. */
+  hosted: boolean;
   children: React.ReactNode;
 }) {
   // The semantic map page's content is dark below the navbar; every other page is light.
@@ -74,9 +77,10 @@ export function AppShell({
     );
 
   return (
-    <CommandPaletteProvider>
+    <CommandPaletteProvider hosted={hosted}>
       <SidebarProvider defaultOpen={defaultSidebarOpen}>
         <PlatformAppSidebar
+          hosted={hosted}
           isAdmin={isAdmin}
           tenantKey={tenantKey}
           username={username}

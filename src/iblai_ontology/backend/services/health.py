@@ -46,6 +46,22 @@ def check_connectivity(service_name: str) -> ConnectivityResult:
 
     service = store.get(Service, name=service_name)
     start = time.time()
+    if service.service_type == "api":
+        from iblai_ontology.backend.services import twenty
+        from iblai_ontology.backend.services.encryption import decrypt_connection_config
+
+        if service.adapter != twenty.ADAPTER:
+            raise RuntimeError(
+                f"{service.display_name or service_name} is read by a connector container "
+                "of its own, which the backend cannot check from here."
+            )
+        twenty.check(decrypt_connection_config(service.connection_config_encrypted))
+        # Its key also makes the changes a role is granted: not a read-only login.
+        return ConnectivityResult(
+            connected=True,
+            read_only=False,
+            latency_ms=int((time.time() - start) * 1000),
+        )
     conn = _connection_for(service)
     latency_ms = int((time.time() - start) * 1000)
     try:

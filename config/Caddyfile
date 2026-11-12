@@ -3,8 +3,7 @@
 #
 # Caddy auto-provisions TLS via Let's Encrypt (or use a university-provided
 # certificate). Replace <domain> with the institution's domain.
-#   ontology.<domain>        -> ontology-gateway:8080  (MCP exposure)
-#   admin.ontology.<domain>  -> admin-dashboard:8080   (admin UI)
+#   ontology.<domain>  -> ontology-gateway:8080  (MCP exposure and the console's API)
 # ============================================================
 
 ontology.{$ONTOLOGY_DOMAIN} {
@@ -35,21 +34,5 @@ ontology.{$ONTOLOGY_DOMAIN} {
     reverse_proxy ontology-gateway:8080
     log {
         output file /var/log/caddy/access.log
-    }
-}
-
-admin.ontology.{$ONTOLOGY_DOMAIN} {
-    # Header subset safe for an HTML dashboard (no API-grade CSP, which would
-    # break a UI). Tighten with a UI-appropriate CSP when the dashboard exists.
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        X-Frame-Options "DENY"
-        -Server
-    }
-    reverse_proxy admin-dashboard:8080
-    log {
-        output file /var/log/caddy/admin-access.log
     }
 }

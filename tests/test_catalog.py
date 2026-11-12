@@ -133,7 +133,8 @@ def test_entries_are_well_formed():
         assert entry.display_name
         assert entry.type in ("database", "api")
         assert entry.adapter
-        assert entry.env, f"{entry.key} has no env vars"
+        # Twenty alone needs none: the backend reads it with a login the registry keeps.
+        assert entry.env or entry.key == "twenty", f"{entry.key} has no env vars"
         assert entry.default_toolset
 
 
@@ -169,3 +170,9 @@ def test_twenty_ships_its_mapping():
     assert (people["table"], people["entity"]) == ("person", "persons")
     assert people["fields"]["nameFirstName"] == "first_name"
     assert all(m["table"] and m["entity"] for m in twenty.mapping.values())
+    # Its address has a default, and what an agent may change is named per object.
+    assert (
+        twenty.connection == {"base_url": "https://api.twenty.com"} and not twenty.env
+    )
+    assert set(twenty.writes) <= set(twenty.mapping)
+    assert twenty.writes["notes"]["targets"]["object"] == "noteTargets"

@@ -1,9 +1,11 @@
 import type { NextRequest } from "next/server";
 import { configFromBackend, type BackendConfigPayload } from "@/lib/ontology/config-files";
-import { backendFor, MULTI_PLATFORM } from "@/lib/ontology/server/backend";
+import { backendFor, MULTI_PLATFORM, NAMED } from "@/lib/ontology/server/backend";
 import { route } from "@/lib/ontology/server/routes";
 
 export const dynamic = "force-dynamic";
+// Connecting a system tries its key, approves it and makes its role in one call.
+export const maxDuration = 60;
 
 /**
  * Set → every call is forwarded there with the caller's token. Unset or empty → hosted mode
@@ -50,7 +52,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const rest = req.nextUrl.pathname.slice("/api/ontology/".length);
   if (UPSTREAM) return forward(req, rest, UPSTREAM.replace(/\/$/, ""));
   if (MULTI_PLATFORM) {
-    const backend = await backendFor(req.headers.get("authorization"));
+    const backend = await backendFor(req.headers.get("authorization"), req.headers.get(NAMED));
     if ("url" in backend) return forward(req, rest, backend.url);
     return Response.json({ error: backend.error }, { status: backend.status });
   }

@@ -8,7 +8,7 @@ This is the core innovation, and the component the whole product is named after.
 2. **Structured cache** — a local PostgreSQL database for aggregations, joins, and analytics.
 3. **Vector index** — embeddings over the text memories (ChromaDB) for semantic search.
 
-A scheduled **sync engine** keeps all three current: it reads each database source through the service's own connection (the schedule names the service and the table) and each API source through its custom MCP server ([Component 1](01-mcp-inbound.md)).
+A scheduled **sync engine** keeps all three current: it reads each database source through the service's own connection (the schedule names the service and the table), each API source through its custom MCP server ([Component 1](01-mcp-inbound.md)), and an application the backend reads itself, Twenty CRM, over its REST API ([below](#an-application-read-over-its-api)).
 
 ---
 
@@ -28,7 +28,7 @@ Event-driven sync is a Phase 4 capability; full and delta are the day-one modes.
 
 ### `sync-schedules.yaml`
 
-Schedules are declared in `config/sync-schedules.yaml`. Each entry names a cron expression, the source and tool to call, and where the output goes (`text_memories` path and/or `structured_cache` table). With `ONTOLOGY_DATA_STORE=dm` the same entries live in the ibl.ai platform, one record per schedule, and `ontology sync import` copies the file in ([DEV.md](../../DEV.md#platform-store-ontology_data_storedm)).
+Schedules are declared in `config/sync-schedules.yaml`. Each entry names a cron expression, the source and tool to call, and where the output goes (`text_memories` path and/or `structured_cache` table). With `ONTOLOGY_DATA_STORE=dm` the same entries live in the ibl.ai platform, one record per schedule, and `ontology sync import` copies the file in ([DEV.md](../../DEV.md#platform-store-ontology_data_storerbac-or-dm)).
 
 ```yaml
 schedules:
@@ -101,6 +101,16 @@ ontology sync history --limit 20
 ```
 
 Every run is recorded in the `sync_runs` table (id, schedule, source, started/completed, status, records processed/created/updated, duration, error) for the audit trail.
+
+### How a schedule runs
+
+The `sync-engine` container is one Celery worker with its scheduler. The scheduler holds a single entry, a tick every minute: the tick reads the schedules and queues each one whose cron has come due since its last run. A schedule saved in the console therefore starts by itself, within a minute and with no restart, and one that never ran starts at the next tick. "Sync now" in the console, and the refresh after an agent changes a record (below), are queued for the same worker through Redis (`ONTOLOGY_CELERY_BROKER`), so a long sync never holds a web request and the gateway never writes a memory file. With no broker set a task runs where it is asked for, which is how the CLI and a local backend work.
+
+### An application read over its API
+
+Twenty CRM needs no connector container: the backend reads it itself (`backend/services/twenty.py`). Its address and API key are entered in the console (**Add a system**) or at `ontology service add --from twenty`, checked on the spot, and kept in the registry, encrypted like a database's login. Connecting it also approves it and queues the first sync, so rows start arriving without a review step. Its schedules have the database shape (`service`, and `table` naming Twenty's object): the sync pages `GET /rest/<object>`, flattens Twenty's composite fields to Twenty's own column names (`name.firstName` becomes `nameFirstName`) and maps them onto the house tables `persons`, `organizations`, `deals`, `workspace_members`, `notes`, `tasks`, `note_targets` and `task_targets` with the catalog's `mapping`.
+
+The same key changes records. The catalog's `writes` lists, per object, the house columns an agent may set. Connecting the system turns them into ten tools of type `twenty` (`<system>-create-person` and `<system>-update-person`, and the same for company, opportunity, note and task) in the toolset `<system>-writes`, marked `write: true`, so only a role that names it holds them. A call is recorded in the audit log first. Then the gateway refuses a field the catalog does not list or a value of the wrong type, sends `POST /rest/<object>` or `PATCH /rest/<object>/<id>`, reads the record back as the sync reads it, and answers it in house column names. A note or a task takes an optional `person_id`, `organization_id` or `deal_id` and is linked to it. Twenty's own refusal comes back as the tool's error. The changed record is handed to the worker, which updates the cache row and the memory file right after; if it cannot be queued the answer says the copy was not refreshed, and the next sync brings it in. No tool deletes a record, and the one key's own permissions in Twenty are the outer limit of all of it.
 
 ---
 

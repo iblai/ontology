@@ -1,6 +1,6 @@
 [project]
 name = "iblai-ontology"
-version = "0.2.11"
+version = "0.2.12"
 description = "On-premise knowledge layer that makes a university's systems queryable by AI agents over MCP — no data extraction."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"  # auto-ontology-server refuses 3.14
@@ -26,7 +26,7 @@ django = [
     "djangorestframework>=3.15,<4.0",
     "django-cors-headers>=4.3,<5.0",
     "environs[django]>=11,<15",
-    "celery>=5.3",
+    "celery[redis]>=5.3",  # the redis client: the sync worker's broker
     "cryptography>=42.0",
     "jinja2>=3.1",
     "uvicorn[standard]>=0.51.0",

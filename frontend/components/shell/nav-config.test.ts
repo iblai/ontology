@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { crumbsFor } from "./nav-config";
+import { crumbsFor, sidebarSections } from "./nav-config";
+
+describe("sidebarSections", () => {
+  it("lists the backend's own page in the hosted console alone", () => {
+    const rows = (hosted: boolean) =>
+      sidebarSections(hosted).flatMap((group) => group.items.map((item) => item.href));
+    expect(rows(false)).not.toContain("/backend");
+    expect(rows(true)).toEqual([...rows(false), "/backend"]);
+  });
+});
 
 describe("crumbsFor", () => {
   it("names a page under its group", () => {
     expect(crumbsFor("/roles")).toEqual([
       { label: "groupGateway" },
       { label: "roles", href: "/roles" },
+    ]);
+    expect(crumbsFor("/agents")).toEqual([
+      { label: "groupGateway" },
+      { label: "agents", href: "/agents" },
     ]);
   });
 

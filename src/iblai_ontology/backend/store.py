@@ -1,9 +1,9 @@
 """Where the service registry lives: Django's own database, or the ibl.ai platform.
 
-``ONTOLOGY_DATA_STORE=local`` (the default) is the ORM. ``dm`` keeps the registry (services,
-their tables, health checks, safety reports, provisioning runs and steps) in the ibl.ai
-platform as records, one kind per model, reached through ``PlatformClient``. Sync runs and the
-audit log use the ORM in both modes. Callers pass model classes and get model instances back
+``ONTOLOGY_DATA_STORE=local`` (the default) and ``rbac`` are the ORM. ``dm`` keeps the registry
+(services, their tables, health checks, safety reports, provisioning runs and steps) in the
+ibl.ai platform as records, one kind per model, reached through ``PlatformClient``. Sync runs
+and the audit log use the ORM in every mode. Callers pass model classes and get model instances back
 either way. Filters are ``field`` (``None`` for null) or a foreign key by pk; the ORM alone
 also answers ``field__gt|gte|icontains``.
 """
@@ -51,6 +51,13 @@ def _json(value) -> bytes:
 
 
 # -- records: what the DM stores, whatever model (or none) stands behind a kind -------------
+# Where the platform keeps none (local, rbac) a record with no model behind it is a row here.
+
+
+def _own(kind: str):
+    from iblai_ontology.backend.services.models import Record
+
+    return Record.objects.filter(kind=kind)
 
 
 def records(
@@ -60,6 +67,10 @@ def records(
     limit: int | None = None,
 ) -> list[dict]:
     """The DM's records of ``kind`` matching ``where``: every page, or the first ``limit``."""
+    if not dm_store():
+        if where or order:
+            raise NotImplementedError("store: this host's own records are read whole")
+        return [{"key": row.key, "data": row.data} for row in _own(kind)[:limit]]
     params: dict = {"page_size": min(limit or _PAGE, _PAGE)}
     if where:
         params["where"] = _json(where).decode()
@@ -74,15 +85,33 @@ def records(
     return found[:limit]
 
 
+def record(kind: str, key: str) -> dict | None:
+    """One record's data; None when there is no such record."""
+    if not dm_store():
+        row = _own(kind).filter(key=key).first()
+        return row.data if row else None
+    answer = client().records("GET", kind, key, ok=(404,))
+    return None if answer.status_code == 404 else answer.json()["data"]
+
+
 def put_record(kind: str, key: str, data: dict, unique_key: str | None = None) -> None:
     """Create the record or replace it whole."""
+    if not dm_store():
+        from iblai_ontology.backend.services.models import Record
+
+        # As the DM would hold it: plain JSON, a timestamp as its text.
+        plain = json.loads(_json(data))
+        Record.objects.update_or_create(kind=kind, key=key, defaults={"data": plain})
+        return
     body = {"data": data, "unique_key": unique_key}
     # Bytes, not a stream: the DM answers 411 to a chunked body.
     client().records("PUT", kind, key, content=_json(body))
 
 
 def delete_record(kind: str, key: str) -> bool:
-    """False when the DM holds no such record."""
+    """False when there is no such record."""
+    if not dm_store():
+        return bool(_own(kind).filter(key=key).delete()[0])
     return client().records("DELETE", kind, key, ok=(404,)).status_code != 404
 
 

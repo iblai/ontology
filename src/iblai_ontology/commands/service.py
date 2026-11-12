@@ -42,7 +42,9 @@ def add(
     service_type: Optional[ServiceType] = typer.Option(
         None, help="Service type (database adapters)."
     ),
-    host: Optional[str] = typer.Option(None, help="Database host."),
+    host: Optional[str] = typer.Option(
+        None, help="Database host, or the address of an API system (Twenty)."
+    ),
     port: Optional[int] = typer.Option(None, help="Database port."),
     database: Optional[str] = typer.Option(None, help="Database/SID name."),
     user: Optional[str] = typer.Option(None, help="Database user."),
@@ -100,10 +102,32 @@ def add(
 
         bootstrap()
         from iblai_ontology.backend.discovery.engine import DiscoveryEngine
+        from iblai_ontology.backend.services import twenty
 
-        DiscoveryEngine().register_api(
-            name=name, adapter=entry.adapter if entry else ref
-        )
+        api_key = ""
+        if entry and entry.adapter == twenty.ADAPTER:
+            # The backend reads Twenty itself: its address, and a key asked for unseen.
+            host = host or typer.prompt(
+                "Twenty address", default=entry.connection["base_url"]
+            )
+            api_key = typer.prompt("Twenty API key", hide_input=True)
+        try:
+            DiscoveryEngine().register_api(
+                name=name,
+                adapter=entry.adapter if entry else ref,
+                host=host or "",
+                api_key=api_key,
+            )
+        except twenty.TwentyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1)
+        if api_key:
+            console.print()
+            console.print(
+                f"[dim]Registered '{name}': Twenty took the key. Approve it "
+                f"(`ontology service approve {name}`), then sync.[/dim]"
+            )
+            return
         var = f"MCP_{name.upper().replace('-', '_')}_URL"
         console.print()
         console.print(
