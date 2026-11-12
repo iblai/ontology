@@ -6,6 +6,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- The Ontology Frontend carries the favicon the ibl.ai SIS and CRM use (`app/favicon.ico`).
+
 ## [0.2.13] - 2026-11-13
 
 ### Changed

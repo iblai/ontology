@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: "Ontology Console · ibl.ai",
   description:
     "Admin console for iblai/ontology — the on-premise knowledge layer that makes your systems queryable by AI agents over MCP.",
+  icons: { icon: "/favicon.ico" },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
