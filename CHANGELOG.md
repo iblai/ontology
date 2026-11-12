@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.13] - 2026-11-13
+
+### Changed
+- Where browsers keep the backend's address (`ONTOLOGY_BACKEND_STORE=browser`), the hosted
+  Ontology Frontend's server no longer calls the ibl.ai platform, whose edge refuses calls that
+  come from a hosting network. "Create key" is asked of the platform by the browser itself, so
+  the frontend's server never holds the key and `POST /api/hosted/backend/key` is gone. A named
+  address is used once it answers `GET /counts` as a backend that takes the caller's sign-in;
+  the platform is no longer asked about the sign-in first.
+- `deploy/install.sh` tells a refusal by the platform's edge from the platform's own: a 403
+  without the platform's `detail` stops it saying this server's network is not let through.
+
+### Fixed
+- The release workflow builds the image as one plain manifest (`--provenance=false`). On the
+  first push of 0.2.12, ghcr.io took the attestation and refused the image beside it, which left
+  that release without its image, `install.sh` and `compose.yaml`: install from 0.2.13.
+
 ## [0.2.12] - 2026-11-13
 
 ### Added
@@ -32,8 +49,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `compose.yaml` before attaching them.
 - **Connect a backend** on the hosted Ontology Frontend: a platform without a backend lands on
   one screen with the install command filled in, a button that makes the backend's platform key
-  (asked of the platform by the browser itself, shown once, never held by the frontend's server)
-  and a field for the backend's address. Connect takes a public `https` address
+  (shown once) and a field for the backend's address. Connect takes a public `https` address
   that answers `GET /counts` with the admin's own token, and keeps it in the platform with
   `iblai-org` set to the backend's platform, so an address that is another platform's backend is
   refused there. A **Backend** page (hosted console only) shows the address and replaces it.
@@ -41,11 +57,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ONTOLOGY_BACKEND_STORE=browser` on the hosted Ontology Frontend, for platforms that keep no
   ontology records yet: Connect makes the same checks and writes nothing, the administrator's
   browser keeps the address (`localStorage`, per platform) and names it on every call, and the
-  frontend uses a named address once it answers `GET /counts` as a backend that takes the
-  caller's sign-in, kept a minute per sign-in and address. The frontend's server asks the
-  platform nothing in this mode, since the platform's edge refuses calls from a hosting network.
-  Each browser connects once; the gate says "This browser does not know this platform's backend
-  yet".
+  frontend uses a named address once the platform knows the sign-in and the address answers
+  `GET /counts` as a backend that takes it, kept a minute per sign-in and address. Each browser
+  connects once; the gate says "This browser does not know this platform's backend yet".
 - `ONTOLOGY_DATA_STORE=rbac`, for a platform that keeps no ontology records: the roles are the
   platform's RBAC roles as in `dm`, so a credential still carries its role and an agent is still
   connected with a key limited to one, while the registry, the schedules, a role's display name
