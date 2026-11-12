@@ -46,16 +46,21 @@ _JSON_TYPES = {
     "array": "array",
 }
 
+_LISTED = 200  # names in one folder listing
+
 # The gateway's own tools, in the DSL shape tools.yaml uses.
 BUILTIN_TOOLS = {
     "read-memory": {
         "name": "read-memory",
-        "description": "Read one text memory (Markdown) by its /ontology/... path.",
+        "description": (
+            "Read one text memory (Markdown) by its /ontology/... path. "
+            "A folder's path lists what is in it: start at /ontology."
+        ),
         "parameters": [
             {
                 "name": "path",
                 "type": "string",
-                "description": "Logical path, e.g. /ontology/students/S1.md",
+                "description": "Logical path, e.g. /ontology or /ontology/students/S1.md",
             }
         ],
     },
@@ -207,15 +212,45 @@ class MCPHandlers:
         # Permission check is against the logical "/ontology/..." namespace, with ".."
         # resolved first: a path may not climb out of a granted folder into another.
         path = posixpath.normpath(path)
+        candidate = self._physical_path(path)
+        if os.path.isdir(candidate):
+            return self._list_memories(path, candidate)
         if not self.ctx.permissions.allows_memory_path(path):
             raise PermissionDenied(
                 f"role '{self.ctx.permissions.role}' cannot read {path}"
             )
-        candidate = self._physical_path(path)
         if not os.path.exists(candidate):
             raise MCPError(f"file not found: {path}")
         with open(candidate) as f:
             return f.read()
+
+    def _list_memories(self, path: str, folder: str) -> str:
+        """A folder's listing: what in it this role may read, or what leads to something it may.
+
+        A folder that shows the role nothing is refused in a file's words, so it cannot be
+        told from one that is not there.
+        """
+        perms = self.ctx.permissions
+        base = path.rstrip("/")
+        seen = []
+        for name in sorted(os.listdir(folder)):
+            child = f"{base}/{name}"
+            if os.path.isdir(os.path.join(folder, name)):
+                inside = f"{child}/"
+                if perms.allows_memory_path(f"{inside}_") or any(
+                    granted.startswith(inside) for granted in perms.memory_paths
+                ):
+                    seen.append(inside)
+            elif perms.allows_memory_path(child):
+                seen.append(child)
+        if not seen:
+            raise PermissionDenied(f"role '{perms.role}' cannot read {path}")
+        # ponytail: the first 200 names; a search tool if agents need to find one among thousands.
+        more = len(seen) - _LISTED
+        lines = seen[:_LISTED]
+        if more > 0:
+            lines.append(f"... and {more} more: read one by its path.")
+        return "\n".join(lines)
 
     def _physical_path(self, path: str) -> str:
         """Map a logical /ontology/... path to a physical path under files_root.
@@ -229,7 +264,8 @@ class MCPHandlers:
         # Strip a leading logical "/ontology" prefix, then anchor under the root.
         rel = path.lstrip("/")
         logical_prefix = "ontology/"
-        if rel.startswith(logical_prefix):
+        # "/ontology" itself is the root, as "/ontology/" is.
+        if rel == "ontology" or rel.startswith(logical_prefix):
             rel = rel[len(logical_prefix) :]
         candidate = os.path.normpath(os.path.join(safe_root, rel))
         if candidate != safe_root and not candidate.startswith(safe_root + os.sep):

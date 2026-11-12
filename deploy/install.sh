@@ -3,9 +3,9 @@
 # install.sh — the ibl.ai ontology backend on a fresh Ubuntu server
 #
 #   curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
-#     | sudo bash -s -- --platform <platform> --platform-url <address> --host <host name>
+#     | sudo bash -s -- --platform <platform> --host <host name>
 #
-# The console's "Connect a backend" screen shows this command filled in, and makes
+# The frontend's "Connect a backend" screen shows this command filled in, and makes
 # the key this script asks for. Run it again to upgrade. --uninstall removes it,
 # --dry-run says what would happen and changes nothing.
 #
@@ -28,7 +28,8 @@ URL_RE='^https://[A-Za-z0-9._:/-]+$'
 KEY_RE='^[A-Za-z0-9._~+/=-]+$'
 
 PLATFORM=""
-PLATFORM_URL=""
+# The ibl.ai platform's address; --platform-url names another.
+PLATFORM_URL="https://api.iblai.app/dm"
 HOST=""
 KEY=""
 # Where the settings live: dm (the platform keeps ontology records) or rbac (this server does).
@@ -41,12 +42,12 @@ usage() {
 Installs the ibl.ai ontology backend on this server (Ubuntu 22.04 or later, amd64).
 
   --platform <platform>     the platform's key in ibl.ai, such as acme
-  --platform-url <address>  the platform's address, as the console shows it
+  --platform-url <address>  the platform's address, when it is not https://api.iblai.app/dm
   --host <host name>        the name this server answers at, such as ontology.example.edu
   --dry-run                 say what would happen; change nothing, ask nothing
   --uninstall               remove the backend, its data and $DIR
 
-What is not given is asked for. The backend's key is always asked for, hidden.
+A platform or a host name not given is asked for. The backend's key is always asked for, hidden.
 Run it again to upgrade: an existing $DIR/.env is kept and nothing is asked.
 EOF
 }
@@ -169,7 +170,7 @@ check_platform() {
   fi
   case "$status" in
     200) ;;
-    401 | 403) stop "the platform refused the key for $PLATFORM: ${words:0:200} Make a new one on the console's Connect a backend screen, signed in to $PLATFORM. Nothing was installed." ;;
+    401 | 403) stop "the platform refused the key for $PLATFORM: ${words:0:200} Make a new one on the frontend's Connect a backend screen, signed in to $PLATFORM. Nothing was installed." ;;
     404) stop "$PLATFORM_URL does not answer as an ibl.ai platform: check the address. Nothing was installed." ;;
     *) stop "the platform answered HTTP $status: ${words:0:200} Nothing was installed." ;;
   esac
@@ -211,7 +212,6 @@ settings() {
     say "  would ask for what is not given, and for the backend's key at a hidden prompt"
   else
     [ -n "$PLATFORM" ] || ask PLATFORM "Platform (its key in ibl.ai, such as acme)"
-    [ -n "$PLATFORM_URL" ] || ask PLATFORM_URL "Platform address (the console shows it in the install command)"
     [ -n "$HOST" ] || ask HOST "Host name of this server (such as ontology.example.edu)"
   fi
   PLATFORM_URL=${PLATFORM_URL%/}
@@ -305,7 +305,7 @@ finish() {
 
 The ontology backend is running (version $VERSION).
 
-  Enter in the console, under Connect a backend:     $HOST
+  Enter in the frontend, under Connect a backend:    $HOST
   The address agents call:                           https://$HOST/mcp
 
   Its two files:   $DIR/compose.yaml
@@ -332,7 +332,7 @@ uninstall() {
   say "that decrypts the logins of the connected systems."
   if [ "$STORE" = rbac ]; then
     say "The connected systems, the schedules and the list of connected agents live on this server"
-    say "and go with it: remove each agent's connection in the console first, so its key is deleted."
+    say "and go with it: remove each agent's connection in the frontend first, so its key is deleted."
   fi
   if [ "$DRY" = 1 ]; then
     say "  would ask for \"$confirm\" to be typed"

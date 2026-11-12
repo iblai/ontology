@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 import { apiClient } from "@/lib/ontology/api-client";
-import { hostName, hostOf, installCommand, validHost } from "@/lib/ontology/install";
+import { addressOf, hostName, hostOf, installCommand } from "@/lib/ontology/install";
 import { CodeBlock } from "@/components/console/code-block";
 import { Field, PLAIN } from "@/components/console/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ export function ConnectBackend({
   const [busy, setBusy] = useState(false);
 
   const name = hostName(host);
-  const inferred = validHost(name) ? `https://${name}` : "";
+  const inferred = addressOf(host);
   const target = address.trim() || inferred;
   const command = installCommand({
     platform: resolveAppTenant(),
@@ -84,12 +84,12 @@ export function ConnectBackend({
   }
 
   return (
-    <Card className="max-w-xl">
+    <Card>
       <CardContent className="flex flex-col gap-6 py-4">
         <Field
           label={t("host")}
           htmlFor="backend-host"
-          error={host.trim() && !validHost(name) ? t("hostInvalid") : undefined}
+          error={host.trim() && !inferred ? t("hostInvalid") : undefined}
           hint={t("hostHint")}
         >
           <Input

@@ -43,8 +43,9 @@ def _platform_roles() -> None:
     """Refuse on a backend whose roles are a file on its own host: a key is limited to a platform role."""
     if not platform_roles():
         raise ConnectionRefused(
-            "An agent is connected as a role of the ibl.ai platform, and this backend "
-            "keeps its roles in a file on its own host."
+            "No agent can be connected to this backend yet: it keeps its roles in a file "
+            "on its own server. Install it with your platform's key, so the roles live in "
+            "the ibl.ai platform."
         )
 
 

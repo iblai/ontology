@@ -6,12 +6,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `docs/install.md`: the one-command install for a platform's administrator, step by step: what
+  to have ready, what the script asks and prints, the console's steps before and after, every
+  setting in `.env`, what runs, where things are kept, day-to-day commands and what each message
+  the script stops with means. With screenshots of adding a system and connecting an agent.
+- The gateway's `read-memory` answers a folder's path with its listing, so an agent can look
+  around: `/ontology` shows the folders its role reaches, and a folder the first 200 names in it.
+  A folder that holds nothing the role may read is refused as a file would be.
+
 ### Changed
 - The Ontology Frontend carries the favicon the ibl.ai SIS and CRM use (`app/favicon.ico`).
 - **Connect a backend** asks for the server's host name alone and takes the backend's address to
   be `https://<host name>`; an address that differs goes under Advanced. Where the console has no
   address for a platform, it now says "ibl.ai Ontology does not know this platform's backend
-  yet". The install script ends by naming the host name to enter, not an address to paste.
+  yet". The install script ends by naming the host name to enter, not an address to paste. The
+  card now fills the page's width, which leaves room for the install command. A console run in
+  development also takes `localhost` (or `127.0.0.1`, `[::1]`, with a port or a local backend's
+  8000) as the host name, for a backend on the same machine; a deployed one never does.
+- The install script takes the platform's address to be `https://api.iblai.app/dm` and no longer
+  asks for it; `--platform-url` names another. The install command the console shows, and the
+  ones in the docs, carry the option only for another address.
+- The docs name the hosted console's address as `ontology.ibl.ai`, available soon.
+
+### Fixed
+- A system's page said "Never synced", 0 tables and 0 rows after every sync: nothing wrote those
+  onto the system. Each schedule run now does, from the newest finished run of each of the
+  system's schedules.
+- The Dashboard of a fresh backend called its empty memory store "Degraded", printed "1 running"
+  for a sync engine that was merely up, and "Next due: - at -" when nothing was due.
+- On a backend that keeps its roles in a file, the Connect an agent dialog's refusal read as if
+  an agent were connected. It now says no agent can be connected yet, and why.
 
 ## [0.2.13] - 2026-11-13
 
@@ -168,7 +193,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `default` role, when it has none and the platform does not answer. `GET /counts` gains
   `data_store`. `IBLAI_AUTH_SCHEME=Api-Token` lets the platform client use a platform API key.
 - One Ontology Frontend for every platform (`ONTOLOGY_MULTI_PLATFORM=true`, as at
-  `ontology.iblai.me`): each call goes to the backend of the signed-in admin's own platform,
+  `ontology.ibl.ai`): each call goes to the backend of the signed-in admin's own platform,
   whose address the platform keeps (set on **Connect a backend**, or with the new
   `ontology platform address --url …` on the server) and the frontend reads with that admin's
   token. The address must be `https` and public; a member who is not the platform's admin sees

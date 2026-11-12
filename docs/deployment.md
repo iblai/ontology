@@ -10,13 +10,12 @@ There are two stacks. A server that works with the ibl.ai platform and the hoste
 
 ## Install on Ubuntu
 
-For a platform's administrator who has a fresh server and no wish to clone anything. The hosted console's **Connect a backend** screen shows this command with the platform and its address filled in:
+For a platform's administrator who has a fresh server and no wish to clone anything. The same install step by step, with what the script prints and every setting explained, is [install.md](install.md). The hosted console's **Connect a backend** screen shows this command with the platform and its address filled in:
 
 ```bash
 curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
   | sudo bash -s -- \
     --platform <platform key> \
-    --platform-url <the platform's address> \
     --host ontology.example.edu
 ```
 
@@ -26,7 +25,7 @@ curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh
 
 1. Checks it runs as root on Ubuntu 22.04 or later, amd64, and stops with the reason otherwise.
 2. Uses the Docker that is there when `docker compose version` works. With none, installs `docker.io` and `docker-compose-v2` from Ubuntu's own archive: no repository and no key file is added. A Docker without Compose stops the script, because mixing Ubuntu's packages with Docker's own breaks both.
-3. Asks for what the three options did not give, then for **the backend's key** at a hidden prompt: the platform API key that **Connect a backend → Create key** shows once. It acts as the administrator who made it.
+3. Asks for a platform or a host name the command did not give, then for **the backend's key** at a hidden prompt: the platform API key that **Connect a backend → Create key** shows once. It acts as the administrator who made it.
 4. Asks the platform two things with the key, before anything is written. First, what the key's owner may grant under `/custom/ontology/`: a key the platform refuses stops the script with the platform's words, and so does a platform whose administrators cannot grant ontology roles yet (RBAC off, or no custom namespace). Second, whether the platform keeps ontology records: where it does, the connected systems and the schedules live in the platform (`ONTOLOGY_DATA_STORE=dm`); where it does not, they live on this server and only the roles are the platform's (`rbac`). The script says which.
 5. Writes `/opt/iblai-ontology/.env`, readable by root alone: the host name, the platform, the key, where the settings live, and four secrets it generates (the database password, the search index's token, Django's secret and the key that encrypts the logins of the connected systems).
 6. Downloads `compose.yaml` of the same release beside it, pulls the images and starts them.
@@ -277,7 +276,7 @@ ENTRA_CLIENT_ID=<iblai-ontology-app-client-id>
 
 The Ontology Frontend, the admin console, is not a service of this stack. Run one beside it (its
 `ONTOLOGY_API_URL` naming the gateway), or use the one hosted for every platform at
-`ontology.iblai.me`: set `ONTOLOGY_DM_URL`, `IBLAI_ORG` and the platform key on the gateway, and
+`ontology.ibl.ai` (available soon): set `ONTOLOGY_DM_URL`, `IBLAI_ORG` and the platform key on the gateway, and
 let the hosted frontend through the firewall as you do the ibl.ai platform. An administrator who
 signs in there connects the backend by entering its host name under **Connect a backend** (the
 address is taken to be `https://<host name>`; another one goes under Advanced);

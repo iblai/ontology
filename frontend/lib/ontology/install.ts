@@ -11,10 +11,29 @@ export function hostName(typed: string): string {
     .replace(/[/:?#].*$/, "");
 }
 
-/** The host name of an address that is plain `https://<host name>`; "" for one with a port, a path or no https. */
+// A developer's own machine; without a port, the one a local backend listens on (DEV.md).
+const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])(?::(\d{1,5}))?$/;
+
+/** The backend address a typed host name stands for: `https://<host name>`, or this machine over http outside production; "" for neither. */
+export function addressOf(typed: string): string {
+  const name = hostName(typed);
+  if (validHost(name)) return `https://${name}`;
+  // As the server takes it: never when deployed.
+  if (process.env.NODE_ENV === "production") return "";
+  const here = typed
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/\/$/, "");
+  const local = LOCAL.exec(here);
+  return local ? `http://${local[1]}:${local[2] ?? "8000"}` : "";
+}
+
+/** What to type as the host name for an address; "" for an address only Advanced can say (a port, a path, cleartext). */
 export function hostOf(address: string): string {
-  const host = /^https:\/\/([^/:?#]+)\/?$/.exec(address.trim().toLowerCase())?.[1] ?? "";
-  return validHost(host) ? host : "";
+  const plain = address.trim().toLowerCase().replace(/\/$/, "");
+  const host = plain.replace(/^https?:\/\//, "");
+  return plain !== host && addressOf(host) === plain ? host : "";
 }
 
 /** Whether it is a full host name: labels of letters, digits and hyphens, with a dot between. */
@@ -25,6 +44,9 @@ export function validHost(host: string): boolean {
   );
 }
 
+/** The ibl.ai platform's address, which the install script takes when it is given no other. */
+export const PLATFORM_URL = "https://api.iblai.app/dm";
+
 /** The command that installs a backend; a value not known, or not one plain word, is left for the script to ask. */
 export function installCommand(known: {
   platform: string;
@@ -33,7 +55,10 @@ export function installCommand(known: {
 }): string {
   const flags = [
     /^[\w.-]+$/.test(known.platform) && `--platform ${known.platform}`,
-    /^https?:\/\/[\w.:/-]+$/.test(known.platformUrl) && `--platform-url ${known.platformUrl}`,
+    // Named only where it is not the script's own default.
+    known.platformUrl !== PLATFORM_URL &&
+      /^https?:\/\/[\w.:/-]+$/.test(known.platformUrl) &&
+      `--platform-url ${known.platformUrl}`,
     validHost(known.host) && `--host ${known.host}`,
   ].filter(Boolean);
   return [

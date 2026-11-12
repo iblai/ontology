@@ -113,6 +113,52 @@ def test_sync_engine_run_schedule(backend, monkeypatch):
     assert SyncRun.objects.filter(schedule_name="demo-sync").exists()
 
 
+def test_a_schedule_run_writes_what_its_service_last_did(
+    backend, monkeypatch, tmp_path
+):
+    from iblai_ontology.backend.services.models import Service
+    from iblai_ontology.backend.sync.engine import SyncRunner
+    from iblai_ontology.backend.sync.models import SyncRun
+
+    _make_service("crm")
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "sync-schedules.yaml").write_text(
+        "schedules:\n"
+        "  - name: crm-people\n"
+        "    cron: '0 * * * *'\n"
+        "    source: crm-mcp\n"
+        "    tool: list-people\n"
+        "  - name: crm-deals\n"
+        "    cron: '0 * * * *'\n"
+        "    source: crm-mcp\n"
+        "    tool: list-deals\n"
+    )
+    monkeypatch.setenv("ONTOLOGY_CONFIG_DIR", str(cfg))
+    rows = {"crm-people": [{"id": "1"}, {"id": "2"}], "crm-deals": [{"id": "9"}]}
+    runner_obj = SyncRunner()
+    monkeypatch.setattr(runner_obj, "_pull", lambda sched: rows[sched["name"]])
+    monkeypatch.setattr(
+        runner_obj, "_write", lambda sched, pulled: {"created": len(pulled)}
+    )
+
+    runner_obj.run_service("crm")
+    crm = Service.objects.get(name="crm")
+    assert (crm.sync_status, crm.tables_synced, crm.rows_synced) == ("success", 2, 3)
+    assert crm.last_sync_at == max(r.completed_at for r in SyncRun.objects.all())
+
+    # One schedule fails the next time: the service says so and counts the table that stands.
+    def fails_on_deals(sched):
+        if sched["name"] == "crm-deals":
+            raise RuntimeError("refused")
+        return rows[sched["name"]]
+
+    monkeypatch.setattr(runner_obj, "_pull", fails_on_deals)
+    runner_obj.run_service("crm")
+    crm.refresh_from_db()
+    assert (crm.sync_status, crm.tables_synced, crm.rows_synced) == ("failed", 1, 2)
+
+
 def test_sync_engine_run_all_due(backend, monkeypatch):
     from iblai_ontology.config.initializer import Initializer
 

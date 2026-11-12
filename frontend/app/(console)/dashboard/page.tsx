@@ -101,8 +101,8 @@ export default function DashboardPage() {
                 label: t("failedLast24h", { n: health.sync.failed_last_24h }),
                 value: health.sync.failed_last_24h === 0,
               },
-              { label: t("runningNow", { n: health.sync.running ? 1 : 0 }), value: true },
-              ...(health.sync.next_due_schedule
+              // The backend sends "-" where nothing is due.
+              ...(health.sync.next_due_schedule && health.sync.next_due_schedule !== "-"
                 ? [
                     {
                       label: t("nextDue", {
@@ -121,7 +121,8 @@ export default function DashboardPage() {
           />
           <HealthPanel
             title={t("healthStorage")}
-            healthy={health.storage.total_files > 0}
+            // An empty store is a fresh install, not a fault.
+            healthy
             rows={[
               { label: t("totalFiles", { n: health.storage.total_files }), value: true },
               { label: fmtSize(health.storage.total_size_mb), value: true },

@@ -186,6 +186,7 @@ It runs on your host or is the one hosted by ibl.ai. On the hosted one, an admin
 |---|---|
 | [DEV.md](DEV.md) | Setup, checks, running the backend locally |
 | [docs/architecture.md](docs/architecture.md) | The full design: components, decisions, rollout |
+| [docs/install.md](docs/install.md) | The one-command install, step by step: what the script asks and prints, what it sets up, how it is configured |
 | [docs/deployment.md](docs/deployment.md) | Installing on a server, the Compose stack, networks, environment, gateway hardening, rollout |
 | [docs/identity.md](docs/identity.md) · [docs/authorization-model.md](docs/authorization-model.md) | Entra ID, roles, how access is decided |
 | [docs/platform-integration.md](docs/platform-integration.md) | Connecting agents on the ibl.ai platform |

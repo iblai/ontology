@@ -282,7 +282,7 @@ stack down --volumes
 ```
 
 The script is checked without a server: `bash -n deploy/install.sh`, `shellcheck deploy/install.sh`
-and `bash deploy/install.sh --dry-run --platform acme --platform-url https://api.iblai.app/dm --host ontology.example.edu`
+and `bash deploy/install.sh --dry-run --platform acme --host ontology.example.edu`
 (and the same with `--uninstall`), which says each step and changes nothing. The copy in the
 source tree carries no version, so a real run of it stops at once; `tests/test_deploy.py` keeps
 the script's `.env`, the compose file's settings and the workflow's two stamps in step.
@@ -407,13 +407,15 @@ client's own verbs:
 ## One Ontology Frontend for every platform
 
 The Ontology Frontend can run once for every platform (`ONTOLOGY_MULTI_PLATFORM=true` in its
-environment, as at `ontology.iblai.me`). It then has no backend of its own: each call goes to the
+environment, as at `ontology.ibl.ai`). It then has no backend of its own: each call goes to the
 backend of the signed-in admin's platform, in either store mode.
 
 An admin of a platform with no backend lands on **Connect a backend**: one field for the server's
 host name, the install command for it ([docs/deployment.md](docs/deployment.md#install-on-ubuntu)),
 a button that makes the backend's platform key, and Connect. The backend's address is taken to be
-`https://<host name>`; one that differs is given under Advanced. Connect checks that the address is
+`https://<host name>`; one that differs is given under Advanced. Outside production the field also
+takes `localhost`, `127.0.0.1` or `[::1]`, with a port or a local backend's 8000, as an `http`
+address on the same machine. Connect checks that the address is
 `https` and public, that the server answers `GET /counts` with the admin's own token and names its
 platform there, then writes the record with `iblai-org: <that platform>`, so the platform itself
 refuses an address that is another platform's backend. The same record from the server's side:

@@ -250,6 +250,42 @@ def test_read_memory_resolves_dot_dot_before_the_role_check(tmp_path):
         handlers.read_memory("/ontology/courses/by-dept/../../students/by-id/1.md")
 
 
+def test_read_memory_lists_a_folder_as_far_as_the_role_reaches(tmp_path):
+    root = tmp_path / "ontology"
+    for folder, name in (("persons", "1.md"), ("persons", "2.md"), ("deals", "9.md")):
+        (root / folder).mkdir(parents=True, exist_ok=True)
+        (root / folder / name).write_text("#")
+
+    def as_role(*paths):
+        perms = Permissions(role="crm", display_name="x", memory_paths=list(paths))
+        return MCPHandlers(
+            MCPContext(permissions=perms, files_root=str(root)), resolver=_resolver()
+        )
+
+    handlers = as_role("/ontology/persons/**")
+    # The top shows the folder the role reads, and not the one beside it.
+    assert handlers.read_memory("/ontology") == "/ontology/persons/"
+    assert handlers.read_memory("/ontology/persons/").split("\n") == [
+        "/ontology/persons/1.md",
+        "/ontology/persons/2.md",
+    ]
+    # A folder that shows the role nothing is refused as a file is: no telling it is there.
+    with pytest.raises(PermissionDenied, match="cannot read /ontology/deals"):
+        handlers.read_memory("/ontology/deals")
+    with pytest.raises(PermissionDenied, match="cannot read /ontology/nowhere"):
+        handlers.read_memory("/ontology/nowhere")
+    # One granted file is enough to show the way to it, and nothing else in its folder.
+    (root / "deals" / "8.md").write_text("#")
+    one = as_role("/ontology/deals/9.md")
+    assert one.read_memory("/ontology") == "/ontology/deals/"
+    assert one.read_memory("/ontology/deals") == "/ontology/deals/9.md"
+    # A long folder is cut, and says by how much.
+    for n in range(3, 204):
+        (root / "persons" / f"{n}.md").write_text("#")
+    listed = handlers.read_memory("/ontology/persons").split("\n")
+    assert len(listed) == 201 and listed[-1].startswith("... and 3 more")
+
+
 def test_read_memory_blocks_traversal(tmp_path):
     root = tmp_path / "ontology"
     root.mkdir()

@@ -31,7 +31,7 @@ export function BackendClient() {
         subtitle={current ? t("connected", { url: current }) : t("subtitle")}
       />
       {current === null ? (
-        <Skeleton className="h-96 max-w-xl rounded-lg" />
+        <Skeleton className="h-96 rounded-lg" />
       ) : (
         <ConnectBackend
           // A new address starts the form again from it.

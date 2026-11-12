@@ -120,7 +120,6 @@
     "latency": "{n} ms",
     "totalSchedules": "{n} schedules",
     "failedLast24h": "{n} failed (24h)",
-    "runningNow": "{n} running",
     "nextDue": "Next due: {schedule} at {time}",
     "totalFiles": "{n} files",
     "byDomain": "By domain"

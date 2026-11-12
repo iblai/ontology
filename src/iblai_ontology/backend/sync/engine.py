@@ -234,6 +234,14 @@ class SyncRunner:
             run.completed_at = timezone.now()
             run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
             store.save(run)
+        try:
+            summarise(_service_of(sched))
+        except Exception:
+            # The run is recorded as it went; what its service shows is a second write.
+            logger.exception(
+                "sync: %s ran, and its service's summary could not be written",
+                run.schedule_name,
+            )
         return SyncResult(
             schedule_name=run.schedule_name,
             source_system=run.source_system,
@@ -318,3 +326,48 @@ def latest_runs() -> list:
         runs.append(run)
         after = {"schedule_name__gt": run.schedule_name}
     return sorted(runs, key=lambda r: r.started_at, reverse=True)
+
+
+def _service_of(sched: dict) -> str:
+    """The service a schedule belongs to: its ``service`` key, or its source without ``-source`` or ``-mcp``."""
+    source = sched.get("source", "")
+    return sched.get("service") or source.removesuffix("-source").removesuffix("-mcp")
+
+
+def summarise(service_name: str) -> None:
+    """Write onto a service what its schedules last did: when, how it went, its tables and its rows."""
+    from django.db.models import Max
+
+    from iblai_ontology.backend import store
+    from iblai_ontology.backend.services.models import Service
+    from iblai_ontology.backend.sync import schedules
+    from iblai_ontology.backend.sync.models import SyncRun
+
+    service = store.first(Service, name=service_name)
+    if service is None:
+        return
+    names = [s["name"] for s in schedules.all() if _owned_by(s, service_name)]
+    finished = SyncRun.objects.filter(schedule_name__in=names).exclude(
+        status=SyncRun.Status.RUNNING
+    )
+    # The newest finished run of each schedule: two queries, however many schedules.
+    newest = dict(
+        finished.order_by()
+        .values("schedule_name")
+        .annotate(at=Max("started_at"))
+        .values_list("schedule_name", "at")
+    )
+    runs = [
+        run
+        for run in finished.filter(started_at__in=list(newest.values()))
+        if run.started_at == newest[run.schedule_name]
+    ]
+    if not runs:
+        return
+    done = [run for run in runs if run.status == SyncRun.Status.SUCCESS]
+    service.last_sync_at = max(run.completed_at or run.started_at for run in runs)
+    service.sync_status = "success" if len(done) == len(runs) else "failed"
+    service.tables_synced = len(done)
+    service.rows_synced = sum(run.records_processed or 0 for run in done)
+    # ponytail: one registry write per schedule run; once per service if the platform's write load matters.
+    store.save(service, ["last_sync_at", "sync_status", "tables_synced", "rows_synced"])
