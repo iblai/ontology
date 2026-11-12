@@ -425,11 +425,13 @@ uv run ontology platform address --url https://ontology.<your-domain>   # this b
   environment, for platforms that keep no ontology records yet). Connect makes the same checks and
   writes nothing: the browser keeps the address in `localStorage` under
   `ontology_backend:<platform>` and names it on every call (`X-Ontology-Backend`). The frontend
-  uses a named address once the platform knows the sign-in (`GET /api/core/token/verify/`) and
-  the address answers `GET /counts` as a backend that takes it, and keeps that for a minute per
-  sign-in and address. So each browser connects once, a cleared browser connects again, and any
-  signed-in member's browser can have the frontend ask an address; the backend itself still
-  refuses a member who is not its platform's admin. `ontology platform address` refuses on such
+  uses a named address once it answers `GET /counts` as a backend that takes the caller's
+  sign-in, and keeps that for a minute per sign-in and address. In this mode its server asks the
+  platform nothing: the platform's edge refuses calls that come from a hosting network, so the
+  backend's own answer is the judge. Each browser connects once, a cleared browser connects
+  again, and anyone can have the frontend ask a public address for `/counts`; nothing is sent
+  on until that address proves itself, and the backend still refuses a member who is not its
+  platform's admin. `ontology platform address` refuses on such
   a platform. Remove the setting once the platform keeps the record, and connect once more.
 - **The address** is the ontology record `backend/default` of the platform of `IBLAI_ORG`, which
   only an admin in person may write. The frontend reads it with the signed-in admin's own token,
@@ -437,8 +439,8 @@ uv run ontology platform address --url https://ontology.<your-domain>   # this b
   and nothing else (`Authorization: Token …`). The hosted console's **Backend** page shows it and
   connects another in its place.
 - **The backend's key** is a platform API key that acts as the admin who pressed "Create key"
-  (`POST /api/core/platform/api-tokens/` with their sign-in, no `mode`). It is shown once and
-  never kept by the frontend.
+  (`POST /api/core/platform/api-tokens/` with their sign-in, no `mode`). The browser asks the
+  platform for it directly, so the frontend's server never holds it; it is shown once.
 - **It must be `https` and public.** The frontend refuses an address that resolves into a private
   network and follows no redirect. A backend that only the campus network reaches cannot be used
   this way: run a frontend beside it instead (`ONTOLOGY_API_URL`).

@@ -163,6 +163,10 @@ check_platform() {
   fi
   status=${answer##*$'\n'}
   words=${answer%$'\n'*}
+  # The platform's own refusals say why in "detail"; one without it comes from the edge in front of it.
+  if [ "$status" = 403 ] && [[ "$words" != *'"detail"'* ]]; then
+    stop "the platform's edge refused this server (HTTP 403: ${words:0:200}). Its network is not let through to $PLATFORM_URL: ask ibl.ai to allow this server's address, then run this again. Nothing was installed."
+  fi
   case "$status" in
     200) ;;
     401 | 403) stop "the platform refused the key for $PLATFORM: ${words:0:200} Make a new one on the console's Connect a backend screen, signed in to $PLATFORM. Nothing was installed." ;;

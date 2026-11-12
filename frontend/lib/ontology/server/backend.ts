@@ -7,7 +7,8 @@
  *
  * `ONTOLOGY_BACKEND_STORE=browser` is for platforms that keep no ontology records yet: each
  * admin's browser keeps the address and names it on every call, and this server uses it
- * once the platform knows the sign-in and the address answers as a backend that takes it.
+ * once the address answers as a backend that takes the caller's sign-in. The platform is
+ * not asked from here in that mode: its edge refuses calls that come from a hosting network.
  */
 
 import { createHash } from "node:crypto";
@@ -29,8 +30,6 @@ export type Backend = { url: string } | { status: number; error: string };
 export type Answer<T> = ({ ok: true } & T) | { ok: false; message: string };
 
 const RECORD = "/v1/ontology/kinds/backend/records/default";
-const KEYS = "/api/core/platform/api-tokens/";
-const VERIFY = "/api/core/token/verify/";
 const TTL_MS = 60_000;
 const KEPT_MAX = 5_000;
 const ANSWER_MS = 10_000;
@@ -124,22 +123,6 @@ async function said(res: Response): Promise<string> {
   return text.replace(/\s+/g, " ").slice(0, 200) || `HTTP ${res.status}`;
 }
 
-/** Why the ibl.ai platform does not take this sign-in; null when it does. */
-async function signedIn(authorization: string): Promise<Backend | null> {
-  let res: Response;
-  try {
-    res = await fetch(`${config.dmUrl()}${VERIFY}`, {
-      headers: { authorization },
-      cache: "no-store",
-      redirect: "manual",
-    });
-  } catch (e) {
-    return { status: 502, error: `The ibl.ai platform did not answer: ${(e as Error).message}` };
-  }
-  if (res.status === 401 || res.status === 403) return { status: 401, error: "not_signed_in" };
-  return res.ok ? null : { status: 502, error: `The ibl.ai platform answered ${res.status}.` };
-}
-
 type Refused = { status: number; error: string; message: string };
 
 /** `raw` as a backend that takes this sign-in: its address and platform, or the refusal as a code and in words. */
@@ -181,12 +164,10 @@ async function proved(
   return { url, platform };
 }
 
-/** The backend a browser names: taken once the platform knows the sign-in and the address proves itself. */
+/** The backend a browser names: taken once it answers as a backend that takes the caller's sign-in. */
 async function claimed(authorization: string, named: string | null): Promise<Backend> {
   if (!named) return { status: 404, error: "no_backend_here" };
-  // Asked first, so only a signed-in member sends this server to an address.
-  const refused = await signedIn(authorization);
-  if (refused) return refused;
+  // ponytail: anyone can have this server ask a public address for /counts; nothing is sent on until it proves itself.
   const found = await proved(authorization, named);
   return "url" in found ? { url: found.url } : { status: found.status, error: found.error };
 }
@@ -223,9 +204,9 @@ export async function connectBackend(
 ): Promise<Answer<{ url: string; browser?: true }>> {
   const no = (message: string) => ({ ok: false as const, message });
   if (!authorization) return no("Sign in first.");
-  // Asked before the address is: only a platform's admin (a signed-in member, where the
-  // browser keeps the address) sends this server anywhere.
-  const held = BROWSER_STORE ? await signedIn(authorization) : await ask(authorization);
+  // The record is asked before the address is, so only a platform's admin sends this server
+  // anywhere. Where the browser keeps the address, the backend's own answer is the judge.
+  const held = BROWSER_STORE ? null : await ask(authorization);
   if (held && "status" in held) {
     if (held.status === 401) return no("Your sign-in has ended: sign in again.");
     if (held.status === 403)
@@ -266,29 +247,6 @@ export async function connectBackend(
   }
   kept.delete(keptAs(authorization));
   return { ok: true, url };
-}
-
-/** A platform API key that acts as the admin who asks, for a backend to hold; answered once. */
-export async function backendKey(authorization: string | null): Promise<Answer<{ key: string }>> {
-  if (!authorization) return { ok: false, message: "Sign in first." };
-  let res: Response;
-  try {
-    res = await fetch(`${config.dmUrl()}${KEYS}`, {
-      method: "POST",
-      headers: { authorization, "content-type": "application/json" },
-      // No mode, so the key acts as its owner; a name is one key's in its platform.
-      body: JSON.stringify({ name: `ontology-backend-${Date.now().toString(36)}` }),
-      cache: "no-store",
-      redirect: "manual",
-    });
-  } catch (e) {
-    return { ok: false, message: `The ibl.ai platform did not answer: ${(e as Error).message}` };
-  }
-  if (!res.ok) return { ok: false, message: `The ibl.ai platform made no key: ${await said(res)}` };
-  const made = (await res.json().catch(() => null)) as { key?: unknown } | null;
-  return typeof made?.key === "string" && made.key
-    ? { ok: true, key: made.key }
-    : { ok: false, message: "The ibl.ai platform made no key: its answer held none." };
 }
 
 /** Tests only. */

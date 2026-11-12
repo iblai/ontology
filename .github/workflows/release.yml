@@ -37,7 +37,8 @@ jobs:
           REGISTRY_USER: ${{ github.actor }}
         run: |
           echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          docker build --tag "$IMAGE:$VERSION" .
+          # One plain manifest: ghcr.io refused the image beside its attestation on v0.2.12's first push.
+          docker build --provenance=false --tag "$IMAGE:$VERSION" .
           docker push "$IMAGE:$VERSION"
 
       - name: Stamp the version into the install files and attach them

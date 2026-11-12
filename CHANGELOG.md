@@ -32,7 +32,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `compose.yaml` before attaching them.
 - **Connect a backend** on the hosted Ontology Frontend: a platform without a backend lands on
   one screen with the install command filled in, a button that makes the backend's platform key
-  (shown once) and a field for the backend's address. Connect takes a public `https` address
+  (asked of the platform by the browser itself, shown once, never held by the frontend's server)
+  and a field for the backend's address. Connect takes a public `https` address
   that answers `GET /counts` with the admin's own token, and keeps it in the platform with
   `iblai-org` set to the backend's platform, so an address that is another platform's backend is
   refused there. A **Backend** page (hosted console only) shows the address and replaces it.
@@ -40,9 +41,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ONTOLOGY_BACKEND_STORE=browser` on the hosted Ontology Frontend, for platforms that keep no
   ontology records yet: Connect makes the same checks and writes nothing, the administrator's
   browser keeps the address (`localStorage`, per platform) and names it on every call, and the
-  frontend uses a named address once the platform knows the sign-in and the address answers
-  `GET /counts` as a backend that takes it, kept a minute per sign-in and address. Each browser
-  connects once; the gate says "This browser does not know this platform's backend yet".
+  frontend uses a named address once it answers `GET /counts` as a backend that takes the
+  caller's sign-in, kept a minute per sign-in and address. The frontend's server asks the
+  platform nothing in this mode, since the platform's edge refuses calls from a hosting network.
+  Each browser connects once; the gate says "This browser does not know this platform's backend
+  yet".
 - `ONTOLOGY_DATA_STORE=rbac`, for a platform that keeps no ontology records: the roles are the
   platform's RBAC roles as in `dm`, so a credential still carries its role and an agent is still
   connected with a key limited to one, while the registry, the schedules, a role's display name

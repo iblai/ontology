@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { apiClient } from "./api-client";
 
 const ADDRESS = "https://ontology.acme.edu";
+const KEY = "k".repeat(64);
 
 /** A browser signed in to `acme`, and a console that answers Connect as `connected`. */
 function browser(connected: object) {
@@ -17,11 +18,14 @@ function browser(connected: object) {
   vi.stubGlobal("window", { localStorage, __ENV__: { NEXT_PUBLIC_MAIN_TENANT_KEY: "" } });
   vi.stubGlobal("localStorage", localStorage);
   const sent: Headers[] = [];
+  const asked: string[] = [];
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     sent.push(new Headers(init?.headers));
+    asked.push(url);
+    if (url.endsWith("/api-tokens/")) return Response.json({ key: KEY }, { status: 201 });
     return Response.json(url.endsWith("/backend") ? connected : { services: 0 });
   });
-  return { kept, sent };
+  return { kept, sent, asked };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -52,4 +56,18 @@ it("keeps nothing in the browser when the platform keeps the address, or Connect
     await apiClient.hosted.connect(ADDRESS);
     expect([...kept.keys()]).toEqual(["dm_token", "tenant"]);
   }
+});
+
+it("asks the platform for the backend's key from the browser, with the sign-in and nothing else", async () => {
+  const { kept, sent, asked } = browser({});
+  kept.set("ontology_backend:acme", ADDRESS);
+  expect(await apiClient.hosted.key()).toEqual({ ok: true, key: KEY });
+  // Straight to the platform, not through the console's server.
+  expect(asked[0]).toMatch(/^https:\/\/.+\/api\/core\/platform\/api-tokens\/$/);
+  expect(sent[0].get("authorization")).toBe("Token t");
+  expect(sent[0].get("x-ontology-backend")).toBeNull();
+
+  kept.delete("dm_token");
+  expect(await apiClient.hosted.key()).toMatchObject({ ok: false });
+  expect(asked).toHaveLength(1);
 });

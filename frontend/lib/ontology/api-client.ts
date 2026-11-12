@@ -20,6 +20,7 @@ import type {
   SyncSchedule,
   TableEdit,
 } from "./types";
+import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 
 /** Same-origin route handlers; the server decides between the mock and a real backend. */
@@ -42,12 +43,12 @@ const backendAt = () => `ontology_backend:${resolveAppTenant()}`;
  */
 function authHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
+  const headers: Record<string, string> = {};
   const dmToken = window.localStorage.getItem("dm_token");
+  if (dmToken) headers.Authorization = `Token ${dmToken}`;
   const backend = window.localStorage.getItem(backendAt());
-  return {
-    ...(dmToken ? { Authorization: `Token ${dmToken}` } : {}),
-    ...(backend ? { "X-Ontology-Backend": backend } : {}),
-  };
+  if (backend) headers["X-Ontology-Backend"] = backend;
+  return headers;
 }
 
 /** A refused call: its HTTP status, with the server's own words in the message. */
@@ -188,7 +189,31 @@ export const apiClient = {
       if (res.ok && res.browser) window.localStorage.setItem(backendAt(), res.url);
       return res;
     },
-    key: (): Promise<{ ok: true; key: string } | Refused> =>
-      http("/backend/key", { method: "POST" }, HOSTED),
+    // Asked of the platform by the browser itself: the console's server never holds the key,
+    // and the platform's edge refuses calls that come from a hosting network.
+    key: async (): Promise<{ ok: true; key: string } | Refused> => {
+      const no = (why: string): Refused => ({
+        ok: false,
+        message: `The ibl.ai platform made no key: ${why}`,
+      });
+      const token = window.localStorage.getItem("dm_token");
+      if (!token) return no("sign in first.");
+      const res = await fetch(`${config.dmUrl()}/api/core/platform/api-tokens/`, {
+        method: "POST",
+        // The sign-in and nothing else: a header the platform does not expect fails its CORS check.
+        headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
+        // No mode, so the key acts as its owner; a name is one key's in its platform.
+        body: JSON.stringify({ name: `ontology-backend-${Date.now().toString(36)}` }),
+      });
+      const made = (await res.json().catch(() => null)) as {
+        key?: unknown;
+        detail?: unknown;
+        error?: unknown;
+      } | null;
+      if (!res.ok) return no(String(made?.detail ?? made?.error ?? `HTTP ${res.status}`));
+      return typeof made?.key === "string" && made.key
+        ? { ok: true, key: made.key }
+        : no("its answer held none.");
+    },
   },
 };
