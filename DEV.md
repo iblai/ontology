@@ -410,9 +410,10 @@ The Ontology Frontend can run once for every platform (`ONTOLOGY_MULTI_PLATFORM=
 environment, as at `ontology.iblai.me`). It then has no backend of its own: each call goes to the
 backend of the signed-in admin's platform, in either store mode.
 
-An admin of a platform with no backend lands on **Connect a backend**: the install command for a
-server ([docs/deployment.md](docs/deployment.md#install-on-ubuntu)), a button that makes the
-backend's platform key, and a field for the backend's address. Connect checks that the address is
+An admin of a platform with no backend lands on **Connect a backend**: one field for the server's
+host name, the install command for it ([docs/deployment.md](docs/deployment.md#install-on-ubuntu)),
+a button that makes the backend's platform key, and Connect. The backend's address is taken to be
+`https://<host name>`; one that differs is given under Advanced. Connect checks that the address is
 `https` and public, that the server answers `GET /counts` with the admin's own token and names its
 platform there, then writes the record with `iblai-org: <that platform>`, so the platform itself
 refuses an address that is another platform's backend. The same record from the server's side:

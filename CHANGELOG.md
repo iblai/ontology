@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - The Ontology Frontend carries the favicon the ibl.ai SIS and CRM use (`app/favicon.ico`).
+- **Connect a backend** asks for the server's host name alone and takes the backend's address to
+  be `https://<host name>`; an address that differs goes under Advanced. Where the console has no
+  address for a platform, it now says "ibl.ai Ontology does not know this platform's backend
+  yet". The install script ends by naming the host name to enter, not an address to paste.
 
 ## [0.2.13] - 2026-11-13
 

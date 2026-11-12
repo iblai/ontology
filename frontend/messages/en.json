@@ -718,7 +718,7 @@
       "no_backend": "Connect a backend",
       "no_backendHint": "This platform has no ontology backend yet. To open another platform, switch from your profile menu.",
       "no_backend_here": "Connect a backend",
-      "no_backend_hereHint": "This browser does not know this platform’s ontology backend yet. Enter its address below, or install one.",
+      "no_backend_hereHint": "ibl.ai Ontology does not know this platform’s backend yet. Enter its host name and connect, or install one first.",
       "bad_backend": "Connect the backend again",
       "bad_backendHint": "The address kept for this platform’s backend cannot be used: it is not a public https address, or no ontology backend answers there.",
       "not_admin": "The ontology console is for this platform’s administrators",
@@ -728,6 +728,7 @@
       "install": "Install it on a server",
       "installHint": "A fresh Ubuntu server of yours, with a host name that points to it and ports 80 and 443 open.",
       "host": "Host name",
+      "hostHint": "The name the backend’s server answers at.",
       "hostInvalid": "A full host name, such as ontology.example.edu.",
       "key": "Give it a key",
       "keyHint": "The install asks for one. With it the backend keeps this platform’s roles and connects its agents, in your name.",
@@ -735,8 +736,10 @@
       "keyCreating": "Creating…",
       "keyOnce": "Shown this once. Paste it when the install asks for the backend’s key.",
       "connectTitle": "Connect it",
-      "connectHint": "The install ends by printing the backend’s address.",
+      "connectHint": "Once the backend is running.",
+      "advanced": "Advanced",
       "address": "Backend address",
+      "addressHint": "Only when the backend is not at https:// followed by the host name.",
       "connect": "Connect",
       "connecting": "Connecting…"
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INSTALL_SCRIPT, hostName, installCommand, validHost } from "./install";
+import { INSTALL_SCRIPT, hostName, hostOf, installCommand, validHost } from "./install";
 
 describe("the install command", () => {
   it("takes the host name out of what was typed or pasted", () => {
@@ -8,6 +8,22 @@ describe("the install command", () => {
     expect(hostName("ontology.acme.edu:8443")).toBe("ontology.acme.edu");
     // Half a scheme, as it is while being typed, is no host name yet.
     expect(validHost(hostName("https:"))).toBe(false);
+  });
+
+  it("reads the host name back out of a plain https address, and out of no other", () => {
+    expect(hostOf("https://ontology.acme.edu")).toBe("ontology.acme.edu");
+    expect(hostOf(" https://Ontology.Acme.edu/ ")).toBe("ontology.acme.edu");
+    // A port, a path or cleartext is an address of its own: shown as it is, not folded into a name.
+    const own = [
+      "https://ontology.acme.edu:8443",
+      "https://ontology.acme.edu/api",
+      "http://ontology.acme.edu",
+      "http://localhost:8000",
+      "https://localhost",
+      "ontology.acme.edu",
+      "",
+    ];
+    expect(own.filter((address) => hostOf(address))).toEqual([]);
   });
 
   it("takes a full host name and nothing else", () => {

@@ -11,6 +11,12 @@ export function hostName(typed: string): string {
     .replace(/[/:?#].*$/, "");
 }
 
+/** The host name of an address that is plain `https://<host name>`; "" for one with a port, a path or no https. */
+export function hostOf(address: string): string {
+  const host = /^https:\/\/([^/:?#]+)\/?$/.exec(address.trim().toLowerCase())?.[1] ?? "";
+  return validHost(host) ? host : "";
+}
+
 /** Whether it is a full host name: labels of letters, digits and hyphens, with a dot between. */
 export function validHost(host: string): boolean {
   const label = "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?";

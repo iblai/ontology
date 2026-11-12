@@ -31,7 +31,7 @@ curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh
 5. Writes `/opt/iblai-ontology/.env`, readable by root alone: the host name, the platform, the key, where the settings live, and four secrets it generates (the database password, the search index's token, Django's secret and the key that encrypts the logins of the connected systems).
 6. Downloads `compose.yaml` of the same release beside it, pulls the images and starts them.
 7. Waits up to three minutes for `https://<host>/mcp` to answer `405`, which the gateway does before any sign-in. If it does not, the last lines of the proxy and the gateway are printed.
-8. Prints the address to paste into the console (`https://<host>`), the address agents call (`https://<host>/mcp`) and where its two files are.
+8. Prints the host name to enter in the console, the address agents call (`https://<host>/mcp`) and where its two files are.
 
 **What runs** (`deploy/compose.yaml`):
 
@@ -62,7 +62,7 @@ docker compose -f /opt/iblai-ontology/compose.yaml logs --follow ontology-gatewa
 - **Remove:** the same command with `--uninstall`. It asks for the host name to be typed, then removes the containers, the volumes, the images and the directory. Docker itself stays, and so does what the platform keeps: the roles, the key and MCP server of each agent still connected, the backend's API key, and with `dm` the schedules, the connected systems and the backend's address. With `rbac`, remove each agent's connection in the console first: the list goes with the server.
 - **Preview:** `--dry-run` says each step and changes nothing.
 
-Then, in the console: paste the address under **Connect a backend**, add a system, and connect an agent on the **Agents** page. Connecting Twenty CRM makes the role an agent is connected as; for a database, give a role its tables and toolsets first.
+Then, in the console: enter the host name under **Connect a backend** and press Connect, add a system, and connect an agent on the **Agents** page. Connecting Twenty CRM makes the role an agent is connected as; for a database, give a role its tables and toolsets first.
 
 ---
 
@@ -279,7 +279,8 @@ The Ontology Frontend, the admin console, is not a service of this stack. Run on
 `ONTOLOGY_API_URL` naming the gateway), or use the one hosted for every platform at
 `ontology.iblai.me`: set `ONTOLOGY_DM_URL`, `IBLAI_ORG` and the platform key on the gateway, and
 let the hosted frontend through the firewall as you do the ibl.ai platform. An administrator who
-signs in there connects the backend by pasting its address under **Connect a backend**;
+signs in there connects the backend by entering its host name under **Connect a backend** (the
+address is taken to be `https://<host name>`; another one goes under Advanced);
 `ontology platform address --url https://ontology.<domain>` on the server records the same
 address. The address must be `https` and public, and the frontend sends each admin's platform
 token and nothing else ([DEV.md](../DEV.md#one-ontology-frontend-for-every-platform)).

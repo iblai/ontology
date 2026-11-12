@@ -305,7 +305,7 @@ finish() {
 
 The ontology backend is running (version $VERSION).
 
-  Paste into the console, under Connect a backend:   https://$HOST
+  Enter in the console, under Connect a backend:     $HOST
   The address agents call:                           https://$HOST/mcp
 
   Its two files:   $DIR/compose.yaml
