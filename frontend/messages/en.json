@@ -749,6 +749,7 @@
       "none": "You administer no platform. Only a platform’s administrator sets up its backend.",
       "switching": "Signing you in to {platform}…",
       "notSwitched": "You are still signed in to another platform. Pick {platform} again, or switch from your profile menu.",
+      "switchBusy": "A platform switch is still marked as under way in this browser. Sign out and in again, then open the link once more.",
       "setUp": "Set up",
       "settingUp": "Setting up…",
       "cancel": "Cancel"

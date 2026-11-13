@@ -10,8 +10,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `docs/install.md`: the one-command install for a platform's administrator, step by step: what
   to have ready, what the script prints, setting the server up from its link, every setting in
   `.env`, what runs, where things are kept, day-to-day commands and what each message the script
-  or the Set up card stops with means. With screenshots of the Dashboard, adding a system,
-  connecting an agent and the agent's chat.
+  or the Set up card stops with means. With screenshots of setting the server up, the
+  Dashboard, adding a system, connecting an agent and the agent's chat.
 - The gateway's `read-memory` answers a folder's path with its listing, so an agent can look
   around: `/ontology` shows the folders its role reaches, and a folder the first 200 names in it.
   A folder that holds nothing the role may read is refused as a file would be.

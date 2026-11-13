@@ -52,9 +52,11 @@ export function SetupBackend({ link }: { link: SetupLink }) {
   const [picked, setPicked] = useState("");
   const [refused, setRefused] = useState("");
   const [busy, setBusy] = useState(false);
+  // The SDK starts no switch while its mark of one under way is set, and says nothing.
+  const [stuck] = useState(() => document.cookie.includes("ibl_tenant_switching"));
 
   // The one platform they administer is not the one they are signed in to: switch to it, once.
-  const mustSwitch = only && only !== here && link.platform !== only ? only : "";
+  const mustSwitch = !stuck && only && only !== here && link.platform !== only ? only : "";
   const going = mustSwitch || picked;
   // A switch that did not take: they are back, still signed in to another platform.
   const missed = !going && link.platform && link.platform !== here ? link.platform : "";
@@ -73,6 +75,7 @@ export function SetupBackend({ link }: { link: SetupLink }) {
   function choose(key: string) {
     setRefused("");
     if (!key || key === here) return setChosen(key);
+    if (stuck) return setRefused(t("switchBusy"));
     // A key is made in the platform of the sign-in that asks: nothing is sent to the server yet.
     setPicked(key);
     switchTo(key);

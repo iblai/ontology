@@ -28,8 +28,11 @@ export function AppShell({
   hosted: boolean;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   // The semantic map page's content is dark below the navbar; every other page is light.
-  const dark = usePathname() === "/map";
+  const dark = pathname === "/map";
+  // The sign-in pages store the session: nothing stands in for them.
+  const signingIn = pathname?.startsWith("/sso-login") ?? false;
   const gate = useBackendGate(!demo);
   // An install's link kept for this tab: its card stands in for the page until it is used or dropped.
   const [setup] = useState(() => (hosted ? pendingSetup() : null));
@@ -115,7 +118,7 @@ export function AppShell({
               dark && "dark overflow-hidden bg-background p-0 text-foreground md:p-0",
             )}
           >
-            {setup ? (
+            {setup && !signingIn ? (
               <SetupBackend link={setup} />
             ) : gate === "open" ? (
               children

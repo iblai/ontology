@@ -107,6 +107,8 @@ would do.
    chosen for you, and picking a platform you are not signed in to signs you in to it first.
 3. Press **Set up**.
 
+![The Set up card: the server named, and the platforms you administer to choose from, none chosen yet](images/install/set-up.png)
+
 Your server then checks the link's code, asks your platform that you administer the platform you
 chose and that its administrators can grant ontology roles, and makes its own key in your
 platform, in your name. The key is never shown and never leaves your server. With it the backend
