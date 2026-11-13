@@ -63,6 +63,21 @@ describe("reach", () => {
     expect([...r.granted].sort()).toEqual(["memory_domain:students", "toolset:ts"]);
     expect(r.nodes.has("role:other")).toBe(false);
   });
+  it("reaches the terms a reached table holds, and no table through an inferred join", () => {
+    const r = reach(
+      [
+        ...links,
+        L("table:svc:a", "term:ao:student", "represents"),
+        L("table:else:c", "term:ao:course", "represents"),
+        L("table:svc:a", "table:else:c", "joins"),
+      ],
+      "role:r",
+    );
+    expect(r.nodes.has("term:ao:student")).toBe(true);
+    // Only the join leads to the other table: reaching one side of it is not reaching the other.
+    expect(r.nodes.has("table:else:c")).toBe(false);
+    expect(r.nodes.has("term:ao:course")).toBe(false);
+  });
 });
 
 describe("toggleGrant", () => {
@@ -242,5 +257,20 @@ describe("graph helpers", () => {
       { id: "toolset:x", kind: "missing", label: "ps_x", group: "", meta: {} },
     ];
     expect(searchGraph(nodes, "ps").map((n) => n.id)).toEqual(["table:svc:a"]);
+  });
+  it("finds a term by another of its names", () => {
+    const nodes: GraphNode[] = [
+      {
+        id: "term:ao:student",
+        kind: "term",
+        label: "Student",
+        group: "",
+        meta: { synonyms: ["learner", "pupil"] },
+      },
+      { id: "table:svc:a", kind: "table", label: "PS_A", group: "", meta: {} },
+    ];
+    expect(searchGraph(nodes, "LEARN").map((n) => n.id)).toEqual(["term:ao:student"]);
+    expect(searchGraph(nodes, "stud").map((n) => n.id)).toEqual(["term:ao:student"]);
+    expect(searchGraph(nodes, "teacher")).toEqual([]);
   });
 });

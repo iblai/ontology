@@ -30,10 +30,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ServiceEndpoints } from "@/components/services/endpoints";
 import { PipelineStepper } from "@/components/services/pipeline-stepper";
 import { SafetyChecklist } from "@/components/services/safety-checklist";
+import { GeneratedTerms, ServiceTerms } from "@/components/services/terms";
 import { toast } from "sonner";
 import { fmtDateTime } from "@/lib/format";
+import { AUTO_ONTOLOGY, CUSTOM_API, UNSYNCED } from "@/lib/ontology/connectable";
 import { fmtDuration, fmtRows, redactConnectionConfig } from "@/lib/ontology/format";
 
 /** Loads the service by name; a missing one is a 404, a failed load says so. */
@@ -151,6 +154,11 @@ function ServiceDetail({ service }: { service: Service }) {
   const connectionRows = Object.entries(redactConnectionConfig(service.connection_config));
   // An API system has no schema to discover and no read-only login to test.
   const api = service.service_type === "api";
+  // A custom API is called live: it has endpoints, and nothing to discover, provision or sync.
+  const custom = service.adapter === CUSTOM_API;
+  // An Auto Ontology server is read for its terms; it has a status check, and nothing to sync either.
+  const terms = service.adapter === AUTO_ONTOLOGY;
+  const unsynced = UNSYNCED.includes(service.adapter);
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,15 +168,37 @@ function ServiceDetail({ service }: { service: Service }) {
         subtitle={service.display_name}
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={custom ? "endpoints" : terms ? "terms" : "overview"}>
         <TabsList>
+          {custom && <TabsTrigger value="endpoints">{t("tabEndpoints")}</TabsTrigger>}
+          {terms && <TabsTrigger value="terms">{t("tabTerms")}</TabsTrigger>}
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="connection">{t("tabConnection")}</TabsTrigger>
-          <TabsTrigger value="schema">{t("tabSchema")}</TabsTrigger>
+          {!unsynced && <TabsTrigger value="schema">{t("tabSchema")}</TabsTrigger>}
+          {!api && <TabsTrigger value="generated">{t("tabTerms")}</TabsTrigger>}
           {!api && <TabsTrigger value="safety">{t("tabSafety")}</TabsTrigger>}
-          <TabsTrigger value="pipeline">{t("tabPipeline")}</TabsTrigger>
-          <TabsTrigger value="sync">{t("tabSync")}</TabsTrigger>
+          {!unsynced && <TabsTrigger value="pipeline">{t("tabPipeline")}</TabsTrigger>}
+          {!unsynced && <TabsTrigger value="sync">{t("tabSync")}</TabsTrigger>}
         </TabsList>
+
+        {custom && (
+          <TabsContent value="endpoints" className="mt-4">
+            <ServiceEndpoints system={service.name} />
+          </TabsContent>
+        )}
+
+        {terms && (
+          <TabsContent value="terms" className="mt-4">
+            <ServiceTerms service={service} />
+          </TabsContent>
+        )}
+
+        {/* A database system: a term for each table, generated when asked. */}
+        {!api && (
+          <TabsContent value="generated" className="mt-4">
+            <GeneratedTerms service={service} />
+          </TabsContent>
+        )}
 
         <TabsContent value="overview" className="mt-4">
           <div className="flex flex-col gap-4">
@@ -179,10 +209,12 @@ function ServiceDetail({ service }: { service: Service }) {
                   {ts("approve")}
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={runProbe}>
-                <Database className="mr-2 size-3.5" />
-                {ts("runStatusProbe")}
-              </Button>
+              {!custom && (
+                <Button size="sm" variant="outline" onClick={runProbe}>
+                  <Database className="mr-2 size-3.5" />
+                  {ts("runStatusProbe")}
+                </Button>
+              )}
               {!api && (
                 <Button size="sm" variant="outline" onClick={discover}>
                   <RefreshCw className="mr-2 size-3.5" />
@@ -195,10 +227,12 @@ function ServiceDetail({ service }: { service: Service }) {
                   {ts("proposeMapping")}
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={syncNow}>
-                <RefreshCw className="mr-2 size-3.5" />
-                {ts("syncNow")}
-              </Button>
+              {!unsynced && (
+                <Button size="sm" variant="outline" onClick={syncNow}>
+                  <RefreshCw className="mr-2 size-3.5" />
+                  {ts("syncNow")}
+                </Button>
+              )}
             </div>
 
             <Card>
@@ -233,27 +267,35 @@ function ServiceDetail({ service }: { service: Service }) {
                       />
                     </>
                   )}
-                  <FactRow
-                    label={t("overview.lastSync")}
-                    value={service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")}
-                  />
-                  <FactRow
-                    label={t("overview.syncStatus")}
-                    value={<StatusBadge kind="sync" value={service.sync_status} />}
-                  />
-                  <FactRow
-                    label={t("overview.tablesSynced")}
-                    value={<span className="tabular-nums">{fmtRows(service.tables_synced)}</span>}
-                  />
-                  <FactRow
-                    label={t("overview.rowsSynced")}
-                    value={<span className="tabular-nums">{fmtRows(service.rows_synced)}</span>}
-                  />
+                  {!unsynced && (
+                    <>
+                      <FactRow
+                        label={t("overview.lastSync")}
+                        value={
+                          service.last_sync_at ? fmtDateTime(service.last_sync_at) : tc("never")
+                        }
+                      />
+                      <FactRow
+                        label={t("overview.syncStatus")}
+                        value={<StatusBadge kind="sync" value={service.sync_status} />}
+                      />
+                      <FactRow
+                        label={t("overview.tablesSynced")}
+                        value={
+                          <span className="tabular-nums">{fmtRows(service.tables_synced)}</span>
+                        }
+                      />
+                      <FactRow
+                        label={t("overview.rowsSynced")}
+                        value={<span className="tabular-nums">{fmtRows(service.rows_synced)}</span>}
+                      />
+                    </>
+                  )}
                 </Facts>
               </CardContent>
             </Card>
 
-            {probe && (
+            {probe && !custom && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium">{t("overview.probe")}</CardTitle>

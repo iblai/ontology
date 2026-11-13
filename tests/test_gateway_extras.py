@@ -34,6 +34,9 @@ def _handlers(perms, **ctx):
         def tool_specs(self, p):
             return [{"name": "allowed-tool", "description": "d", "parameters": []}]
 
+        def spec(self, name):
+            return {}  # no tool of this resolver is a system's own
+
     return MCPHandlers(MCPContext(permissions=perms, **ctx), resolver=R())
 
 
@@ -200,6 +203,9 @@ def _subject_handlers(perms, subject_id):
 
         def scope_for(self, p):
             return ScopedTools(toolsets=["t"], tool_names=["get-student-enrollment"])
+
+        def spec(self, name):
+            return {}  # no tool of this resolver is a system's own
 
     h = MCPHandlers(MCPContext(permissions=perms, subject_id=subject_id), resolver=R())
     h._proxy_to_toolbox = lambda name, arguments: {"ok": name, "args": arguments}

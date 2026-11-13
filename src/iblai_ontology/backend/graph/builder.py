@@ -1,4 +1,4 @@
-"""Build the relationship graph: services, tables, MCP config, roles, schedules, memories.
+"""Build the relationship graph: services, tables, their terms, MCP config, roles, schedules, memories.
 
 Nodes are ``{id, kind, label, group, meta, health}``; links are typed ``{source, target,
 kind}`` (the inverse is implied by direction). A reference to something that does not
@@ -16,6 +16,11 @@ from iblai_ontology.backend.discovery.config_generator import _bare
 from iblai_ontology.backend.discovery.config_generator import (
     table_descriptions as _descriptions,
 )
+from iblai_ontology.backend.mcp_server.toolbox_compat import writing_tools
+from iblai_ontology.backend.mcp_server.toolbox_config import GATEWAY_TYPES
+
+# The HTTP method a tool the gateway runs itself sends, per operation.
+_GATEWAY_METHOD = {"create": "POST", "update": "PATCH"}
 
 # ponytail: table names after FROM/JOIN/INTO/UPDATE; a real SQL parser if statements get exotic.
 _SQL_TABLE_RE = re.compile(r"\b(?:from|join|into|update)\s+([A-Za-z_][\w$.]*)", re.I)
@@ -127,10 +132,13 @@ def build_graph(
     schedules: list[dict],
     by_domain: dict[str, dict],
     columns: bool = False,
+    terms: dict[str, list[dict]] | None = None,
 ) -> dict:
+    """``terms``: per Auto Ontology system, the terms it was read for (services/auto_ontology.py)."""
     g = _Graph()
     tables_by_service: dict[str, dict[str, str]] = {}
     group_of_table: dict[str, str] = {}
+    holders: dict[str, list[str]] = {}  # a database's name -> the systems that hold it
 
     # Services, tables, columns, entity groups, foreign keys.
     for s in services:
@@ -166,6 +174,20 @@ def build_graph(
             lookup[name.lower()] = tid
             group_of_table[tid] = group
             g.link(sid, tid, "has_table")
+            # The term a model wrote for it here (discovery/terms.py): no one has certified it.
+            own = t.get("term") or {}
+            if own.get("id"):
+                term_id = g.node(
+                    "term",
+                    f"{s.name}:{own['id']}",
+                    label=str(own.get("name") or own["id"]),
+                    service=s.name,
+                    description=str(own.get("description") or ""),
+                    synonyms=list(own.get("synonyms") or []),
+                    certification="pending",
+                    generated=True,
+                )
+                g.link(tid, term_id, "represents")
             g.link(
                 tid, g.node("entity_group", group, label=group, group=group), "in_group"
             )
@@ -185,6 +207,9 @@ def build_graph(
                     )
                     g.link(tid, cid, "has_column")
         tables_by_service[s.name] = lookup
+        database = str((s.schema_manifest or {}).get("database") or "").lower()
+        if database:
+            holders.setdefault(database, []).append(s.name)
         for t in tables:
             schema = str(t.get("schema_name") or "")
             name = str(t.get("table_name") or "")
@@ -202,6 +227,51 @@ def build_graph(
                 ref = lookup.get(str(fk.get("references_table") or "").lower())
                 if ref and ref != tid:
                     g.link(tid, ref, "references")
+
+    # Terms: what an Auto Ontology server says a table means, and the joins it inferred.
+    joined = {
+        frozenset((link["source"], link["target"]))
+        for link in g.links
+        if link["kind"] == "references"
+    }
+
+    def ours(place) -> str | None:
+        """Our table for NVIDIA's (database, schema, table): only when one system here holds that database."""
+        database, schema, table = (str(part or "").lower() for part in place)
+        held = holders.get(database) or []
+        if len(held) != 1:
+            return None  # none holds it, or two do and nothing says which one is meant
+        return tables_by_service[held[0]].get(f"{schema}.{table}" if schema else table)
+
+    for layer, rows in (terms or {}).items():
+        for term in rows:
+            matched = [
+                ours((t.get("database"), t.get("schema"), t.get("table")))
+                for t in term.get("tables") or []
+                if t.get("holds")
+            ]
+            held = list(dict.fromkeys(tid for tid in matched if tid))
+            if not held:
+                continue  # all of its tables are elsewhere
+            term_id = g.node(
+                "term",
+                f"{layer}:{term.get('id')}",
+                label=str(term.get("name") or term.get("id")),
+                service=layer,
+                description=str(term.get("description") or ""),
+                synonyms=list(term.get("synonyms") or []),
+                certification=str(term.get("certification") or ""),
+                # Its tables that are not on this map: in a system not connected here, or a view.
+                elsewhere=matched.count(None),
+            )
+            for tid in held:
+                g.link(tid, term_id, "represents")
+            for source, target in term.get("joins") or []:
+                a, b = ours(source), ours(target)
+                # A declared foreign key is drawn as `references` already.
+                if a and b and a != b and frozenset((a, b)) not in joined:
+                    joined.add(frozenset((a, b)))
+                    g.link(a, b, "joins")
 
     # Memory domains: synced folders and the ones schedules write.
     domains: set[str] = {d for d in by_domain if d != "_root"}
@@ -237,23 +307,44 @@ def build_graph(
             host=str(src.get("host") or ""),
         )
         for s in services:
-            if name in (f"{s.name}-source", s.name):
+            # A custom API has two: one its tools read through, one they change data through.
+            own = (f"{s.name}-source", s.name, f"{s.name}-reads", f"{s.name}-writes")
+            if name in own:
                 g.link(nid("service", s.name), nid("source", name), "exposes")
                 service_of_source[name] = s.name
-    for tool in reader.get_tools():
+    tools = reader.get_tools()
+    writing = writing_tools(tools)
+    for tool in tools:
         name = str(tool.get("name") or "")
+        kind = str(tool.get("type") or "")
+        source = str(tool.get("source") or "")
+        svc = service_of_source.get(source)
+        if kind == "http":
+            method = str(tool.get("method") or "").upper()
+        else:
+            gateway = kind in GATEWAY_TYPES
+            method = (
+                _GATEWAY_METHOD.get(str(tool.get("operation")), "") if gateway else ""
+            )
         tid = g.node(
             "tool",
             name,
             label=name,
             group="mcp",
-            type=str(tool.get("type") or ""),
-            source=str(tool.get("source") or ""),
+            type=kind,
+            source=source,
             description=str(tool.get("description") or ""),
             statement=str(tool.get("statement") or ""),
+            # What Access switches on: whether it can change data, how, and whose it is.
+            write=name in writing,
+            method=method,
+            service=str(tool.get("service") or svc or ""),
         )
-        g.ref(tid, "uses_source", "source", str(tool.get("source") or ""))
-        svc = service_of_source.get(str(tool.get("source") or ""))
+        if source:
+            g.ref(tid, "uses_source", "source", source)
+        elif nid("service", str(tool.get("service") or "")) in g.nodes:
+            # A tool the gateway runs on the system itself has no source between them.
+            g.link(nid("service", str(tool["service"])), tid, "exposes")
         lookup = (
             tables_by_service.get(svc, {})
             if svc
@@ -332,7 +423,11 @@ def build_graph(
             memory_paths=list(spec.get("memory_paths") or []),
             cache_tables=list(spec.get("cache_tables") or []),
             mcp_toolsets=list(spec.get("mcp_toolsets") or []),
+            mcp_tools=list(spec.get("mcp_tools") or []),
         )
+        # A tool held by its own name, beside what the toolsets lend.
+        for tool in spec.get("mcp_tools") or []:
+            g.ref(rid, "grants", "tool", str(tool))
         granted = spec.get("mcp_toolsets") or []
         through_all = toolset_ids if "*" in granted else []
         for tsid in through_all:

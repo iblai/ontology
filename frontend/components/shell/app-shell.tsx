@@ -29,8 +29,8 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  // The semantic map page's content is dark below the navbar; every other page is light.
-  const dark = pathname === "/map";
+  // The semantic map fills the content area edge to edge; every other page is padded.
+  const bleed = pathname === "/map";
   // The sign-in pages store the session: nothing stands in for them.
   const signingIn = pathname?.startsWith("/sso-login") ?? false;
   const gate = useBackendGate(!demo);
@@ -115,7 +115,7 @@ export function AppShell({
           <main
             className={cn(
               "min-h-0 flex-1 overflow-y-auto p-4 md:p-6",
-              dark && "dark overflow-hidden bg-background p-0 text-foreground md:p-0",
+              bleed && "overflow-hidden p-0 md:p-0",
             )}
           >
             {setup && !signingIn ? (

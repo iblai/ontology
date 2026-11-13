@@ -185,7 +185,7 @@ class ProvisioningEngine:
     @staticmethod
     def reach(name: str) -> dict[str, list[str]]:
         """What a system gives an agent, read from its own schedules and tools: the tables it
-        fills, their memory folders and the toolset of its operations."""
+        fills, their memory folders and the toolsets of its operations."""
         from iblai_ontology.backend.sync import schedules
         from iblai_ontology.backend.sync.engine import _owned_by
         from iblai_ontology.config.reader import ConfigReader
@@ -193,11 +193,14 @@ class ProvisioningEngine:
         outputs = [s.get("output") or {} for s in schedules.all() if _owned_by(s, name)]
         tables = {o["structured_cache"] for o in outputs if o.get("structured_cache")}
         folders = {o["text_memories"] for o in outputs if o.get("text_memories")}
-        writes = f"{name}-writes"
+        held = ConfigReader().get_toolsets()
         return {
             "cache_tables": sorted(tables),
             "memory_paths": sorted(folder.rstrip("/") + "/**" for folder in folders),
-            "mcp_toolsets": [writes] if writes in ConfigReader().get_toolsets() else [],
+            # A custom API has both; a system the backend reads itself only what changes data.
+            "mcp_toolsets": [
+                t for t in (f"{name}-reads", f"{name}-writes") if t in held
+            ],
         }
 
     # -- teardown --------------------------------------------------------
@@ -207,15 +210,16 @@ class ProvisioningEngine:
         midway can be run again."""
         from iblai_ontology.backend import store
         from iblai_ontology.backend.identity import role_source
-        from iblai_ontology.backend.services import twenty
+        from iblai_ontology.backend.services import http_api, twenty
         from iblai_ontology.backend.services.models import Service
         from iblai_ontology.backend.sync import schedules
         from iblai_ontology.backend.sync.engine import _owned_by
 
         service = store.first(Service, name=name)
+        adapter = service.adapter if service else ""
         # Read before its schedules and tools go: what connecting it gave the role of its name.
         given = (
-            self.reach(name) if service and service.adapter == twenty.ADAPTER else None
+            self.reach(name) if adapter in (twenty.ADAPTER, http_api.ADAPTER) else None
         )
         for sched in schedules.all():
             if _owned_by(sched, name):
@@ -228,17 +232,22 @@ class ProvisioningEngine:
             for f in gen.glob("*"):
                 f.unlink()
             gen.rmdir()
+        if adapter == http_api.ADAPTER:
+            # Its endpoints live in tools.yaml alone, and its two toolsets go empty or not.
+            self._unmerge_tools(http_api.documents(name), given["mcp_toolsets"])
         if given:
             role_source.reduce_role(name, given)
         store.delete(Service, name=name)  # cascades to health, runs, steps and tables
         logger.info("Tore down service '%s'", name)
 
     @staticmethod
-    def _unmerge_tools(generated: str) -> None:
+    def _unmerge_tools(generated: str, toolsets: list[str] | None = None) -> None:
         """Take a service's generated tools and sources back out of tools.yaml.
 
         A toolset they leave empty goes too, from the file and from every role that names
-        it: a role naming a toolset that is gone cannot be saved again.
+        it: a role naming a toolset that is gone cannot be saved again. ``toolsets`` go
+        the same way whatever they hold: a system's own, which may never have held a tool.
+        The tools leave every role that holds one by name.
         """
         from iblai_ontology.backend.identity import role_source
         from iblai_ontology.backend.provisioning.tools_generator import ToolsGenerator
@@ -251,8 +260,9 @@ class ProvisioningEngine:
             for doc in yaml.safe_load_all(generated)
             if doc and doc.get("kind") in ("tool", "source")
         }
+        gone |= {("toolset", name) for name in toolsets or []}
         tools = {name for kind, name in gone if kind == "tool"}
-        kept, emptied = [], set()
+        kept, emptied = [], set(toolsets or [])
         for doc in generator._existing_docs():
             if (doc.get("kind"), doc.get("name")) in gone:
                 continue
@@ -263,11 +273,12 @@ class ProvisioningEngine:
                     emptied.add(doc.get("name"))
                     continue
             kept.append(doc)
-        generator.path.write_text(
-            yaml.dump_all(kept, default_flow_style=False, sort_keys=False)
-        )
-        for role, spec in role_source.load_roles().items() if emptied else ():
-            held = spec.get("mcp_toolsets") or []
-            if emptied & set(held):
-                left = [t for t in held if t not in emptied]
-                role_source.put_role(role, {**spec, "mcp_toolsets": left})
+        generator.write(yaml.dump_all(kept, default_flow_style=False, sort_keys=False))
+        for role, spec in role_source.load_roles().items() if emptied or tools else ():
+            held, named = spec.get("mcp_toolsets") or [], spec.get("mcp_tools") or []
+            if emptied & set(held) or tools & set(named):
+                left = {
+                    "mcp_toolsets": [t for t in held if t not in emptied],
+                    "mcp_tools": [t for t in named if t not in tools],
+                }
+                role_source.put_role(role, {**spec, **left})

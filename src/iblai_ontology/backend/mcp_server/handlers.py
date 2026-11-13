@@ -44,6 +44,7 @@ _JSON_TYPES = {
     "boolean": "boolean",
     "bool": "boolean",
     "array": "array",
+    "map": "object",
 }
 
 _LISTED = 200  # names in one folder listing
@@ -108,8 +109,14 @@ _PARAMETER_KEYS = (
 
 
 def tool_parameters(spec: dict) -> list[dict]:
-    """Every argument a tool takes, whichever list of its spec declares it."""
-    return [p for key in _PARAMETER_KEYS for p in spec.get(key) or []]
+    """Every argument a caller gives a tool, whichever list of its spec declares it.
+
+    A system's own tool keeps its header to itself: the gateway fills it with the key.
+    """
+    keys = [
+        k for k in _PARAMETER_KEYS if k != "headerParams" or not spec.get("service")
+    ]
+    return [p for key in keys for p in spec.get(key) or []]
 
 
 def input_schema(parameters: list[dict]) -> dict:
@@ -487,6 +494,7 @@ class MCPHandlers:
         # to their own subject record.
         self._require_scoped(name)
         self._require_subject_ownership(arguments)
+        spec = self.resolver.spec(name)
         if name in self.resolver.writing:
             # A change is recorded before it is made: no recorder, no change.
             if self.ctx.before_write is None:
@@ -496,10 +504,33 @@ class MCPHandlers:
                 )
             self.ctx.before_write(name, arguments)
             # An API system's own operation is always a change, and never the Toolbox's.
-            spec = self.resolver.spec(name)
             if spec.get("type") in GATEWAY_TYPES:
                 return self._change_at_source(spec, arguments)
+        if spec.get("type") == "http" and spec.get("service"):
+            return self._call_system(spec, arguments)
         return self._proxy_to_toolbox(name, arguments)
+
+    def _call_system(self, spec: dict, arguments: dict[str, Any]) -> Any:
+        """A custom API's endpoint: the Toolbox's call, with the system's key added here.
+
+        After the change was recorded, so the audit log never holds the key; and the key
+        is masked in what comes back, for an API that echoes what it was sent.
+        """
+        from iblai_ontology.backend.services import http_api
+
+        try:
+            arguments, key = http_api.signed(
+                spec, self.resolver.source(str(spec.get("source") or "")), arguments
+            )
+        except http_api.ApiError as exc:
+            raise MCPError(str(exc)) from exc
+        try:
+            return http_api.without(
+                key, self._proxy_to_toolbox(spec["name"], arguments)
+            )
+        except MCPError as exc:
+            # Not chained: the Toolbox's own error may hold what the API echoed.
+            raise MCPError(http_api.without(key, str(exc)), code=exc.code) from None
 
     def _change_at_source(self, spec: dict, arguments: dict[str, Any]) -> dict:
         """Run an API system's named operation here, then hand the record to the cache.

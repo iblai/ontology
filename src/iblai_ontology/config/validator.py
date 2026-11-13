@@ -125,6 +125,7 @@ class ConfigValidator:
         if roles is None:
             roles = self.reader.get_roles()
         known_toolsets = set(self.reader.get_toolsets().keys())
+        known_tools = {str(t.get("name")) for t in self.reader.get_tools()}
 
         if not roles:
             result.issues.append(RoleIssue("warning", "no roles defined"))
@@ -143,6 +144,15 @@ class ConfigValidator:
                         RoleIssue(
                             "error",
                             f"role '{name}' references toolset '{ts}' which does not exist",
+                        )
+                    )
+            # A tool held by name the gateway does not know is lent to no one.
+            for tool in spec.get("mcp_tools") or []:
+                if tool not in known_tools:
+                    result.issues.append(
+                        RoleIssue(
+                            "error",
+                            f"role '{name}' holds the tool '{tool}' which does not exist",
                         )
                     )
         return result

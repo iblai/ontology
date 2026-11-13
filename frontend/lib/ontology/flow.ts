@@ -144,7 +144,11 @@ export function layoutFlow(g: GraphData, roles: Role[]): FlowLayout {
     return m;
   };
   const tools = outDegree("contains");
-  const grants = outDegree("grants");
+  // A role's count is its toolsets: a tool it holds by name is not one.
+  const grants = new Map<string, number>();
+  for (const l of g.links)
+    if (l.kind === "grants" && endId(l.target).startsWith("toolset:"))
+      grants.set(endId(l.source), (grants.get(endId(l.source)) ?? 0) + 1);
   const seeds: Seed[] = [];
   for (const n of g.nodes) {
     const kind = n.kind as FlowKind;

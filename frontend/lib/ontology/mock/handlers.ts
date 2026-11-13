@@ -3,6 +3,7 @@ import type {
   AgentConnection,
   BackendConfigSnapshot,
   ComplianceReport,
+  Db,
   GraphData,
   GraphRecords,
   HealthSnapshot,
@@ -14,16 +15,27 @@ import type {
   Role,
   SafetyReport,
   Service,
+  ServiceEndpoint,
   ServiceHealth,
   SyncRun,
   SyncSchedule,
   TableEdit,
+  TermDetail,
 } from "../types";
 import { STEP_TYPES } from "../types";
+import { AUTO_ONTOLOGY, CUSTOM_API } from "../connectable";
 import { parseAllDocuments, stringify } from "yaml";
 import { mutate, query, resetDb, uid, now, isoMinutesAgo } from "./store";
-import { mockGraph, mockRecords } from "./graph";
+import {
+  MOCK_READING,
+  MOCK_TERMS,
+  changesData,
+  generatedTerm,
+  mockGraph,
+  mockRecords,
+} from "./graph";
 import { configFromTexts } from "../config-files";
+import { accessLevel, type Tooling } from "../access";
 
 type Ok = { ok: boolean; message: string };
 
@@ -51,7 +63,51 @@ const TWENTY_TABLES = [
   "note_targets",
   "task_targets",
 ];
-const twentyMemory = TWENTY_TABLES.map((table) => `/ontology/${table}/**`);
+
+/** What Twenty's operations change, and what each sends, as the backend's catalog names them. */
+const TWENTY_OBJECTS = ["person", "company", "opportunity", "note", "task"];
+const TWENTY_OPERATIONS = [
+  ["create", "POST", "Create"],
+  ["update", "PATCH", "Update"],
+] as const;
+
+/** What deciding a role's tools needs, read from the mock's own tools. */
+const tooling = (db: Db): Tooling => ({
+  toolsets: db.mcp_toolsets,
+  writing: new Set(db.mcp_tools.filter(changesData).map((t) => t.name)),
+  known: new Set(db.mcp_tools.map((t) => t.name)),
+});
+/** As the backend: a tool that is gone, or that now changes data, leaves every role holding it by name. */
+function dropTools(db: Db, tools: string[]) {
+  db.roles = db.roles.map((r) =>
+    r.mcp_tools?.some((t) => tools.includes(t))
+      ? { ...r, mcp_tools: r.mcp_tools.filter((t) => !tools.includes(t)) }
+      : r,
+  );
+}
+
+/** A custom API's two toolsets, and its two sources of the same names: reads, then changes. */
+const ownToolsets = (system: string) => [`${system}-reads`, `${system}-writes`];
+/** A value in an endpoint's path: `{invoice_id}`. */
+const PLACE = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
+/** An endpoint as the mock keeps it: a tool, with what the backend keeps in tools.yaml beside it. */
+type EndpointTool = McpTool & { method: ServiceEndpoint["method"]; path: string };
+
+function asEndpoint(system: string, tool: McpTool): ServiceEndpoint {
+  const { method, path } = tool as EndpointTool;
+  const values = [...path.matchAll(PLACE)].map((m) => m[1]);
+  const names = tool.parameters.map((p) => p.name);
+  return {
+    name: tool.name.slice(system.length + 1),
+    tool: tool.name,
+    description: tool.description,
+    method,
+    path,
+    query: names.filter((n) => n !== "body" && !values.includes(n)),
+    body: names.includes("body"),
+    write: method !== "GET",
+  };
+}
 
 export const mockApi = {
   reset(): void {
@@ -184,6 +240,9 @@ export const mockApi = {
         const svc = db.services.find((s) => s.name === name);
         if (!svc) return { ok: false, message: "Service not found." };
         svc.last_discovery_at = now();
+        // An Auto Ontology server is read again: its terms, not a schema.
+        if (svc.adapter === AUTO_ONTOLOGY)
+          return { ok: true, message: `${MOCK_READING.terms} terms read.` };
         return { ok: true, message: `Discovery re-run for ${name}.` };
       });
     },
@@ -249,17 +308,31 @@ export const mockApi = {
         db.provisioning_runs = db.provisioning_runs.filter((r) => r.service_name !== name);
         db.safety_reports = db.safety_reports.filter((r) => r.service_name !== name);
         db.sync_schedules = db.sync_schedules.filter((s) => s.source !== name);
-        // What connecting it gave goes with it: its toolset from every role, its reach from its own.
-        const writes = `${name}-writes`;
-        if (db.mcp_toolsets.some((t) => t.name === writes)) {
-          db.mcp_toolsets = db.mcp_toolsets.filter((t) => t.name !== writes);
+        // What connecting it gave goes with it: its toolsets from every role, its reach from its own.
+        const own = ownToolsets(name);
+        if (db.mcp_toolsets.some((t) => own.includes(t.name))) {
+          db.mcp_toolsets = db.mcp_toolsets.filter((t) => !own.includes(t.name));
+          // A custom API's endpoints and sources are its own, as Twenty's operations are.
+          dropTools(
+            db,
+            db.mcp_tools.filter((t) => t.service === name).map((t) => t.name),
+          );
+          db.mcp_tools = db.mcp_tools.filter((t) => t.service !== name);
+          db.mcp_sources = db.mcp_sources.filter((s) => !own.includes(s.name));
           db.roles = db.roles.flatMap((r) => {
-            const left = { ...r, mcp_toolsets: r.mcp_toolsets.filter((t) => t !== writes) };
+            const left = { ...r, mcp_toolsets: r.mcp_toolsets.filter((t) => !own.includes(t)) };
             if (r.name !== name) return [left];
-            left.cache_tables = left.cache_tables.filter((t) => !TWENTY_TABLES.includes(t));
-            left.memory_paths = left.memory_paths.filter((p) => !twentyMemory.includes(p));
+            // Its own tables and folders: the house's, or those under its name.
+            const mine = TWENTY_TABLES.flatMap((t) => [t, `${name.replace(/-/g, "_")}_${t}`]);
+            left.cache_tables = left.cache_tables.filter((t) => !mine.includes(t));
+            left.memory_paths = left.memory_paths.filter(
+              (p) => !mine.some((t) => p === `/ontology/${t}/**`),
+            );
             const reaches =
-              left.mcp_toolsets.length + left.cache_tables.length + left.memory_paths.length;
+              left.mcp_toolsets.length +
+              left.cache_tables.length +
+              left.memory_paths.length +
+              (left.mcp_tools?.length ?? 0);
             // A role left reaching nothing is removed.
             return reaches || left.admin_dashboard ? [left] : [];
           });
@@ -269,6 +342,7 @@ export const mockApi = {
     },
     add(input: {
       name: string;
+      display_name?: string;
       service_type: "database" | "api";
       adapter: string;
       host: string;
@@ -277,6 +351,7 @@ export const mockApi = {
       user?: string;
       password?: string;
       api_key?: string;
+      options?: Record<string, string>;
       domain: string;
     }): { ok: boolean; message: string } {
       return mutate((db) => {
@@ -286,12 +361,28 @@ export const mockApi = {
         const twenty = input.adapter === "twenty_api";
         if (twenty && input.api_key === "wrong")
           return { ok: false, message: "Twenty refused the API key: Token invalid." };
+        // A custom API is connected at once too: its endpoints are named afterwards.
+        const custom = input.adapter === CUSTOM_API;
+        // An Auto Ontology server is connected at once as well, and read for its terms.
+        const terms = input.adapter === AUTO_ONTOLOGY;
+        if ((custom || terms) && /^https?:\/\/localhost\b/.test(input.host))
+          return {
+            ok: false,
+            message:
+              "localhost is this machine or a link-local address (127.0.0.1): neither is called.",
+          };
+        // As the backend: a Twenty connected after another keeps its records in tables of its own.
+        const prefix =
+          twenty && db.services.some((s) => s.adapter === input.adapter)
+            ? `${input.name.replace(/-/g, "_")}_`
+            : "";
+        const tables = TWENTY_TABLES.map((table) => prefix + table);
         const svc: Service = {
           name: input.name,
-          display_name: twenty ? "Twenty CRM" : input.name,
+          display_name: input.display_name?.trim() || (twenty ? "Twenty CRM" : input.name),
           service_type: input.service_type,
           adapter: input.adapter,
-          status: twenty ? "active" : "pending",
+          status: twenty || custom || terms ? "active" : "pending",
           host: input.host,
           port: input.port,
           database: input.database,
@@ -301,8 +392,22 @@ export const mockApi = {
             ...(input.database ? { database: input.database } : {}),
             ...(input.user ? { user: input.user } : {}),
             ...(input.password ? { password: "********" } : {}),
+            ...(input.options?.header ? { header: input.options.header } : {}),
             ...(input.api_key ? { api_key: "********" } : {}),
           },
+          // What a reading leaves on the system: how many terms, and in which of NVIDIA's databases.
+          ...(terms
+            ? {
+                schema_manifest: {
+                  db_type: "",
+                  total_tables: 0,
+                  total_rows: 0,
+                  tables: [],
+                  database: "",
+                  ...MOCK_READING,
+                },
+              }
+            : {}),
           safety_status: "pending",
           sync_status: twenty ? "running" : "never_run",
           tables_synced: 0,
@@ -314,6 +419,51 @@ export const mockApi = {
         if (twenty) {
           // As the backend: its operations are one toolset that changes data, and the role of its name reaches it.
           const writes = `${input.name}-writes`;
+          const operations: McpTool[] = TWENTY_OPERATIONS.flatMap(([operation, method, verb]) =>
+            TWENTY_OBJECTS.map((object) => ({
+              kind: "tool" as const,
+              name: `${input.name}-${operation}-${object}`,
+              type: "twenty",
+              source: "",
+              service: input.name,
+              method,
+              description: `${verb} a ${object} in ${svc.display_name}.`,
+              parameters: [],
+            })),
+          );
+          for (const tool of operations) db.mcp_tools = upsert(db.mcp_tools, tool);
+          db.mcp_toolsets = upsert(db.mcp_toolsets, {
+            kind: "toolset",
+            name: writes,
+            tools: operations.map((t) => t.name),
+            write: true,
+          });
+          const held = db.roles.find((r) => r.name === input.name);
+          db.roles = upsert(db.roles, {
+            name: input.name,
+            display_name: svc.display_name,
+            admin_dashboard: false,
+            agents: [],
+            ...held,
+            mcp_toolsets: [...new Set([...(held?.mcp_toolsets ?? []), writes])],
+            memory_paths: [
+              ...new Set([
+                ...(held?.memory_paths ?? []),
+                ...tables.map((table) => `/ontology/${table}/**`),
+              ]),
+            ],
+            cache_tables: [...new Set([...(held?.cache_tables ?? []), ...tables])],
+          });
+        }
+        if (custom) {
+          // As the backend: two sources, two empty toolsets, and the role of its name holds both.
+          const [reads, writes] = ownToolsets(input.name);
+          db.mcp_sources = [
+            ...db.mcp_sources,
+            { kind: "source", name: reads, type: "http" },
+            { kind: "source", name: writes, type: "http" },
+          ];
+          db.mcp_toolsets = upsert(db.mcp_toolsets, { kind: "toolset", name: reads, tools: [] });
           db.mcp_toolsets = upsert(db.mcp_toolsets, {
             kind: "toolset",
             name: writes,
@@ -326,16 +476,166 @@ export const mockApi = {
             display_name: svc.display_name,
             admin_dashboard: false,
             agents: [],
+            memory_paths: [],
+            cache_tables: [],
             ...held,
-            mcp_toolsets: [...new Set([...(held?.mcp_toolsets ?? []), writes])],
-            memory_paths: [...new Set([...(held?.memory_paths ?? []), ...twentyMemory])],
-            cache_tables: [...new Set([...(held?.cache_tables ?? []), ...TWENTY_TABLES])],
+            mcp_toolsets: [...new Set([...(held?.mcp_toolsets ?? []), reads, writes])],
           });
         }
         const message = twenty
           ? `'${input.name}' is connected. Its records are on their way.`
-          : `${input.name} added. Discovery running.`;
+          : custom
+            ? `'${input.name}' is connected. Add the endpoints agents may call.`
+            : terms
+              ? `'${input.name}' is connected: ${MOCK_READING.terms} terms read.`
+              : `${input.name} added. Discovery running.`;
         return { ok: true, message };
+      });
+    },
+    /** As the backend: a term for each table that has none, written here from the table's name. */
+    generateTerms(name: string): Ok {
+      return mutate((db) => {
+        const svc = db.services.find((s) => s.name === name);
+        if (!svc) return { ok: false, message: `Service '${name}' not found.` };
+        const tables = svc.schema_manifest?.tables ?? [];
+        if (svc.service_type !== "database")
+          return { ok: false, message: `'${name}' holds no tables to name.` };
+        if (tables.length === 0)
+          return { ok: false, message: `'${name}' has no tables yet: discover it first.` };
+        const waiting = tables.filter((t) => !t.term);
+        if (waiting.length === 0)
+          return {
+            ok: true,
+            message: `Every one of its ${tables.length} tables has a term already.`,
+          };
+        for (const t of waiting) t.term = generatedTerm(t.table_name).name;
+        return {
+          ok: true,
+          message: `${waiting.length} of its ${tables.length} tables got a term.`,
+        };
+      });
+    },
+    /** A term's columns and calculations: the mock's Auto Ontology server's, or a generated term's. */
+    term(name: string, id: string): TermDetail {
+      return query((db) => {
+        // A term generated here: its columns under their plain names, from the tables that hold it.
+        const held = db.services.find((s) => s.name === name && s.service_type === "database");
+        if (held)
+          return {
+            ok: true,
+            message: "",
+            columns: (held.schema_manifest?.tables ?? [])
+              .filter((t) => t.term && generatedTerm(t.table_name).id === id)
+              .flatMap((t) =>
+                generatedTerm(t.table_name).columns.map(([business, column]) => ({
+                  name: business,
+                  description: "",
+                  certified: false,
+                  table: t.table_name,
+                  column,
+                })),
+              ),
+            calculations: [],
+          };
+        const term = MOCK_TERMS.find((t) => t.id === id);
+        if (!term || !db.services.some((s) => s.name === name && s.adapter === AUTO_ONTOLOGY))
+          return {
+            ok: false,
+            message: `'${name}' holds no term ${id}.`,
+            columns: [],
+            calculations: [],
+          };
+        const certified = term.certification === "certified";
+        return {
+          ok: true,
+          message: "",
+          columns: term.columns.map(([business, column]) => ({
+            name: business,
+            description: "",
+            certified,
+            table: term.table,
+            column,
+          })),
+          calculations: term.calculations.map(([calculation, expression]) => ({
+            name: calculation,
+            description: "",
+            expression,
+            certified,
+          })),
+        };
+      });
+    },
+    /** A custom API's endpoints, read back from its tools as the backend reads them from tools.yaml. */
+    endpoints(name: string): ServiceEndpoint[] {
+      return query((db) =>
+        db.mcp_tools
+          .filter((t) => t.service === name && t.type === "http")
+          .map((t) => asEndpoint(name, t)),
+      );
+    },
+    saveEndpoint(name: string, input: Omit<ServiceEndpoint, "tool" | "write">): Ok {
+      return mutate((db) => {
+        if (!db.services.some((s) => s.name === name && s.adapter === CUSTOM_API))
+          return { ok: false, message: `'${name}' is not a custom API.` };
+        const tool = `${name}-${input.name}`;
+        if (db.mcp_tools.some((t) => t.name === tool && t.service !== name))
+          return {
+            ok: false,
+            message: `A tool named ${tool} exists already: name the endpoint something else.`,
+          };
+        if (!/^\/[A-Za-z0-9._~{}/-]+$/.test(input.path))
+          return {
+            ok: false,
+            message:
+              "A path starts with / and holds plain segments and {name} for a value: /invoices/{invoice_id}/notes",
+          };
+        // One that read and now changes data leaves every role that holds it by name.
+        const before = db.mcp_tools.find((t) => t.name === tool);
+        if (before && !changesData(before) && input.method !== "GET") dropTools(db, [tool]);
+        const body = input.body && ["POST", "PUT", "PATCH"].includes(input.method);
+        const values = [...input.path.matchAll(PLACE)].map((m) => m[1]);
+        const home = ownToolsets(name)[input.method === "GET" ? 0 : 1];
+        const entry: EndpointTool = {
+          kind: "tool",
+          name: tool,
+          type: "http",
+          source: home,
+          service: name,
+          description: input.description,
+          method: input.method,
+          path: input.path,
+          parameters: [...new Set(values), ...input.query, ...(body ? ["body"] : [])].map((p) => ({
+            name: p,
+            type: p === "body" ? "map" : "string",
+            description: p.replace(/_/g, " "),
+          })),
+        };
+        db.mcp_tools = upsert(db.mcp_tools, entry);
+        // It is listed in the toolset of its kind, and in that one alone.
+        db.mcp_toolsets = db.mcp_toolsets.map((ts) =>
+          ownToolsets(name).includes(ts.name)
+            ? {
+                ...ts,
+                tools: [...ts.tools.filter((t) => t !== tool), ...(ts.name === home ? [tool] : [])],
+              }
+            : ts,
+        );
+        return { ok: true, message: `${tool} is saved: a role that holds ${home} can call it.` };
+      });
+    },
+    removeEndpoint(name: string, endpoint: string): Ok {
+      return mutate((db) => {
+        const tool = `${name}-${endpoint}`;
+        if (!db.mcp_tools.some((t) => t.name === tool && t.service === name))
+          return { ok: false, message: `'${name}' has no endpoint named ${endpoint}.` };
+        db.mcp_tools = db.mcp_tools.filter((t) => t.name !== tool);
+        db.mcp_toolsets = db.mcp_toolsets.map((ts) =>
+          ownToolsets(name).includes(ts.name)
+            ? { ...ts, tools: ts.tools.filter((t) => t !== tool) }
+            : ts,
+        );
+        dropTools(db, [tool]);
+        return { ok: true, message: `${tool} is removed.` };
       });
     },
     /** A server whose login `wrong` is refused and any other may open three databases. */
@@ -433,13 +733,7 @@ export const mockApi = {
         sources: db.mcp_sources.length,
         tools: db.mcp_tools.length,
         toolsets: db.mcp_toolsets.length,
-        issues: [
-          {
-            severity: "warning" as const,
-            message:
-              "Tool 'get-canvas-activity' references source 'peoplesoft-db' (database) but is type 'http'. Consider a dedicated API source.",
-          },
-        ],
+        issues: [],
       }));
     },
     build(): { ok: boolean; nativeTools: number; path: string } {
@@ -473,7 +767,8 @@ export const mockApi = {
     },
     saveTool(tool: McpTool): Ok {
       return mutate((db) => {
-        if (!db.mcp_sources.some((s) => s.name === tool.source))
+        // A tool the gateway runs on its system itself names no source.
+        if (tool.type !== "twenty" && !db.mcp_sources.some((s) => s.name === tool.source))
           return {
             ok: false,
             message: `tool '${tool.name}' references undefined source '${tool.source}'`,
@@ -481,7 +776,7 @@ export const mockApi = {
         db.mcp_tools = upsert(db.mcp_tools, tool);
         return {
           ok: true,
-          message: `tool '${tool.name}' saved. Build and restart the MCP Toolbox to apply.`,
+          message: `tool '${tool.name}' saved.`,
         };
       });
     },
@@ -496,9 +791,10 @@ export const mockApi = {
         if (!db.mcp_tools.some((t) => t.name === name))
           return { ok: false, message: `tool '${name}' not found.` };
         db.mcp_tools = db.mcp_tools.filter((t) => t.name !== name);
+        dropTools(db, [name]);
         return {
           ok: true,
-          message: `tool '${name}' removed. Build and restart the MCP Toolbox to apply.`,
+          message: `tool '${name}' removed.`,
         };
       });
     },
@@ -515,7 +811,7 @@ export const mockApi = {
         db.mcp_toolsets = upsert(db.mcp_toolsets, write ? toolset : rest);
         return {
           ok: true,
-          message: `toolset '${toolset.name}' saved. Build and restart the MCP Toolbox to apply.`,
+          message: `toolset '${toolset.name}' saved.`,
         };
       });
     },
@@ -526,7 +822,7 @@ export const mockApi = {
         db.mcp_toolsets = db.mcp_toolsets.filter((t) => t.name !== name);
         return {
           ok: true,
-          message: `toolset '${name}' removed. Build and restart the MCP Toolbox to apply.`,
+          message: `toolset '${name}' removed.`,
         };
       });
     },
@@ -540,7 +836,7 @@ export const mockApi = {
         db.mcp_sources = upsert(db.mcp_sources, source);
         return {
           ok: true,
-          message: `source '${source.name}' saved. Build and restart the MCP Toolbox to apply.`,
+          message: `source '${source.name}' saved.`,
         };
       });
     },
@@ -557,7 +853,7 @@ export const mockApi = {
         db.mcp_sources = db.mcp_sources.filter((s) => s.name !== name);
         return {
           ok: true,
-          message: `source '${name}' removed. Build and restart the MCP Toolbox to apply.`,
+          message: `source '${name}' removed.`,
         };
       });
     },
@@ -593,7 +889,7 @@ export const mockApi = {
         if (!text.trim())
           issues.push({ severity: "error", message: "tools.yaml must not be empty" });
         for (const t of tools)
-          if (!sources.some((s) => s.name === t.source))
+          if (t.type !== "twenty" && !sources.some((s) => s.name === t.source))
             issues.push({
               severity: "error",
               message: `tool '${t.name}' references undefined source '${t.source}'`,
@@ -611,7 +907,7 @@ export const mockApi = {
         db.mcp_toolsets = toolsets;
         return {
           ok: true,
-          message: "tools.yaml saved. Build and restart the MCP Toolbox to apply.",
+          message: "tools.yaml saved.",
           ...counts,
           issues: [],
         };
@@ -620,8 +916,16 @@ export const mockApi = {
   },
 
   roles: {
-    list() {
-      return query((db) => [...db.roles]);
+    /** Each role with the tools it holds by name and how far it reaches, as the backend sends it. */
+    list(): Role[] {
+      return query((db) => {
+        const known = tooling(db);
+        return db.roles.map((r) => ({
+          ...r,
+          mcp_tools: r.mcp_tools ?? [],
+          access: accessLevel(r, known),
+        }));
+      });
     },
     save(role: Role): Ok {
       return mutate((db) => {
@@ -629,7 +933,15 @@ export const mockApi = {
           (t) => t !== "*" && !db.mcp_toolsets.some((x) => x.name === t),
         );
         if (bad) return { ok: false, message: `Unknown toolsets: ${bad}` };
-        db.roles = upsert(db.roles, role);
+        // A tool is held by a name the gateway knows; one the role held before may stay.
+        const before = db.roles.find((r) => r.name === role.name)?.mcp_tools ?? [];
+        const unknown = (role.mcp_tools ?? before).find(
+          (t) => !db.mcp_tools.some((x) => x.name === t) && !before.includes(t),
+        );
+        if (unknown) return { ok: false, message: `Unknown tools: ${unknown}` };
+        // How far it reaches is worked out, never kept; a save that names no tools keeps them.
+        const { access: _level, ...kept } = role;
+        db.roles = upsert(db.roles, { ...kept, mcp_tools: role.mcp_tools ?? before });
         return { ok: true, message: `Role '${role.name}' saved.` };
       });
     },

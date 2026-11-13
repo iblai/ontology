@@ -32,6 +32,13 @@ service_urls = [
     path("services/<str:name>/approve", views.ServiceApproveView.as_view()),
     path("services/<str:name>/sync", views.ServiceSyncView.as_view()),
     path("services/<str:name>/tables", views.ServiceTablesView.as_view()),
+    path("services/<str:name>/endpoints", views.ServiceEndpointsView.as_view()),
+    path(
+        "services/<str:name>/endpoints/<str:endpoint>",
+        views.ServiceEndpointView.as_view(),
+    ),
+    path("services/<str:name>/terms", views.ServiceTermsView.as_view()),
+    path("services/<str:name>/terms/<str:term>", views.ServiceTermView.as_view()),
 ]
 
 sync_urls = [

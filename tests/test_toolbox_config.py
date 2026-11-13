@@ -53,6 +53,13 @@ DSL = textwrap.dedent(
         description: SQL
     statement: ${sql}
     ---
+    kind: tool
+    name: count-legacy
+    type: oracle-sql
+    source: legacy-oracle
+    description: Count legacy rows
+    statement: SELECT COUNT(*) FROM students
+    ---
     kind: toolset
     name: client-db-tools
     tools:
@@ -177,6 +184,94 @@ def test_a_write_toolset_and_an_http_tool_reach_the_toolbox_as_it_reads_them(tmp
         "person",
         "body",
     ]
+
+
+def test_a_source_no_tool_uses_is_left_out_and_a_systems_tool_loses_the_gateways_word(
+    tmp_path,
+):
+    path = tmp_path / "tools.yaml"
+    path.write_text(
+        textwrap.dedent(
+            """
+            kind: source
+            name: campus-db
+            type: postgres
+            host: ${CAMPUS_DB_HOST}
+            ---
+            kind: source
+            name: acme-reads
+            type: http
+            baseUrl: https://api.acme.example/v1/
+            ---
+            kind: source
+            name: acme-writes
+            type: http
+            baseUrl: https://api.acme.example/v1/
+            ---
+            kind: tool
+            name: acme-list-invoices
+            type: http
+            source: acme-reads
+            service: acme
+            method: GET
+            path: invoices
+            description: Open invoices.
+            headerParams:
+              - name: Authorization
+                type: string
+                description: Added by the gateway.
+            ---
+            kind: toolset
+            name: acme-reads
+            tools:
+              - acme-list-invoices
+            ---
+            kind: toolset
+            name: acme-writes
+            write: true
+            tools: []
+            """
+        )
+    )
+    result = build_toolbox_config(path)
+    # A connected database leaves a source with unset placeholders and no tool: the
+    # Toolbox would refuse its whole file over it.
+    assert set(result.config["sources"]) == {"acme-reads"}
+    assert result.sources == 1
+    tool = result.config["tools"]["acme-list-invoices"]
+    # `service` is whose key the gateway adds; the Toolbox refuses a key it does not know.
+    assert "service" not in tool
+    assert tool["headerParams"][0]["name"] == "Authorization"
+    assert result.config["toolsets"] == {
+        "acme-reads": ["acme-list-invoices"],
+        "acme-writes": [],
+    }
+
+
+def test_a_written_file_holds_an_empty_toolset_named_after_its_content(tmp_path):
+    dest = tmp_path / "generated" / "toolbox.yaml"
+    first = write_toolbox_config(_write(tmp_path), dest)
+    loaded = yaml.safe_load(dest.read_text())
+    assert first.mark.startswith("loaded-") and loaded["toolsets"][first.mark] == []
+    # The same content is the same name; another is another.
+    assert write_toolbox_config(_write(tmp_path), dest).mark == first.mark
+    other = tmp_path / "other.yaml"
+    other.write_text(DSL.replace("List tables", "Every table"))
+    assert write_toolbox_config(other, dest).mark != first.mark
+
+    # With nothing for the Toolbox, the file holds that toolset and no empty map.
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("# nothing yet\n")
+    mark = write_toolbox_config(empty, dest).mark
+    assert yaml.safe_load(dest.read_text()) == {"toolsets": {mark: []}}
+
+
+def test_publish_writes_the_file_beside_tools_yaml(tmp_path):
+    from iblai_ontology.backend.mcp_server.toolbox_config import publish
+
+    mark = publish(_write(tmp_path)).mark
+    served = yaml.safe_load((tmp_path / "generated" / "toolbox.yaml").read_text())
+    assert mark in served["toolsets"] and "list-tables" in served["tools"]
 
 
 def test_write_emits_loadable_yaml_without_injection_comment(tmp_path):

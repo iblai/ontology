@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Play, Plus, CalendarClock, Activity } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
+import { UNSYNCED } from "@/lib/ontology/connectable";
 import type { SyncSchedule, SyncRun } from "@/lib/ontology/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortableHeader } from "@/components/shared/data-table";
@@ -54,7 +55,10 @@ export default function SyncPage() {
     apiClient.sync.history().then(setHistory).catch(err);
     apiClient.services
       .list()
-      .then((list) => setSources(list.map((s) => s.name)))
+      // A system that is read when asked has nothing for a schedule to copy.
+      .then((list) =>
+        setSources(list.filter((s) => !UNSYNCED.includes(s.adapter)).map((s) => s.name)),
+      )
       .catch(err);
     apiClient.mcp
       .tools()

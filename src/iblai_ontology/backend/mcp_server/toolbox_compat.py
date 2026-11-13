@@ -18,6 +18,7 @@ import yaml
 from iblai_ontology.backend.mcp_server.toolbox_config import (
     _INJECTION_RE,
     GATEWAY_TYPES,
+    publish,
 )
 
 # Source types Toolbox understands (the subset we use + common ones).
@@ -291,11 +292,71 @@ def _literal_secrets(value, where: str = ""):
             yield from _literal_secrets(inner, path)
 
 
-def save_tools_yaml(text: str, path: str | Path) -> ComplianceReport:
+def _toolbox_refuses(path: Path, needed: bool) -> str | None:
+    """Why a saved tools.yaml cannot stand, by the Toolbox this server runs; None when it can.
+
+    The Toolbox's file is written from it either way. With no Toolbox to ask, or one that
+    does not answer, a save stands unless it ``needed`` one.
+    """
+    from iblai_ontology.backend.mcp_server.toolbox_client import ToolboxError, loaded
+
+    mark = publish(path).mark
+    url = os.environ.get("MCP_TOOLBOX_URL", "")
+    if not url:
+        return (
+            "This server runs no MCP Toolbox (MCP_TOOLBOX_URL is not set), and a custom "
+            "API's endpoint is called by one."
+            if needed
+            else None
+        )
+    try:
+        why = loaded(url, mark)
+    except ToolboxError as exc:
+        why = str(exc) if needed else None
+    return f"Not saved: {why}." if why else None
+
+
+def _roles_refuse(before: str, docs: list[dict]) -> str | None:
+    """Take a tool that is gone, or that read and now changes data, from every role that
+    holds it by name; why that could not be done, or None."""
+    try:
+        old = [d for d in yaml.safe_load_all(before) if isinstance(d, dict)]
+    except yaml.YAMLError:
+        return None  # nothing readable was there to compare with
+    was, now = writing_tools(old), writing_tools(docs)
+    names = {str(d.get("name")) for d in docs if d.get("kind") == "tool"}
+    gone = {
+        name
+        for name in (str(d.get("name")) for d in old if d.get("kind") == "tool")
+        if name not in names or (name in now and name not in was)
+    }
+    if not gone:
+        return None
+    from iblai_ontology.backend.identity import role_source
+
+    try:
+        role_source.drop_tools(gone)
+    except Exception as exc:  # the platform's own words, or the roles file's
+        why = " ".join(str(exc).split())[:300]
+        return f"Not saved: the roles that hold {', '.join(sorted(gone))} by name were not changed ({why})."
+    return None
+
+
+def save_tools_yaml(
+    text: str, path: str | Path, *, needs_toolbox: bool = False
+) -> ComplianceReport:
     """Validate ``text`` as a tools.yaml and atomically replace ``path`` only if it passes.
 
     Literal secrets on sources and tools are refused: the file holds ``${VAR}``
     references, so a password typed into the console never lands on disk.
+
+    The Toolbox's file is then written from it. Where this server runs a Toolbox
+    (``MCP_TOOLBOX_URL``) the save stands only once the Toolbox has loaded that file: one
+    it refuses is put back, since it would stop the Toolbox at its next start.
+    ``needs_toolbox`` also refuses a save no Toolbox answered for.
+
+    A tool the save removes, or turns from one that reads into one that changes data,
+    leaves every role that holds it by name: a grant to read never becomes one to change.
     """
     path = Path(path)
     tmp = path.with_name(f".{path.name}.tmp")
@@ -317,7 +378,13 @@ def save_tools_yaml(text: str, path: str | Path) -> ComplianceReport:
                         "use a ${VAR} reference",
                     )
         if report.ok:
+            before = path.read_text() if path.exists() else ""
             os.replace(tmp, path)
+            why = _toolbox_refuses(path, needs_toolbox) or _roles_refuse(before, docs)
+            if why:
+                path.write_text(before)
+                publish(path)
+                _err(report, why)
     finally:
         tmp.unlink(missing_ok=True)
     return report

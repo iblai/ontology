@@ -17,6 +17,8 @@ import {
   reach,
   type ToggleKind,
 } from "@/lib/ontology/graph";
+import { held, roleScope, setTools } from "@/lib/ontology/access";
+import { useRoleLabel } from "@/lib/ontology/use-role-label";
 import { CARD, COLUMNS, colX, layoutFlow, type FlowCard } from "@/lib/ontology/flow";
 import { SectionHeader } from "@/components/console/section-header";
 import { EmptyState } from "@/components/console/empty-state";
@@ -39,11 +41,18 @@ const kindOf = (id: string) => id.split(":")[0] as GraphKind;
 const STRETCH = "cursor-pointer after:absolute after:inset-0";
 /** On a card's other control: it stays clickable above the stretched one. */
 const RAISED = "relative z-10";
+/** A switch over several tools of which the role holds some: its thumb rests in the middle. */
+const SOME = "data-[state=unchecked]:bg-foreground/30 [&>span]:translate-x-[7px]!";
+/** The methods an API's tools send, in the order their switches stand. */
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+/** What a switch is over, for its words: reading, changing data, or one method. */
+type Verb = "read" | "write" | "method";
 
 export default function AccessPage() {
   const t = useTranslations("access");
   const tg = useTranslations("graph");
   const tc = useTranslations("common");
+  const roleLabel = useRoleLabel();
   const [data, setData] = useState<GraphData | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [toolsets, setToolsets] = useState<McpToolset[]>([]);
@@ -111,25 +120,81 @@ export default function AccessPage() {
     () => new Set(graph.nodes.filter((n) => n.kind === "toolset" && n.meta.write).map((n) => n.id)),
     [graph.nodes],
   );
+  // The tools on the map: which can change data, what each sends, and whose each is.
+  const tooling = useMemo(() => {
+    const tools = graph.nodes.filter((n) => n.kind === "tool");
+    const name = (id: string) => id.slice("tool:".length);
+    const owned = (key: "service" | "source") => {
+      const by = new Map<string, string[]>();
+      for (const n of tools) {
+        const owner = String(n.meta[key] ?? "");
+        if (owner) by.set(owner, [...(by.get(owner) ?? []), name(n.id)]);
+      }
+      return by;
+    };
+    return {
+      toolsets,
+      writing: new Set(tools.filter((n) => n.meta.write).map((n) => name(n.id))),
+      known: new Set(tools.map((n) => name(n.id))),
+      method: new Map(tools.map((n) => [name(n.id), String(n.meta.method ?? "")])),
+      byService: owned("service"),
+      bySource: owned("source"),
+    };
+  }, [graph.nodes, toolsets]);
+  // What the picked role may call. An older backend's roles hold no tool by name: it gets
+  // the toolset switches alone, never one that would save nothing.
+  const scope = useMemo(
+    () => (role && role.mcp_tools !== undefined ? roleScope(role, tooling) : null),
+    [role, tooling],
+  );
 
-  async function onGrant(kind: ToggleKind, name: string) {
-    if (!role) return;
-    const patch = grantPatch(graph, role, kind, name);
+  /** After a save: the map, the roles with how far each now reaches, and the toolsets, read again. */
+  async function refresh() {
+    try {
+      const [g, r, ts] = await Promise.all([
+        apiClient.graph.get(false),
+        apiClient.roles.list(),
+        apiClient.mcp.toolsets(),
+      ]);
+      if (g.ok === false) toast.error(g.message || tg("loadFailed"));
+      else setData(g);
+      setRoles(r);
+      setToolsets(ts);
+    } catch (e) {
+      console.error("access reload failed", e);
+      toast.error(tg("loadFailed"));
+    }
+  }
+
+  /** Save a role as it now stands and say so; the switches wait until the page has read it back. */
+  async function saveRole(next: Role, said: string) {
     setSaving(true);
     try {
-      const r = await apiClient.roles.save(patch.role);
+      const r = await apiClient.roles.save(next);
       if (!r.ok) {
         toast.error(r.message);
         return;
       }
-      setRoles((rs) => rs.map((x) => (x.name === role.name ? patch.role : x)));
-      setData((d) => d && { ...d, links: patch.links });
-      toast.success(tg(patch.had ? "revoked" : "granted", { role: role.display_name, name }));
+      toast.success(said);
+      await refresh();
     } catch {
       toast.error(tc("failed"));
     } finally {
       setSaving(false);
     }
+  }
+
+  function onGrant(kind: ToggleKind, name: string) {
+    if (!role) return;
+    const patch = grantPatch(graph, role, kind, name);
+    const said = tg(patch.had ? "revoked" : "granted", { role: role.display_name, name });
+    return saveRole(patch.role, said);
+  }
+
+  /** Switch some tools on or off for the picked role; `own` is the toolset whose card it is. */
+  function onTools(tools: string[], on: boolean, said: string, own?: string) {
+    if (!role) return;
+    return saveRole(setTools(role, tools, on, tooling, own), said);
   }
 
   async function onMember(tool: string) {
@@ -146,19 +211,9 @@ export default function AccessPage() {
         toast.error(r.message);
         return;
       }
-      setToolsets((ts) => ts.map((x) => (x.name === next.name ? next : x)));
-      const source = `toolset:${next.name}`;
-      const target = `tool:${tool}`;
-      setData((d) => {
-        if (!d) return d;
-        const links = d.links.filter(
-          (l) =>
-            !(l.kind === "contains" && endId(l.source) === source && endId(l.target) === target),
-        );
-        if (!had) links.push({ source, target, kind: "contains" });
-        return { ...d, links };
-      });
       toast.success(t(had ? "removed" : "added", { tool, toolset: next.name }));
+      // What a toolset lends changes how far its roles reach.
+      await refresh();
     } catch {
       toast.error(tc("failed"));
     } finally {
@@ -208,9 +263,74 @@ export default function AccessPage() {
     setDragging(false);
   }
 
+  /** The tools under a card: its own, a toolset's, a source's or a system's. */
+  function under(card: FlowCard): string[] {
+    const name = card.id.slice(card.kind.length + 1);
+    if (card.kind === "tool") return [name];
+    if (card.kind === "toolset") return toolsets.find((ts) => ts.name === name)?.tools ?? [];
+    if (card.kind === "source") return tooling.bySource.get(name) ?? [];
+    return card.kind === "service" ? (tooling.byService.get(name) ?? []) : [];
+  }
+
+  /** What a switch over `tools` shows and does: on, off or some, its words, and its flip. */
+  function over(card: FlowCard, tools: string[], verb: Verb, method = "") {
+    const state = scope ? held(scope, tools) : "none";
+    const on = state !== "all";
+    const words = { role: role?.display_name ?? "", name: card.label, method };
+    const label = t(`${verb}Of`, { name: card.label, method });
+    return {
+      state,
+      label: state === "some" ? t("someOf", { what: label }) : label,
+      flip: () =>
+        onTools(
+          tools,
+          on,
+          t(`${on ? "can" : "cannot"}.${verb}`, words),
+          card.kind === "toolset" ? card.label : undefined,
+        ),
+    };
+  }
+
+  /** A system's methods in its card's top row: one switch per method its tools send. */
+  function methods(card: FlowCard) {
+    if (!scope || card.kind !== "service") return null;
+    const tools = under(card);
+    const sent = METHODS.map((m) => [m, tools.filter((x) => tooling.method.get(x) === m)] as const);
+    if (sent.every(([, list]) => list.length === 0)) return null;
+    return (
+      <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+        {sent.map(([method, list]) => {
+          if (list.length === 0) return null;
+          const { state, label, flip } = over(card, list, "method", method);
+          return (
+            <button
+              key={method}
+              type="button"
+              aria-pressed={state === "all" ? true : state === "some" ? "mixed" : false}
+              aria-label={label}
+              title={state === "some" ? t("some") : undefined}
+              disabled={saving}
+              onClick={flip}
+              className={cn(
+                RAISED,
+                "rounded border px-1 text-[9px] leading-4 font-medium disabled:opacity-50",
+                state === "all" && "border-foreground bg-foreground text-background",
+                state === "some" && "border-foreground/60 text-foreground border-dashed",
+              )}
+            >
+              {method}
+            </button>
+          );
+        })}
+      </span>
+    );
+  }
+
   /** The switch in a card's top row: a role's toolset grant, or a tool's membership in the picked toolset. */
   function control(card: FlowCard) {
-    if (role && card.kind === "toolset")
+    // Where roles hold tools by name, Read and Write stand on the card's last row instead;
+    // a toolset with no tool yet is still held whole, so what joins it later comes along.
+    if (role && card.kind === "toolset" && (!scope || under(card).length === 0))
       return (
         <Switch
           className={STRETCH}
@@ -262,9 +382,54 @@ export default function AccessPage() {
         </span>
       );
     }
+    // With a role picked: Read over the tools under the card that only read, Write over those
+    // that change data. With a toolset picked a tool's card is about its place in that toolset.
+    const tools = scope && !(toolset && card.kind === "tool") ? under(card) : [];
+    const reads = tools.filter((x) => !tooling.writing.has(x));
+    const changes = tools.filter((x) => tooling.writing.has(x));
+    if (tools.length > 0) {
+      // A click anywhere on the card flips its switch only where it has just one.
+      const place = reads.length > 0 && changes.length > 0 ? RAISED : STRETCH;
+      const one = (list: string[], verb: Verb) => {
+        const { state, label, flip } = over(card, list, verb);
+        return (
+          <Switch
+            className={cn(place, state === "some" && SOME)}
+            aria-label={label}
+            title={state === "some" ? t("some") : undefined}
+            checked={state === "all"}
+            disabled={saving}
+            onCheckedChange={flip}
+          />
+        );
+      };
+      return (
+        <span className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+          {reads.length > 0 && (
+            <>
+              {t("read")}
+              {one(reads, "read")}
+            </>
+          )}
+          {changes.length > 0 && (
+            <>
+              <span className={cn(reads.length > 0 && "ml-1")}>{t("write")}</span>
+              {one(changes, "write")}
+            </>
+          )}
+        </span>
+      );
+    }
     const fact =
       card.fact ?? (card.count ? t(`count.${card.count.unit}`, { n: card.count.n }) : "");
-    const text = writes.has(card.id) ? `${fact} · ${tc("changesData")}` : fact;
+    // A role's card says how far it reaches, where the backend says so.
+    const level =
+      card.kind === "role" ? roles.find((r) => `role:${r.name}` === card.id)?.access : undefined;
+    const text = writes.has(card.id)
+      ? `${fact} · ${tc("changesData")}`
+      : level
+        ? `${t(`levelName.${level}`)} · ${fact}`
+        : fact;
     return <span className="text-muted-foreground truncate text-[11px]">{text}</span>;
   }
 
@@ -275,14 +440,14 @@ export default function AccessPage() {
         <div className="flex flex-col gap-1">
           <Label className="text-muted-foreground text-xs">{t("role")}</Label>
           <Select value={roleName} onValueChange={setRoleName}>
-            <SelectTrigger className="h-9 w-56" aria-label={t("role")}>
+            <SelectTrigger className="h-9 w-72" aria-label={t("role")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("allRoles")}</SelectItem>
               {roles.map((r) => (
                 <SelectItem key={r.name} value={r.name}>
-                  {r.display_name}
+                  {roleLabel(r)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -296,7 +461,7 @@ export default function AccessPage() {
           {toolset
             ? t("hintToolset", { name: toolset.name })
             : role
-              ? t("hintRole", { role: role.display_name })
+              ? t(scope ? "hintRole" : "hintRoleToolsets", { role: role.display_name })
               : t("hint")}
         </p>
       </div>
@@ -369,15 +534,8 @@ export default function AccessPage() {
             </svg>
             {flow.cards.map((card) => {
               const on = !lit || lit.has(card.id);
-              // Memory domains are white hubs on the dark map; on paper they take their entity group's green.
-              const color =
-                KIND_COLORS[
-                  card.kind === "agent"
-                    ? "role"
-                    : card.kind === "memory_domain"
-                      ? "entity_group"
-                      : card.kind
-                ];
+              const color = KIND_COLORS[card.kind === "agent" ? "role" : card.kind];
+              const sends = methods(card);
               const cardRole = card.kind === "role" ? card.id.slice("role:".length) : null;
               const picked =
                 cardRole !== null
@@ -400,7 +558,7 @@ export default function AccessPage() {
                   }}
                 >
                   <div className="text-muted-foreground flex h-5 items-center justify-between gap-2 text-[10px] tracking-wide uppercase">
-                    <span>{t(`kinds.${card.kind}`)}</span>
+                    {sends ?? <span>{t(`kinds.${card.kind}`)}</span>}
                     {control(card)}
                   </div>
                   {cardRole !== null || card.kind === "toolset" ? (

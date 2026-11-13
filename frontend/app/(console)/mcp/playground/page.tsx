@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Play } from "lucide-react";
 import { apiClient } from "@/lib/ontology/api-client";
@@ -28,13 +29,21 @@ export default function PlaygroundPage() {
   const [params, setParams] = useState<Record<string, string>>({});
   const [result, setResult] = useState<string>("");
   const [running, setRunning] = useState(false);
+  // Try on a system's page opens this page on its endpoint's tool.
+  const wanted = useSearchParams().get("tool");
 
   useEffect(() => {
     apiClient.mcp
       .tools()
-      .then(setTools)
+      .then((found) => {
+        setTools(found);
+        const opened = found.find((t) => t.name === wanted);
+        if (!opened) return;
+        setToolName(opened.name);
+        setParams(Object.fromEntries(opened.parameters.map((p) => [p.name, ""])));
+      })
       .catch((e) => console.error("playground load failed", e));
-  }, []);
+  }, [wanted]);
 
   const tool = tools?.find((t) => t.name === toolName);
 

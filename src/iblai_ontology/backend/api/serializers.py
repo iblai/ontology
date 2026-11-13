@@ -180,15 +180,32 @@ class ServiceSerializer(serializers.ModelSerializer):
                 "column_count": int(
                     t.get("column_count", len(t.get("columns", []) or []))
                 ),
+                # The business term generated for it, where it has one.
+                **({"term": str(t["term"])} if t.get("term") else {}),
             }
             for t in (m.get("tables") or [])
         ]
-        return {
+        out = {
             "db_type": m.get("db_type", ""),
+            # The name a term's table is matched by (graph/builder.py).
+            "database": str(m.get("database") or ""),
             "total_tables": int(m.get("total_tables", len(tables)) or 0),
             "total_rows": int(m.get("total_rows", 0) or 0),
             "tables": tables,
         }
+        if "terms" in m:  # an Auto Ontology server: what its last reading took
+            out.update(
+                terms=int(m.get("terms") or 0),
+                of=int(m.get("of") or 0),
+                databases=[
+                    {
+                        "name": str(d.get("name") or ""),
+                        "terms": int(d.get("terms") or 0),
+                    }
+                    for d in (m.get("databases") or [])
+                ],
+            )
+        return out
 
 
 class ServiceHealthSerializer(serializers.ModelSerializer):
@@ -385,11 +402,14 @@ class McpToolSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, default="")
     parameters = serializers.SerializerMethodField()
     statement = serializers.CharField(required=False, allow_blank=True)
-    # The system an API operation runs on: the gateway runs it there, not the Toolbox.
+    # The system a tool is an operation or an endpoint of: it comes and goes with it.
     service = serializers.CharField(required=False, allow_blank=True)
 
     def get_parameters(self, obj):
-        params = (obj.get("parameters") if isinstance(obj, dict) else None) or []
+        from iblai_ontology.backend.mcp_server.handlers import tool_parameters
+
+        # What a caller gives it: an http tool keeps its arguments in four lists of its own.
+        params = tool_parameters(obj) if isinstance(obj, dict) else []
         return McpToolParameterSerializer(params, many=True).data
 
 
@@ -422,11 +442,23 @@ class RoleSerializer(serializers.Serializer):
     name = serializers.CharField(source="role")
     display_name = serializers.CharField()
     mcp_toolsets = serializers.ListField(child=serializers.CharField())
+    # Tools held by their own name, beside what the toolsets lend.
+    mcp_tools = serializers.ListField(child=serializers.CharField())
     memory_paths = serializers.ListField(child=serializers.CharField())
     cache_tables = serializers.ListField(child=serializers.CharField())
     admin_dashboard = serializers.BooleanField()
     agents = serializers.ListField(child=serializers.CharField())
     concurrency_limits = serializers.DictField(required=False)
+    # How far the role reaches, worked out from the above: none, read, write or read_write.
+    access = serializers.SerializerMethodField()
+
+    def get_access(self, obj) -> str:
+        resolver = self.context.get("resolver")
+        if resolver is None:
+            from iblai_ontology.backend.mcp_server.toolsets import ToolsetResolver
+
+            resolver = self.context["resolver"] = ToolsetResolver()
+        return resolver.level(obj)
 
 
 class ConfigFileSerializer(serializers.Serializer):
@@ -482,6 +514,10 @@ class McpTestResultSerializer(serializers.Serializer):
 class AddServiceSerializer(serializers.Serializer):
     # A name becomes a folder, a schedule prefix and a tool prefix: nothing else is taken.
     name = serializers.RegexField(r"^[a-z0-9][a-z0-9_-]{0,62}$")
+    # The name people read; absent, each kind of system has its own default.
+    display_name = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=255
+    )
     # Optional: the chosen adapter's SERVICE_TYPE is authoritative for the stored
     # category (DiscoveryEngine.run), so this is accepted for the SPA's
     # AddServiceInput shape but not required — and never overrides the adapter.
@@ -508,6 +544,61 @@ class AddServiceSerializer(serializers.Serializer):
         if value == "databases":  # the lookup's own path under /services
             raise serializers.ValidationError("That name is taken by the console.")
         return value
+
+
+class EndpointSerializer(serializers.Serializer):
+    """One endpoint of a custom API, as it was entered; ``tool`` is what an agent calls."""
+
+    name = serializers.CharField()
+    tool = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+    method = serializers.CharField()
+    path = serializers.CharField()
+    query = serializers.ListField(child=serializers.CharField(), default=list)
+    body = serializers.BooleanField(default=False)
+    write = serializers.BooleanField(default=False)
+
+
+class TermColumnSerializer(serializers.Serializer):
+    """A column a term's business name stands on."""
+
+    name = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+    certified = serializers.BooleanField()
+    table = serializers.CharField(allow_blank=True)
+    column = serializers.CharField(allow_blank=True)
+
+
+class TermCalculationSerializer(serializers.Serializer):
+    """A named SQL expression kept under a term."""
+
+    name = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+    expression = serializers.CharField(allow_blank=True, trim_whitespace=False)
+    certified = serializers.BooleanField()
+
+
+class TermDetailSerializer(serializers.Serializer):
+    """One term: read from its Auto Ontology server just now, or generated here."""
+
+    ok = serializers.BooleanField()
+    message = serializers.CharField(allow_blank=True)
+    columns = TermColumnSerializer(many=True)
+    calculations = TermCalculationSerializer(many=True)
+
+
+class EndpointInputSerializer(serializers.Serializer):
+    # What each may hold is services/http_api.py's to say, in its own words.
+    description = serializers.CharField(max_length=1000)
+    method = serializers.CharField(max_length=10)
+    path = serializers.CharField(max_length=500)
+    query = serializers.ListField(
+        child=serializers.CharField(max_length=64),
+        required=False,
+        default=list,
+        max_length=30,
+    )
+    body = serializers.BooleanField(required=False, default=False)
 
 
 class AgentSerializer(serializers.Serializer):
@@ -669,6 +760,7 @@ class MapResultSerializer(serializers.Serializer):
 class RoleInputSerializer(serializers.Serializer):
     display_name = serializers.CharField()
     mcp_toolsets = serializers.ListField(child=serializers.CharField(), default=list)
+    mcp_tools = serializers.ListField(child=serializers.CharField(), default=list)
     memory_paths = serializers.ListField(child=serializers.CharField(), default=list)
     cache_tables = serializers.ListField(child=serializers.CharField(), default=list)
     agents = serializers.ListField(child=serializers.CharField(), default=list)

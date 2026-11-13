@@ -90,6 +90,34 @@ with the mark, `ontology mcp build`, a Toolbox restart, then the role's switch o
 the Access page. [components/01-mcp-inbound.md](components/01-mcp-inbound.md#tools-that-change-data)
 has the YAML.
 
+## Tools held by name
+
+A role can also hold one tool by its own name (`mcp_tools`), beside its toolsets: this is
+what a switch on the Access page writes when it stands for less than a whole toolset.
+
+- The gateway lends a tool when one of the role's toolsets lends it, as above, or when the
+  role names it. A tool held by name is lent as it is, whether it reads or changes data: the
+  name is the grant, as a marked toolset's name is. `*` never names a tool.
+- In the platform it is the resource `/custom/ontology/tools/<name>/` of the role's policy,
+  counted when the role holds `Ontology/Tools/action`. A grant on the root, or on
+  `/custom/ontology/tools/` alone, lends no tool.
+- **A grant to read never becomes one to change.** When a save of `tools.yaml` removes a
+  tool, or turns one that reads into one that changes data, the tool is taken from every role
+  that holds it by name before the save stands; if the roles cannot be written, the file is
+  put back.
+- **What the switches do.** On a card of the Access page, Read is every tool under it that
+  only reads and Write every tool under it that changes data: a tool is itself, a toolset its
+  tools, a source the tools that use it, a system its own tools, and a system reached over a
+  web API also has one switch per HTTP method. On adds the missing tools by name; on a
+  toolset's own card a role that ends up with all it lends holds the toolset, so a tool added
+  to it later comes along. Off takes the tools away however they were held: a toolset that
+  lent one is replaced by its other tools, by name, and `*` by the read-only toolsets it stood
+  for.
+- **How far a role reaches** (`access` on `GET /roles`) is worked out from this: `read_write`
+  when a tool that changes data is within its reach and something it can read is too, `write`
+  or `read` when only one is, `none` when it reaches nothing. Reading is a tool that only
+  reads, a memory path or a cache table. The console shows it after the role's name.
+
 A connector can ship its operations instead. Connecting Twenty CRM adds the toolset
 `<system>-writes`, already marked, with ten tools of type `twenty` that the gateway
 runs itself with the system's own key: create and update, no delete. The same

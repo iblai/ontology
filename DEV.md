@@ -94,6 +94,14 @@ elsewhere (the hosted DM: `https://asgi.data.iblai.app`). The probe sends each t
 `llm.sample_rows` sample rows (default 5) to the model; `--sample-rows 0` sends names and types only.
 The key's owner must be a platform admin with credits.
 
+**Generate terms** (a database system's Terms tab, `POST /services/<name>/terms`,
+`discovery/terms.py`) uses the same call with no `llm` block at all: with none configured it
+asks the platform's model (`iblai/iblai-pro`) with the server's own platform key, so locally it
+needs the four variables above and, where completions are served elsewhere,
+`IBLAI_INFERENCE_URL`. It sends each table's name, discovery's one-line description and its
+columns' names, types and keys, never a row; one press works for 45 seconds, four questions at
+a time, and keeps each answer on its `ServiceTable` row (`payload["term"]`).
+
 ## Expose the gateway to an ibl.ai agent
 
 The MCP gateway is `POST /mcp` on the backend, a stateless streamable-HTTP MCP server. An agent
@@ -244,6 +252,42 @@ the REST path leaves them out. Where a deployment preloads `sql/schema.sql` into
 the house table already exists and an unmapped source column has nowhere to go: extend the table or
 map the column before the first sync.
 
+## A custom API, locally
+
+Any HTTP API is connected in the frontend (**Add a system** → **Custom API**) and called by the
+MCP Toolbox, so a backend started by hand needs one running and `MCP_TOOLBOX_URL` in its
+environment. Without it a system still connects, and saving an endpoint is refused ("This server
+runs no MCP Toolbox").
+
+```bash
+# Once, so the Toolbox has a file to start on; the backend rewrites it on every change.
+uv run ontology mcp build                         # <config folder>/generated/toolbox.yaml
+# The Toolbox on the backend's config folder, as deploy/compose.yaml runs it.
+docker run --rm -p 127.0.0.1:5000:5000 -v "<config folder>":/config:ro \
+  us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.5.0 \
+  --config /config/generated/toolbox.yaml --address 0.0.0.0 --port 5000 --poll-interval 2
+# In the backend's environment, before it starts.
+export MCP_TOOLBOX_URL=http://127.0.0.1:5000
+```
+
+An API on this machine is reached at Docker's bridge address (`http://172.17.0.1:<port>`, with
+the API listening there): that counts as inside a private network. `localhost` is refused, as it
+is on a server. The key is added by the gateway (`services/http_api.py`, `signed`) and is in
+neither `tools.yaml` nor the Toolbox's file.
+
+## NVIDIA Auto Ontology's terms, locally
+
+**Add a system** → **NVIDIA Auto Ontology** reads the business terms of an Auto Ontology server
+and draws them on the semantic map (`services/auto_ontology.py`). To try it, run NVIDIA's own
+stack from its clone as its README says (it needs model keys in its `.env`), connect a database
+there and turn on **Settings → Semantic Compilation**. Connect the same database here: tables
+match by database, schema and table name.
+
+The address is the one its frontend answers at, with the API token of a viewer (user menu →
+**API Tokens**). Where its backend's own port (3001) is reachable, that port works with no
+token: it asks for none. `localhost` is refused, as it is on a server: use this machine's LAN
+address, or Docker's bridge address (`http://172.17.0.1:<port>`) with the port published there.
+
 ## Dependencies
 
 ```bash
@@ -356,6 +400,7 @@ client's own verbs:
 | In the role | Policy resource | Verb the role holds |
 |---|---|---|
 | `mcp_toolsets: [T]`, `["*"]`, `["*", W]` | `/custom/ontology/toolsets/T/`, `/custom/ontology/toolsets/`, both | `Ontology/Toolsets/action` |
+| `mcp_tools: [T]` (a tool held by name; no `*`) | `/custom/ontology/tools/T/` | `Ontology/Tools/action` |
 | `cache_tables: [X]`, `["*"]` | `/custom/ontology/tables/X/`, `/custom/ontology/tables/` | `Ontology/Tables/read` |
 | `/ontology/a/b/**`, `/ontology/**` | `/custom/ontology/memory/a/b/`, `/custom/ontology/memory/` | `Ontology/Memory/read` |
 | `/ontology/a/_index.md`, one file | `/custom/ontology/memory/a/_index*/` (the `*` stands for `.md`) | `Ontology/Memory/read` |

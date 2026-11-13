@@ -10,6 +10,7 @@ import type { GraphData, GraphKind, GraphLink, GraphNode } from "@/lib/ontology/
 import {
   FLOW,
   GRANT,
+  INK,
   KIND_COLORS,
   degrees,
   endId,
@@ -37,15 +38,35 @@ interface CanvasProps {
 }
 
 const LEAF: ReadonlySet<GraphKind> = new Set(["column", "memory_record"]);
-const RED = "#e66767";
-const WHITE = "#f5f5f4";
+const RED = "#e34948";
+/** Labels away from the pointer. */
+const INK_SOFT = "#52514e";
+/** The moving dots on sync flows: the brand's blue. */
+const FLOW_BLUE = "#0058cc";
 const FIT_PADDING = 48;
+/** A canvas shadow is measured in device pixels, whatever the zoom. */
+const DPR = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 const radius = (kind: GraphKind, d: number) =>
   kind === "memory_domain"
     ? 6 + 1.2 * Math.sqrt(d)
     : LEAF.has(kind)
       ? 1.6 + 0.5 * Math.sqrt(d)
       : 3 + 1.8 * Math.sqrt(d);
+
+/** A node's outline: a circle; a term, which wears its tables' colour, is a diamond. */
+function outline(ctx: CanvasRenderingContext2D, kind: GraphKind, x: number, y: number, r: number) {
+  ctx.beginPath();
+  if (kind !== "term") {
+    ctx.arc(x, y, r, 0, 2 * Math.PI);
+    return;
+  }
+  const d = r * 1.3;
+  ctx.moveTo(x, y - d);
+  ctx.lineTo(x + d, y);
+  ctx.lineTo(x, y + d);
+  ctx.lineTo(x - d, y);
+  ctx.closePath();
+}
 
 /** Keeps dots apart so the cluster breathes and labels get room. */
 // ponytail: O(n²) pair loop, fine below ~500 nodes; d3-force-3d's quadtree collide if the graph grows.
@@ -75,7 +96,7 @@ function collide(pad: (n: N) => number) {
   return force;
 }
 
-/** The force graph: dots sized by links, glowing hubs, labels where there is room, particles on sync flows. */
+/** The force graph on white: dots sized by links, hubs in a soft halo, labels where there is room, particles on sync flows. */
 export default function GraphCanvas({
   data,
   hiddenKinds,
@@ -182,39 +203,55 @@ export default function GraphCanvas({
           const hub = n.kind === "memory_domain" || d >= 8;
           const r = radius(n.kind, d);
           const on = bright(n.id);
-          const alpha = on ? 1 : 0.12;
-          const colour = n.kind === "memory_domain" ? WHITE : KIND_COLORS[n.kind];
+          const alpha = on ? 1 : 0.14;
+          const colour = KIND_COLORS[n.kind];
           const selected = n.id === selectedId;
           const x = n.x ?? 0;
           const y = n.y ?? 0;
           if (hub || selected) {
-            ctx.globalAlpha = alpha * (selected ? 0.3 : 0.16);
+            // A halo in the dot's own colour, fading out to the page.
+            const halo = ctx.createRadialGradient(x, y, r, x, y, r * 2.6);
+            halo.addColorStop(0, `${colour}${selected ? "4d" : "33"}`);
+            halo.addColorStop(1, `${colour}00`);
+            ctx.globalAlpha = alpha;
             ctx.beginPath();
-            ctx.arc(x, y, r * 2.4, 0, 2 * Math.PI);
-            ctx.fillStyle = selected ? "#ffffff" : colour;
+            ctx.arc(x, y, r * 2.6, 0, 2 * Math.PI);
+            ctx.fillStyle = halo;
             ctx.fill();
           }
           ctx.globalAlpha = alpha;
-          ctx.beginPath();
-          ctx.arc(x, y, r, 0, 2 * Math.PI);
+          outline(ctx, n.kind, x, y, r);
           if (n.kind === "missing") {
             ctx.strokeStyle = colour;
             ctx.lineWidth = 1 / scale;
             ctx.stroke();
           } else {
+            // A soft shadow lifts the dot off the page; leaves and dimmed dots go without.
+            if (on && !LEAF.has(n.kind)) {
+              ctx.shadowColor = "rgba(11,11,11,0.22)";
+              ctx.shadowBlur = 5 * DPR;
+              ctx.shadowOffsetY = DPR;
+            }
             ctx.fillStyle = colour;
             ctx.fill();
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+            // A ring of the page's white keeps touching dots and link ends apart.
+            outline(ctx, n.kind, x, y, r + 0.75 / scale);
+            ctx.strokeStyle = SURFACE;
+            ctx.lineWidth = 1.5 / scale;
+            ctx.stroke();
           }
           const ring = selected
-            ? "#ffffff"
+            ? INK
             : granted.has(n.id) && focusColor
               ? focusColor
               : issues && n.health
                 ? RED
                 : null;
           if (ring) {
-            ctx.beginPath();
-            ctx.arc(x, y, r + 2 / scale, 0, 2 * Math.PI);
+            outline(ctx, n.kind, x, y, r + 3 / scale);
             ctx.strokeStyle = ring;
             ctx.lineWidth = 1.5 / scale;
             ctx.stroke();
@@ -231,11 +268,13 @@ export default function GraphCanvas({
             ctx.font = `${(hub ? 12.5 : 11.5) / scale}px ui-sans-serif, system-ui, sans-serif`;
             ctx.textAlign = "left";
             ctx.textBaseline = "middle";
+            // The label's own halo of white, so a link behind it does not strike it through.
+            ctx.lineJoin = "round";
             ctx.lineWidth = 3.5 / scale;
             ctx.strokeStyle = SURFACE;
-            ctx.strokeText(n.label, x + r + 4 / scale, y);
-            ctx.fillStyle = hub || near ? WHITE : "#c7cbd6";
-            ctx.fillText(n.label, x + r + 4 / scale, y);
+            ctx.strokeText(n.label, x + r + 5 / scale, y);
+            ctx.fillStyle = hub || near ? INK : INK_SOFT;
+            ctx.fillText(n.label, x + r + 5 / scale, y);
           }
           ctx.globalAlpha = 1;
         }}
@@ -248,16 +287,18 @@ export default function GraphCanvas({
         linkColor={(l: L) => {
           const s = endId(l.source);
           const t = endId(l.target);
-          if (!bright(s) || !bright(t)) return "rgba(255,255,255,0.03)";
-          if (focusColor && GRANT.has(l.kind) && emphasis?.has(s)) return `${focusColor}aa`;
-          if (touches(l)) return "rgba(255,255,255,0.6)";
-          return active ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.14)";
+          if (!bright(s) || !bright(t)) return "rgba(11,11,11,0.04)";
+          if (focusColor && GRANT.has(l.kind) && emphasis?.has(s)) return `${focusColor}cc`;
+          if (touches(l)) return "rgba(11,11,11,0.55)";
+          return active ? "rgba(11,11,11,0.08)" : "rgba(11,11,11,0.16)";
         }}
         linkWidth={(l: L) => (touches(l) ? 1.6 : 1)}
+        // A join the database does not declare, inferred by Auto Ontology, is dashed.
+        linkLineDash={(l: L) => (l.kind === "joins" ? [3, 3] : null)}
         linkDirectionalParticles={(l: L) => (!reduced && FLOW.has(l.kind) ? 2 : 0)}
         linkDirectionalParticleSpeed={0.004}
         linkDirectionalParticleWidth={2}
-        linkDirectionalParticleColor={() => "rgba(255,255,255,0.6)"}
+        linkDirectionalParticleColor={() => FLOW_BLUE}
         onNodeHover={(n: N | null) => setHover(n?.id ?? null)}
         onNodeClick={(n: N) => onSelect(n.id)}
         onBackgroundClick={() => onSelect(null)}

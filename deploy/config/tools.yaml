@@ -6,6 +6,6 @@
 # run here. Connecting a system in the console adds its tools below; the
 # console's MCP page edits this file too.
 #
-# Multi-document YAML: kind: source | tool | toolset. A hand-written tool that
-# reads a database goes through the MCP Toolbox, which this install does not run.
+# Multi-document YAML: kind: source | tool | toolset. The MCP Toolbox of this
+# install calls the custom APIs connected in the console; it is given no database login.
 # ============================================================

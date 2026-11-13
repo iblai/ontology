@@ -1,4 +1,5 @@
 import type {
+  AgentConnection,
   Db,
   Service,
   ProvisioningRun,
@@ -13,7 +14,115 @@ import type {
   ServiceHealth,
   SyncSchedule,
 } from "../types";
+import { CUSTOM_API } from "../connectable";
 import { isoHoursAgo, isoDaysAgo, isoMinutesAgo, uid } from "./store";
+
+/**
+ * The demo is one university: a student information system (PeopleSoft, a database), a
+ * learning management system (Canvas) and two CRMs (Slate for admissions, Salesforce for
+ * advising), the last three connected as web APIs. Each endpoint is one tool: its name, its
+ * method, its path and what it does.
+ */
+const APIS: {
+  name: string;
+  display_name: string;
+  host: string;
+  endpoints: [string, string, string, string][];
+}[] = [
+  {
+    name: "canvas",
+    display_name: "Canvas LMS",
+    host: "https://alasu.instructure.com/api/v1/",
+    endpoints: [
+      ["list-courses", "GET", "/users/{user_id}/courses", "List the courses a student is in"],
+      [
+        "get-grades",
+        "GET",
+        "/users/{user_id}/enrollments",
+        "Get a student’s current grade in each course",
+      ],
+      [
+        "missing-work",
+        "GET",
+        "/users/{user_id}/missing_submissions",
+        "List the assignments a student has not handed in",
+      ],
+      ["send-message", "POST", "/conversations", "Send a student a message in the Canvas inbox"],
+      [
+        "grade-submission",
+        "PUT",
+        "/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+        "Grade or excuse a student’s submission",
+      ],
+    ],
+  },
+  {
+    name: "slate",
+    display_name: "Slate Admissions CRM",
+    host: "https://apply.alasu.edu/manage/api/",
+    endpoints: [
+      ["get-prospect", "GET", "/prospects/{prospect_id}", "Get a prospective student’s record"],
+      [
+        "get-application",
+        "GET",
+        "/applications/{application_id}",
+        "Get an application and its status",
+      ],
+      [
+        "list-checklist",
+        "GET",
+        "/applications/{application_id}/checklist",
+        "List what an application is still missing",
+      ],
+      [
+        "log-interaction",
+        "POST",
+        "/prospects/{prospect_id}/interactions",
+        "Log a call, an email or a visit with a prospect",
+      ],
+      [
+        "update-application",
+        "PATCH",
+        "/applications/{application_id}",
+        "Change an application’s status or its reader",
+      ],
+    ],
+  },
+  {
+    name: "salesforce",
+    display_name: "Salesforce Advising CRM",
+    host: "https://alasu.my.salesforce.com/services/apexrest/advising/",
+    endpoints: [
+      ["list-cases", "GET", "/students/{student_id}/cases", "List a student’s open advising cases"],
+      ["list-notes", "GET", "/students/{student_id}/notes", "List the advising notes on a student"],
+      [
+        "list-appointments",
+        "GET",
+        "/students/{student_id}/appointments",
+        "List a student’s advising appointments",
+      ],
+      ["add-note", "POST", "/students/{student_id}/notes", "Add an advising note to a student"],
+      ["book-appointment", "POST", "/appointments", "Book an advising appointment"],
+      [
+        "update-case",
+        "PATCH",
+        "/cases/{case_id}",
+        "Change an advising case: its status, its owner or its next step",
+      ],
+      [
+        "cancel-appointment",
+        "DELETE",
+        "/appointments/{appointment_id}",
+        "Cancel an advising appointment",
+      ],
+    ],
+  },
+];
+/** An API's tools that read (GET) or that change data (any other method), by name. */
+const apiTools = (api: string, write: boolean) =>
+  (APIS.find((a) => a.name === api)?.endpoints ?? [])
+    .filter(([, method]) => (method !== "GET") === write)
+    .map(([name]) => `${api}-${name}`);
 
 function peopleSoftManifest() {
   const tables = [
@@ -59,6 +168,22 @@ function peopleSoftManifest() {
     },
     {
       schema_name: "SYSADM",
+      table_name: "PS_SRVC_IND_DATA",
+      row_count: 61_480,
+      column_count: 19,
+      entity_group: "students",
+      description: "Service indicators: the holds on a student’s record.",
+    },
+    {
+      schema_name: "SYSADM",
+      table_name: "PS_ASU_ADV_NOTE",
+      row_count: 318_772,
+      column_count: 9,
+      entity_group: "advising",
+      description: "Advising notes, one per meeting with a student.",
+    },
+    {
+      schema_name: "SYSADM",
       table_name: "PS_INSTITUTION",
       row_count: 12,
       column_count: 15,
@@ -71,135 +196,7 @@ function peopleSoftManifest() {
     total_tables: 847,
     total_rows: 12_400_000,
     tables,
-  };
-}
-
-function canvasManifest() {
-  const tables = [
-    {
-      schema_name: "public",
-      table_name: "enrollments",
-      row_count: 89_432,
-      column_count: 12,
-      entity_group: "enrollment",
-      description: "Course enrollments with role and state.",
-    },
-    {
-      schema_name: "public",
-      table_name: "submissions",
-      row_count: 234_871,
-      column_count: 9,
-      entity_group: "courses",
-      description: "Assignment submissions and scores.",
-    },
-    {
-      schema_name: "public",
-      table_name: "courses",
-      row_count: 1_204,
-      column_count: 14,
-      entity_group: "courses",
-      description: "Canvas courses by term.",
-    },
-    {
-      schema_name: "public",
-      table_name: "users",
-      row_count: 45_678,
-      column_count: 8,
-      entity_group: "students",
-      description: "Canvas user accounts.",
-    },
-    {
-      schema_name: "public",
-      table_name: "assignments",
-      row_count: 12_098,
-      column_count: 11,
-      entity_group: "courses",
-      description: "Assignments with due dates and points.",
-    },
-  ];
-  return {
-    db_type: "postgres",
-    total_tables: 38,
-    total_rows: 383_283,
-    tables,
-  };
-}
-
-function slateManifest() {
-  const tables = [
-    {
-      schema_name: "slate",
-      table_name: "applications",
-      row_count: 14_567,
-      column_count: 22,
-      entity_group: "admissions",
-      description: "Admission applications by program and term.",
-    },
-    {
-      schema_name: "slate",
-      table_name: "prospects",
-      row_count: 28_901,
-      column_count: 16,
-      entity_group: "admissions",
-      description: "Prospective students and their source.",
-    },
-    {
-      schema_name: "slate",
-      table_name: "decisions",
-      row_count: 8_765,
-      column_count: 11,
-      entity_group: "admissions",
-      description: "Admission decisions per application.",
-    },
-  ];
-  return {
-    db_type: "postgres",
-    total_tables: 19,
-    total_rows: 52_233,
-    tables,
-  };
-}
-
-function snowflakeManifest() {
-  const tables = [
-    {
-      schema_name: "SALES",
-      table_name: "ORDERS",
-      row_count: 5_432_109,
-      column_count: 28,
-      entity_group: "finance",
-      description: "Sales orders and totals.",
-    },
-    {
-      schema_name: "SALES",
-      table_name: "CUSTOMERS",
-      row_count: 1_098_765,
-      column_count: 19,
-      entity_group: "customers",
-      description: "Customer master records.",
-    },
-    {
-      schema_name: "HR",
-      table_name: "EMPLOYEES",
-      row_count: 23_456,
-      column_count: 23,
-      entity_group: "hr",
-      description: "Employee records with department and salary.",
-    },
-    {
-      schema_name: "FINANCE",
-      table_name: "LEDGER",
-      row_count: 18_765_432,
-      column_count: 31,
-      entity_group: "finance",
-      description: "General ledger entries.",
-    },
-  ];
-  return {
-    db_type: "snowflake",
-    total_tables: 124,
-    total_rows: 25_317_762,
-    tables,
+    database: "CSPRD",
   };
 }
 
@@ -306,7 +303,7 @@ function buildServices(): Service[] {
   return [
     {
       name: "peoplesoft",
-      display_name: "PeopleSoft (Oracle)",
+      display_name: "PeopleSoft SIS",
       service_type: "database",
       adapter: "peoplesoft",
       status: "active",
@@ -331,74 +328,22 @@ function buildServices(): Service[] {
       rows_synced: 12_400_000,
       domain: "higher-ed",
     },
-    {
-      name: "canvas",
-      display_name: "Instructure Canvas LMS",
+    // A web API is called when an agent asks: nothing of it is synced.
+    ...APIS.map((api): Service => ({
+      name: api.name,
+      display_name: api.display_name,
       service_type: "api",
-      adapter: "canvas_api",
+      adapter: CUSTOM_API,
       status: "active",
-      host: "canvas.instructure.com",
-      connection_config: {
-        base_url: "https://canvas.instructure.com",
-        api_token: "REDACTED_SECRET_VALUE",
-      },
-      schema_manifest: canvasManifest(),
-      llm_analysis: { provider: "rule-based", entities: 8 },
-      last_discovery_at: isoDaysAgo(5),
-      last_safety_check_at: isoDaysAgo(5),
-      safety_status: "passed",
-      last_sync_at: isoHoursAgo(2),
-      sync_status: "success",
-      tables_synced: 38,
-      rows_synced: 383_283,
-      domain: "higher-ed",
-    },
-    {
-      name: "slate",
-      display_name: "Technolutions Slate CRM",
-      service_type: "api",
-      adapter: "slate_api",
-      status: "pending",
-      host: "slate.alasu.edu",
-      connection_config: {
-        base_url: "https://slate.alasu.edu",
-        api_key: "REDACTED_SECRET_VALUE",
-      },
-      schema_manifest: slateManifest(),
-      llm_analysis: { provider: "rule-based", entities: 4 },
-      last_discovery_at: isoDaysAgo(1),
-      last_safety_check_at: isoDaysAgo(1),
-      safety_status: "passed",
-      last_sync_at: undefined,
+      host: api.host,
+      connection_config: { host: api.host, header: "Authorization", api_key: "********" },
+      last_discovery_at: isoDaysAgo(6),
+      safety_status: "pending",
       sync_status: "never_run",
       tables_synced: 0,
       rows_synced: 0,
       domain: "higher-ed",
-    },
-    {
-      name: "snowflake",
-      display_name: "Snowflake Data Warehouse",
-      service_type: "database",
-      adapter: "snowflake",
-      status: "error",
-      host: "xy12345.us-east-1.snowflakecomputing.com",
-      connection_config: {
-        account: "xy12345",
-        user: "iblai_readonly",
-        password: "REDACTED_SECRET_VALUE",
-        warehouse: "ANALYTICS_WH",
-      },
-      schema_manifest: snowflakeManifest(),
-      llm_analysis: { provider: "anthropic", model: "claude-opus-4-8", entities: 6 },
-      last_discovery_at: isoDaysAgo(3),
-      last_safety_check_at: isoDaysAgo(3),
-      safety_status: "failed",
-      last_sync_at: isoHoursAgo(18),
-      sync_status: "failed",
-      tables_synced: 0,
-      rows_synced: 0,
-      domain: "enterprise",
-    },
+    })),
   ];
 }
 
@@ -432,110 +377,44 @@ function buildSyncSchedules(): SyncSchedule[] {
       enabled: true,
     },
     {
-      name: "canvas-activity",
-      cron: "0 */4 * * *",
-      source: "canvas",
-      tool: "get-canvas-activity",
+      name: "peoplesoft-holds",
+      cron: "*/15 * * * *",
+      source: "peoplesoft",
+      tool: "get-student-holds",
       mode: "delta",
-      description: "Pull Canvas activity every 4 hours",
+      description: "Sync holds every 15 minutes",
       enabled: true,
-    },
-    {
-      name: "canvas-submissions",
-      cron: "0 * * * *",
-      source: "canvas",
-      tool: "get-canvas-submissions",
-      mode: "delta",
-      description: "Sync submissions hourly",
-      enabled: true,
-    },
-    {
-      name: "slate-applications",
-      cron: "0 */6 * * *",
-      source: "slate",
-      tool: "get-applications",
-      mode: "full",
-      description: "Full refresh of Slate applications every 6 hours",
-      enabled: false,
     },
   ];
 }
 
 function buildSyncRuns(): SyncRun[] {
+  const run = (
+    schedule_name: string,
+    minutesAgo: number,
+    seconds: number,
+    counts: [number, number, number],
+    error_message?: string,
+  ): SyncRun => ({
+    id: uid("sr_"),
+    schedule_name,
+    source_system: "peoplesoft",
+    started_at: isoMinutesAgo(minutesAgo),
+    completed_at: isoMinutesAgo(minutesAgo - seconds / 60),
+    status: error_message ? "failed" : "success",
+    records_processed: counts[0],
+    records_created: counts[1],
+    records_updated: counts[2],
+    error_message,
+    duration_seconds: seconds,
+  });
   return [
-    {
-      id: uid("sr_"),
-      schedule_name: "peoplesoft-students",
-      source_system: "peoplesoft",
-      started_at: isoMinutesAgo(45),
-      completed_at: isoMinutesAgo(43),
-      status: "success",
-      records_processed: 1247,
-      records_created: 12,
-      records_updated: 1235,
-      duration_seconds: 95,
-    },
-    {
-      id: uid("sr_"),
-      schedule_name: "peoplesoft-financial-aid",
-      source_system: "peoplesoft",
-      started_at: isoMinutesAgo(50),
-      completed_at: isoMinutesAgo(48),
-      status: "success",
-      records_processed: 89,
-      records_created: 3,
-      records_updated: 86,
-      duration_seconds: 42,
-    },
-    {
-      id: uid("sr_"),
-      schedule_name: "canvas-activity",
-      source_system: "canvas",
-      started_at: isoHoursAgo(2),
-      completed_at: isoHoursAgo(2),
-      status: "success",
-      records_processed: 4521,
-      records_created: 1024,
-      records_updated: 3497,
-      duration_seconds: 180,
-    },
-    {
-      id: uid("sr_"),
-      schedule_name: "peoplesoft-courses",
-      source_system: "peoplesoft",
-      started_at: isoHoursAgo(6),
-      completed_at: isoHoursAgo(6),
-      status: "success",
-      records_processed: 432,
-      records_created: 0,
-      records_updated: 432,
-      duration_seconds: 28,
-    },
-    {
-      id: uid("sr_"),
-      schedule_name: "canvas-submissions",
-      source_system: "canvas",
-      started_at: isoHoursAgo(1),
-      completed_at: isoHoursAgo(1),
-      status: "failed",
-      records_processed: 0,
-      records_created: 0,
-      records_updated: 0,
-      error_message: "Connection timeout to canvas.instructure.com",
-      duration_seconds: 30,
-    },
-    {
-      id: uid("sr_"),
-      schedule_name: "peoplesoft-students",
-      source_system: "peoplesoft",
-      started_at: isoHoursAgo(3),
-      completed_at: isoHoursAgo(3),
-      status: "success",
-      records_processed: 1198,
-      records_created: 8,
-      records_updated: 1190,
-      duration_seconds: 88,
-    },
+    run("peoplesoft-holds", 9, 11, [214, 6, 208]),
+    run("peoplesoft-students", 45, 95, [1247, 12, 1235]),
+    run("peoplesoft-financial-aid", 50, 42, [89, 3, 86]),
+    run("peoplesoft-students", 105, 88, [1198, 8, 1190]),
+    run("peoplesoft-financial-aid", 110, 30, [0, 0, 0], "ORA-12170: TNS:Connect timeout occurred"),
+    run("peoplesoft-courses", 360, 28, [432, 0, 432]),
   ];
 }
 
@@ -551,134 +430,130 @@ function buildMcpSources(): McpSource[] {
       user: "iblai_readonly",
       password: "${PEOPLESOFT_RO_PASSWORD}",
     },
+    // A login of its own for the few changes agents may make: reads never run on it.
     {
       kind: "source",
-      name: "snowflake-wh",
-      type: "snowflake",
-      host: "xy12345.us-east-1.snowflakecomputing.com",
-      database: "ANALYTICS",
-      user: "iblai_readonly",
-      password: "${SNOWFLAKE_PASSWORD}",
+      name: "peoplesoft-rw",
+      type: "oracle",
+      host: "psft-db.internal.edu",
+      port: 1521,
+      database: "CSPRD",
+      user: "iblai_advising_rw",
+      password: "${PEOPLESOFT_RW_PASSWORD}",
     },
+    // A web API has two: one its endpoints read through, one they change data through.
+    ...APIS.flatMap((api): McpSource[] => [
+      { kind: "source", name: `${api.name}-reads`, type: "http" },
+      { kind: "source", name: `${api.name}-writes`, type: "http" },
+    ]),
   ];
 }
 
+/** A PeopleSoft tool: one fixed statement on the read-only login, or on the one that may change data. */
+function sisTool(
+  name: string,
+  description: string,
+  statement: string,
+  parameters: [string, string][],
+): McpTool {
+  return {
+    kind: "tool",
+    name,
+    type: "oracle-sql",
+    source: /^\s*select\b/i.test(statement) ? "peoplesoft-db" : "peoplesoft-rw",
+    description,
+    statement,
+    parameters: parameters.map(([param, about]) => ({
+      name: param,
+      type: "string",
+      description: about,
+      required: true,
+    })),
+  };
+}
+
+const EMPLID: [string, string] = ["student_id", "The EMPLID of the student"];
+const TERM: [string, string] = ["term", "The term code (e.g. 2268)"];
+const CLASS: [string, string] = ["class_nbr", "The class number"];
+
 function buildMcpTools(): McpTool[] {
   return [
-    {
-      kind: "tool",
-      name: "get-student-enrollment",
-      type: "oracle-sql",
-      source: "peoplesoft-db",
-      description: "Get enrollment records for a student by EMPLID",
-      parameters: [
-        {
-          name: "student_id",
-          type: "string",
-          description: "The EMPLID of the student",
-          required: true,
-        },
-        {
-          name: "term",
-          type: "string",
-          description: "Optional term code (e.g. 2026 FALL)",
-          required: false,
-        },
-      ],
-      statement:
-        "SELECT * FROM SYSADM.PS_STDNT_ENRL WHERE EMPLID = :student_id AND (:term IS NULL OR STRM = :term)",
-    },
-    {
-      kind: "tool",
-      name: "get-financial-aid",
-      type: "oracle-sql",
-      source: "peoplesoft-db",
-      description: "Get financial aid awards for a student by EMPLID",
-      parameters: [
-        {
-          name: "student_id",
-          type: "string",
-          description: "The EMPLID of the student",
-          required: true,
-        },
-        {
-          name: "aid_year",
-          type: "string",
-          description: "Optional aid year (e.g. 2026)",
-          required: false,
-        },
-      ],
-      statement: "SELECT * FROM SYSADM.PS_FIN_AID_AWD WHERE EMPLID = :student_id",
-    },
-    {
-      kind: "tool",
-      name: "get-course-catalog",
-      type: "oracle-sql",
-      source: "peoplesoft-db",
-      description: "List the active course catalog",
-      parameters: [{ name: "limit", type: "integer", description: "Max results", required: false }],
-      statement: "SELECT * FROM SYSADM.PS_CLASS_TBL WHERE ROWNUM <= :limit",
-    },
-    {
-      kind: "tool",
-      name: "get-canvas-activity",
-      type: "http",
-      source: "peoplesoft-db",
-      description: "Get recent Canvas activity events for a course",
-      parameters: [
-        { name: "course_id", type: "string", description: "Canvas course ID", required: true },
-        { name: "since", type: "string", description: "ISO timestamp", required: false },
-      ],
-    },
-    {
-      kind: "tool",
-      name: "get-canvas-submissions",
-      type: "http",
-      source: "peoplesoft-db",
-      description: "List submissions for a Canvas assignment",
-      parameters: [
-        { name: "course_id", type: "string", description: "Canvas course ID", required: true },
-        { name: "assignment_id", type: "string", description: "Assignment ID", required: true },
-      ],
-    },
-    {
-      kind: "tool",
-      name: "get-applications",
-      type: "http",
-      source: "peoplesoft-db",
-      description: "List Slate applications with optional status filter",
-      parameters: [
-        {
-          name: "status",
-          type: "string",
-          description: "Application status (e.g. admitted)",
-          required: false,
-        },
-        { name: "limit", type: "integer", description: "Max results", required: false },
-      ],
-    },
-    {
-      kind: "tool",
-      name: "get-snowflake-orders",
-      type: "snowflake-sql",
-      source: "snowflake-wh",
-      description: "Query recent orders from the Snowflake sales schema",
-      parameters: [
-        { name: "customer_id", type: "string", description: "Customer ID", required: false },
-        { name: "limit", type: "integer", description: "Max results", required: false },
-      ],
-      statement:
-        "SELECT * FROM SALES.ORDERS WHERE (:customer_id IS NULL OR CUSTOMER_ID = :customer_id) LIMIT :limit",
-    },
-    {
-      kind: "tool",
-      name: "get-snowflake-ledger",
-      type: "snowflake-sql",
-      source: "snowflake-wh",
-      description: "Query the finance ledger",
-      parameters: [{ name: "limit", type: "integer", description: "Max results", required: false }],
-      statement: "SELECT * FROM FINANCE.LEDGER LIMIT :limit",
-    },
+    sisTool(
+      "get-student-enrollment",
+      "Get a student’s classes and grades by term",
+      "SELECT * FROM SYSADM.PS_STDNT_ENRL WHERE EMPLID = :student_id AND STRM = :term",
+      [EMPLID, TERM],
+    ),
+    sisTool(
+      "get-degree-progress",
+      "Get a student’s credits, GPA and standing by term",
+      "SELECT * FROM SYSADM.PS_STDNT_CAR_TERM WHERE EMPLID = :student_id",
+      [EMPLID],
+    ),
+    sisTool(
+      "get-student-holds",
+      "List the holds on a student’s record",
+      "SELECT * FROM SYSADM.PS_SRVC_IND_DATA WHERE EMPLID = :student_id",
+      [EMPLID],
+    ),
+    sisTool(
+      "get-financial-aid",
+      "Get a student’s financial aid awards by aid year",
+      "SELECT * FROM SYSADM.PS_FIN_AID_AWD WHERE EMPLID = :student_id AND AID_YEAR = :aid_year",
+      [EMPLID, ["aid_year", "The aid year (e.g. 2027)"]],
+    ),
+    sisTool(
+      "get-course-catalog",
+      "List the class sections offered in a term",
+      "SELECT * FROM SYSADM.PS_CLASS_TBL WHERE STRM = :term",
+      [TERM],
+    ),
+    sisTool(
+      "add-advising-note",
+      "Add an advising note to a student’s record",
+      "INSERT INTO SYSADM.PS_ASU_ADV_NOTE (EMPLID, NOTE_DT, ADVISOR_ID, NOTE_TEXT) VALUES (:student_id, SYSDATE, :advisor_id, :note)",
+      [EMPLID, ["advisor_id", "The advisor’s own id"], ["note", "The note’s text"]],
+    ),
+    sisTool(
+      "release-advising-hold",
+      "Release a student’s advising hold so they can enroll",
+      "UPDATE SYSADM.PS_SRVC_IND_DATA SET SRVC_IND_ACTIVE = 'N' WHERE EMPLID = :student_id AND SRVC_IND_CD = 'ADV'",
+      [EMPLID],
+    ),
+    sisTool(
+      "post-final-grade",
+      "Post a student’s final grade for a class",
+      "UPDATE SYSADM.PS_STDNT_ENRL SET CRSE_GRADE_OFF = :grade WHERE EMPLID = :student_id AND STRM = :term AND CLASS_NBR = :class_nbr",
+      [EMPLID, TERM, CLASS, ["grade", "The letter grade"]],
+    ),
+    sisTool(
+      "drop-class",
+      "Drop a student from a class",
+      "UPDATE SYSADM.PS_STDNT_ENRL SET STDNT_ENRL_STATUS = 'D' WHERE EMPLID = :student_id AND STRM = :term AND CLASS_NBR = :class_nbr",
+      [EMPLID, TERM, CLASS],
+    ),
+    ...APIS.flatMap((api) =>
+      api.endpoints.map(([name, method, path, description]): McpTool => ({
+        kind: "tool",
+        name: `${api.name}-${name}`,
+        type: "http",
+        source: `${api.name}-${method === "GET" ? "reads" : "writes"}`,
+        service: api.name,
+        method,
+        path,
+        description,
+        parameters: [
+          ...[...path.matchAll(/\{([a-z_]+)\}/g)].map((m) => ({
+            name: m[1],
+            type: "string",
+            description: m[1].replace(/_/g, " "),
+          })),
+          ...(["POST", "PUT", "PATCH"].includes(method)
+            ? [{ name: "body", type: "map", description: "The JSON body to send, as one object." }]
+            : []),
+        ],
+      })),
+    ),
   ];
 }
 
@@ -686,73 +561,163 @@ function buildMcpToolsets(): McpToolset[] {
   return [
     {
       kind: "toolset",
-      name: "enrollment-tools",
-      tools: ["get-student-enrollment", "get-financial-aid", "get-course-catalog"],
+      name: "sis-enrollment",
+      tools: ["get-student-enrollment", "get-degree-progress", "get-student-holds"],
+    },
+    { kind: "toolset", name: "sis-financial-aid", tools: ["get-financial-aid"] },
+    { kind: "toolset", name: "sis-catalog", tools: ["get-course-catalog"] },
+    // What advising may change in the SIS, apart from what only the registrar may.
+    {
+      kind: "toolset",
+      name: "sis-advising-writes",
+      tools: ["add-advising-note", "release-advising-hold"],
+      write: true,
     },
     {
       kind: "toolset",
-      name: "canvas-tools",
-      tools: ["get-canvas-activity", "get-canvas-submissions"],
+      name: "sis-registrar-writes",
+      tools: ["post-final-grade", "drop-class"],
+      write: true,
     },
-    {
-      kind: "toolset",
-      name: "admissions-tools",
-      tools: ["get-applications", "get-student-enrollment"],
-    },
-    {
-      kind: "toolset",
-      name: "admin-analytics-tools",
-      tools: ["get-snowflake-orders", "get-snowflake-ledger"],
-    },
+    ...APIS.flatMap((api): McpToolset[] => [
+      { kind: "toolset", name: `${api.name}-reads`, tools: apiTools(api.name, false) },
+      { kind: "toolset", name: `${api.name}-writes`, tools: apiTools(api.name, true), write: true },
+    ]),
   ];
 }
 
 function buildRoles(): Role[] {
   return [
     {
-      name: "FinancialAidCounselor",
-      display_name: "Financial Aid Counselor",
-      mcp_toolsets: ["enrollment-tools"],
-      memory_paths: ["/ontology/financial-aid/**", "/ontology/students/by-id/${USER_EMPLID}.md"],
-      cache_tables: ["financial_aid", "students", "isir_data"],
-      admin_dashboard: false,
-      agents: ["general-info-agent"],
-    },
-    {
       name: "AcademicAdvisor",
       display_name: "Academic Advisor",
-      mcp_toolsets: ["enrollment-tools"],
-      memory_paths: ["/ontology/students/**", "/ontology/enrollment/**", "/ontology/courses/**"],
+      // Reads all four systems. Changes the advising CRM, and in the SIS only what advising
+      // may: a note and an advising hold, never a grade or an enrollment.
+      mcp_toolsets: [
+        "sis-enrollment",
+        "sis-financial-aid",
+        "sis-catalog",
+        "sis-advising-writes",
+        "canvas-reads",
+        "slate-reads",
+        "salesforce-reads",
+        "salesforce-writes",
+      ],
+      mcp_tools: [],
+      memory_paths: [
+        "/ontology/students/**",
+        "/ontology/enrollment/**",
+        "/ontology/courses/**",
+        "/ontology/advising/**",
+      ],
       cache_tables: ["students", "enrollment", "courses", "advising"],
       admin_dashboard: false,
-      agents: ["general-info-agent", "analytics-agent"],
+      agents: ["advising-agent"],
+      concurrency_limits: { max_records_per_query: 1000 },
+    },
+    {
+      name: "AdmissionsCounselor",
+      display_name: "Admissions Counselor",
+      // The admissions CRM is theirs; of the SIS they see the catalog alone.
+      mcp_toolsets: ["slate-reads", "slate-writes", "sis-catalog"],
+      mcp_tools: [],
+      memory_paths: ["/ontology/courses/**"],
+      cache_tables: ["courses"],
+      admin_dashboard: false,
+      agents: ["admissions-agent"],
+      concurrency_limits: { max_records_per_query: 1000 },
+    },
+    {
+      name: "FinancialAidCounselor",
+      display_name: "Financial Aid Counselor",
+      // Aid awards, and by name the two SIS reads an award depends on. Sees advising cases, changes nothing.
+      mcp_toolsets: ["sis-financial-aid", "salesforce-reads"],
+      mcp_tools: ["get-student-enrollment", "get-student-holds"],
+      memory_paths: ["/ontology/financial_aid/**", "/ontology/students/**"],
+      cache_tables: ["financial_aid", "students"],
+      admin_dashboard: false,
+      agents: ["financial-aid-agent"],
+      concurrency_limits: { max_records_per_query: 1000 },
     },
     {
       name: "Registrar",
       display_name: "Registrar",
-      mcp_toolsets: ["enrollment-tools", "admissions-tools"],
+      // The SIS whole, grades and enrollment included; the other three to read.
+      mcp_toolsets: [
+        "sis-enrollment",
+        "sis-financial-aid",
+        "sis-catalog",
+        "sis-advising-writes",
+        "sis-registrar-writes",
+        "canvas-reads",
+        "slate-reads",
+        "salesforce-reads",
+      ],
+      mcp_tools: [],
       memory_paths: ["/ontology/**"],
       cache_tables: ["*"],
-      admin_dashboard: true,
-      agents: ["general-info-agent", "analytics-agent"],
+      admin_dashboard: false,
+      agents: ["registrar-agent"],
+      concurrency_limits: { max_records_per_query: 10000 },
+    },
+    {
+      name: "Faculty",
+      display_name: "Faculty",
+      // The LMS whole. Of the SIS: the catalog, a class’s enrollment, and posting a final grade.
+      // Of the advising CRM: raising a note on a student, without reading the cases.
+      mcp_toolsets: ["canvas-reads", "canvas-writes", "sis-catalog"],
+      mcp_tools: ["get-student-enrollment", "post-final-grade", "salesforce-add-note"],
+      memory_paths: ["/ontology/courses/**", "/ontology/enrollment/**"],
+      cache_tables: ["courses", "enrollment"],
+      admin_dashboard: false,
+      agents: ["course-assistant"],
+      concurrency_limits: { max_records_per_query: 1000 },
     },
     {
       name: "Student",
       display_name: "Student",
-      mcp_toolsets: ["enrollment-tools"],
+      // Their own record and courses, to read.
+      mcp_toolsets: ["sis-catalog", "canvas-reads"],
+      mcp_tools: ["get-student-enrollment", "get-degree-progress"],
       memory_paths: ["/ontology/students/by-id/${USER_EMPLID}.md", "/ontology/courses/**"],
-      cache_tables: ["students", "enrollment", "courses"],
+      cache_tables: ["courses"],
       admin_dashboard: false,
-      agents: [],
+      agents: ["student-help-agent"],
+      concurrency_limits: { max_records_per_query: 100 },
     },
     {
       name: "IblaiOntologyAdmin",
-      display_name: "iblai/ontology Administrator",
+      display_name: "Ontology Administrator",
       mcp_toolsets: ["*"],
+      mcp_tools: [],
       memory_paths: ["/ontology/**"],
       cache_tables: ["*"],
       admin_dashboard: true,
-      agents: ["executive-dashboard-agent"],
+      agents: [],
+    },
+  ];
+}
+
+/** Two of the platform’s agents already reach the gateway, each as one role. */
+function buildAgentConnections(): AgentConnection[] {
+  return [
+    {
+      name: "7b61e4d2-academicadvisor",
+      agent: "7b61e4d2-0000-4000-8000-000000000002",
+      agent_name: "Advising coach",
+      role: "AcademicAdvisor",
+      fingerprint: "4f9c21d07ab3",
+      created_at: isoDaysAgo(9),
+      created_by: "registrar@alasu.edu",
+    },
+    {
+      name: "3f2a9c10-admissionscounselor",
+      agent: "3f2a9c10-0000-4000-8000-000000000001",
+      agent_name: "Admissions assistant",
+      role: "AdmissionsCounselor",
+      fingerprint: "b81e7c0452de",
+      created_at: isoDaysAgo(4),
+      created_by: "registrar@alasu.edu",
     },
   ];
 }
@@ -766,28 +731,24 @@ function buildHealth(): HealthSnapshot {
       size_mb: 4287.4,
       active_connections: 12,
     },
-    mcp_servers: [
-      { name: "mcp-toolbox", reachable: true, latency_ms: 42, tool_count: 6 },
-      { name: "mcp-canvas", reachable: true, latency_ms: 88, tool_count: 2 },
-      { name: "mcp-slate", reachable: false, latency_ms: 0, tool_count: 1 },
-    ],
+    // The one Toolbox runs the SIS’s statements and makes the calls to the three web APIs.
+    mcp_servers: [{ name: "mcp-toolbox", reachable: true, latency_ms: 42, tool_count: 26 }],
     sync: {
       running: true,
-      total_schedules: 6,
+      total_schedules: 4,
       failed_last_24h: 1,
-      next_due_schedule: "peoplesoft-students",
-      next_due_at: isoMinutesAgo(-15),
+      next_due_schedule: "peoplesoft-holds",
+      next_due_at: isoMinutesAgo(-6),
     },
     storage: {
-      total_files: 247,
-      total_size_mb: 18.3,
+      total_files: 2_431,
+      total_size_mb: 61.7,
       by_domain: [
-        { domain: "students", files: 89, size_mb: 6.2 },
-        { domain: "courses", files: 34, size_mb: 2.1 },
-        { domain: "financial-aid", files: 67, size_mb: 4.8 },
-        { domain: "enrollment", files: 28, size_mb: 1.9 },
-        { domain: "hr", files: 12, size_mb: 0.8 },
-        { domain: "facilities", files: 9, size_mb: 0.4 },
+        { domain: "students", files: 812, size_mb: 21.4 },
+        { domain: "enrollment", files: 640, size_mb: 14.8 },
+        { domain: "advising", files: 455, size_mb: 12.9 },
+        { domain: "financial_aid", files: 301, size_mb: 7.6 },
+        { domain: "courses", files: 215, size_mb: 2.9 },
         { domain: "_audit", files: 5, size_mb: 1.2 },
         { domain: "_schema", files: 3, size_mb: 0.9 },
       ],
@@ -795,8 +756,8 @@ function buildHealth(): HealthSnapshot {
     gateway: {
       running: true,
       url: "https://ontology.alasu.edu/mcp",
-      tool_count: 8,
-      toolset_count: 4,
+      tool_count: 26,
+      toolset_count: 11,
       active_sessions: 3,
     },
     checked_at: isoMinutesAgo(2),
@@ -805,13 +766,16 @@ function buildHealth(): HealthSnapshot {
 
 export function buildSeed(): Db {
   const services = buildServices();
-  const safetyReports: SafetyReport[] = services.map((s) =>
-    buildSafetyReport(
-      s.name,
-      s.schema_manifest?.db_type ?? "postgres",
-      s.safety_status === "passed",
-    ),
-  );
+  // A web API has no read-only suite to run: it gets no report.
+  const safetyReports: SafetyReport[] = services
+    .filter((s) => s.adapter !== CUSTOM_API)
+    .map((s) =>
+      buildSafetyReport(
+        s.name,
+        s.schema_manifest?.db_type ?? "postgres",
+        s.safety_status === "passed",
+      ),
+    );
   const serviceHealth: ServiceHealth[] = services.map((s) => ({
     id: uid("sh_"),
     service_name: s.name,
@@ -824,15 +788,9 @@ export function buildSeed(): Db {
       unknown
     >,
   }));
-  const provisioningRuns: ProvisioningRun[] = [
-    buildProvisioningRun("peoplesoft", "completed"),
-    buildProvisioningRun("canvas", "completed"),
-    buildProvisioningRun("slate", "failed", 3),
-    buildProvisioningRun("snowflake", "running"),
-  ];
   return {
     services,
-    provisioning_runs: provisioningRuns,
+    provisioning_runs: [buildProvisioningRun("peoplesoft", "completed")],
     service_health: serviceHealth,
     safety_reports: safetyReports,
     sync_schedules: buildSyncSchedules(),
@@ -841,7 +799,7 @@ export function buildSeed(): Db {
     mcp_tools: buildMcpTools(),
     mcp_toolsets: buildMcpToolsets(),
     roles: buildRoles(),
-    agent_connections: [],
+    agent_connections: buildAgentConnections(),
     health: buildHealth(),
   };
 }

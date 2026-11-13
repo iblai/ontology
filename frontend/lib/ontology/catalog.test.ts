@@ -41,8 +41,12 @@ describe("the console's copy of the catalog", () => {
 });
 
 describe("what connects from here", () => {
-  it("is Twenty and the nine database engines, each named once", () => {
+  it("is Twenty, any HTTP API, an Auto Ontology server and the nine database engines, each named once", () => {
     expect(CONNECTABLE.filter((c) => c.kind === "twenty").map((c) => c.key)).toEqual(["twenty"]);
+    expect(CONNECTABLE.filter((c) => c.kind === "api").map((c) => c.adapter)).toEqual(["http_api"]);
+    expect(CONNECTABLE.filter((c) => c.kind === "terms").map((c) => c.adapter)).toEqual([
+      "auto_ontology",
+    ]);
     expect(CONNECTABLE.filter((c) => c.kind === "database")).toHaveLength(9);
     expect(new Set(CONNECTABLE.map((c) => c.key)).size).toBe(CONNECTABLE.length);
     // Only an engine whose databases the backend can list offers them.

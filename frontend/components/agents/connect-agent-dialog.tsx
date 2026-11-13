@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/ontology/api-client";
 import type { Agent, McpToolset, Role } from "@/lib/ontology/types";
+import { useRoleLabel } from "@/lib/ontology/use-role-label";
 import { Field } from "@/components/console/form-dialog";
 import { Picker } from "@/components/console/picker";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function ConnectAgentDialog({
   onConnected: () => void;
 }) {
   const t = useTranslations("agents");
+  const roleLabel = useRoleLabel();
   const [agents, setAgents] = useState<Agent[]>([]);
   // Why the platform's agents could not be listed, in the backend's words.
   const [refused, setRefused] = useState("");
@@ -140,7 +142,7 @@ export function ConnectAgentDialog({
               <SelectContent>
                 {roles.map((r) => (
                   <SelectItem key={r.name} value={r.name}>
-                    {r.display_name || r.name}
+                    {roleLabel({ ...r, display_name: r.display_name || r.name })}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -184,6 +184,7 @@ class ServicesView(ConsoleAPIView):
         form.is_valid(raise_exception=True)
         v = form.validated_data
         name = v["name"]
+        display = " ".join(v.get("display_name", "").split())
         if store.count(Service, name=name):
             self._audit(request, action="service.add", resource=name, allowed=False)
             return _envelope(False, f"Service '{name}' already exists.")
@@ -192,14 +193,37 @@ class ServicesView(ConsoleAPIView):
             from iblai_ontology.backend.discovery.engine import DiscoveryEngine
 
             if get_adapter(v["adapter"]).SERVICE_TYPE == "api":
-                from iblai_ontology.backend.services import twenty
+                from iblai_ontology.backend.services import (
+                    auto_ontology,
+                    http_api,
+                    twenty,
+                )
 
+                if v["adapter"] == auto_ontology.ADAPTER:
+                    # Its terms are read at once: nothing is synced and no role is made.
+                    said = auto_ontology.connect(
+                        name, v.get("host", ""), v.get("api_key", ""), display
+                    )
+                    self._audit(request, action="service.add", resource=name)
+                    return _envelope(True, said)
+                if v["adapter"] == http_api.ADAPTER:
+                    # Any HTTP API: nothing to read or review; its endpoints are named afterwards.
+                    said = http_api.connect(
+                        name,
+                        v.get("host", ""),
+                        (v.get("options") or {}).get("header", ""),
+                        v.get("api_key", ""),
+                        display,
+                    )
+                    self._audit(request, action="service.add", resource=name)
+                    return _envelope(True, said)
                 # No database to introspect: the Service row and its catalog schedules.
                 service = DiscoveryEngine().register_api(
                     name=name,
                     adapter=v["adapter"],
                     host=v.get("host", ""),
                     api_key=v.get("api_key", ""),
+                    display_name=display,
                 )
                 if service.adapter == twenty.ADAPTER:
                     return self._connect_now(request, name, service.display_name)
@@ -214,6 +238,7 @@ class ServicesView(ConsoleAPIView):
                     password=v.get("password", ""),
                     use_llm=False,
                     options=v.get("options"),
+                    display_name=display,
                 )
         except Exception as exc:
             self._audit(request, action="service.add", resource=name, allowed=False)
@@ -308,6 +333,123 @@ class ServiceDetailView(ConsoleAPIView):
             return _envelope(False, f"'{name}' was not removed: {why}")
         self._audit(request, action="service.delete", resource=name)
         return _envelope(True, f"Service '{name}' removed.")
+
+
+def _custom_api(name: str):
+    """The custom API of that name, or None."""
+    from iblai_ontology.backend.services import http_api
+
+    service = store.first(Service, name=name)
+    return service if service and service.adapter == http_api.ADAPTER else None
+
+
+class ServiceEndpointsView(ConsoleAPIView):
+    """The endpoints of a custom API: each is one tool an agent may call."""
+
+    def get(self, request, name):
+        from iblai_ontology.backend.services import http_api
+
+        from .serializers import EndpointSerializer
+
+        found = http_api.endpoints(name) if _custom_api(name) else []
+        return Response(EndpointSerializer(found, many=True).data)
+
+
+class ServiceEndpointView(ConsoleAPIView):
+    """PUT/DELETE one endpoint of a custom API."""
+
+    def _change(self, request, name, endpoint, action, change):
+        from iblai_ontology.backend.services import http_api
+
+        service = _custom_api(name)
+        if service is None:
+            return _envelope(False, f"'{name}' is not a custom API.")
+        resource = f"{name}/{endpoint}"
+        try:
+            said = change(service)
+        except http_api.ApiError as exc:
+            self._audit(request, action=action, resource=resource, allowed=False)
+            return _envelope(False, str(exc)[:500])
+        self._audit(request, action=action, resource=resource)
+        return _envelope(True, said)
+
+    def put(self, request, name, endpoint):
+        from iblai_ontology.backend.services import http_api
+
+        from .serializers import EndpointInputSerializer
+
+        form = EndpointInputSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        entered = {**_plain(form.validated_data), "name": endpoint}
+        return self._change(
+            request,
+            name,
+            endpoint,
+            "service.endpoint.upsert",
+            lambda service: http_api.save(service, entered),
+        )
+
+    def delete(self, request, name, endpoint):
+        from iblai_ontology.backend.services import http_api
+
+        return self._change(
+            request,
+            name,
+            endpoint,
+            "service.endpoint.delete",
+            lambda service: http_api.remove(service, endpoint),
+        )
+
+
+class ServiceTermsView(ConsoleAPIView):
+    """Generate a business term for each table of a database system that has none yet."""
+
+    def post(self, request, name):
+        from iblai_ontology.backend.discovery import terms
+
+        service = store.first(Service, name=name)
+        if not service:
+            return _envelope(False, f"Service '{name}' not found.")
+        if service.service_type != "database":
+            return _envelope(False, f"'{name}' holds no tables to name.")
+        try:
+            # ponytail: inside the request, 45 seconds a press; a task when a schema needs many.
+            said = terms.generate(service)
+        except Exception as exc:
+            self._audit(request, action="service.terms", resource=name, allowed=False)
+            return _envelope(False, " ".join(str(exc).split())[:500])
+        self._audit(request, action="service.terms", resource=name)
+        return _envelope(True, said)
+
+
+class ServiceTermView(ConsoleAPIView):
+    """One term's columns and calculations: read now from its Auto Ontology server, or,
+    for a term generated here, from the tables that hold it."""
+
+    def get(self, request, name, term):
+        from iblai_ontology.backend.services import auto_ontology
+
+        from .serializers import TermDetailSerializer
+
+        def answer(ok: bool, message: str, found: dict | None = None):
+            return _envelope(
+                ok,
+                message,
+                extra=found or {"columns": [], "calculations": []},
+                serializer=TermDetailSerializer,
+            )
+
+        service = store.first(Service, name=name)
+        if service and service.service_type == "database":
+            from iblai_ontology.backend.discovery import terms
+
+            return answer(True, "", terms.detail(service, term))
+        if not service or service.adapter != auto_ontology.ADAPTER:
+            return answer(False, f"'{name}' is not an Auto Ontology server.")
+        try:
+            return answer(True, "", auto_ontology.term(service, term))
+        except Exception as exc:
+            return answer(False, " ".join(str(exc).split())[:400])
 
 
 class ServiceRunsView(ConsoleAPIView):
@@ -428,6 +570,23 @@ class ServiceDiscoverView(ConsoleAPIView):
         if not service:
             return _envelope(False, f"Service '{name}' not found.")
         if service.service_type == "api":
+            from iblai_ontology.backend.services import auto_ontology
+
+            if service.adapter == auto_ontology.ADAPTER:
+                # For an Auto Ontology server, discovering is reading its terms again.
+                try:
+                    said = auto_ontology.read(service)
+                except Exception as exc:
+                    self._audit(
+                        request, action="service.discover", resource=name, allowed=False
+                    )
+                    why = " ".join(str(exc).split())[:400]
+                    return _envelope(
+                        False,
+                        f"Its terms were not read: {why} What was read before is kept.",
+                    )
+                self._audit(request, action="service.discover", resource=name)
+                return _envelope(True, said)
             return _envelope(
                 False,
                 "An API system has no schema to discover: what it syncs is the catalog's list.",
@@ -446,11 +605,21 @@ class ServiceDiscoverView(ConsoleAPIView):
 
 class ServiceMapView(ConsoleAPIView):
     def post(self, request, name):
+        from iblai_ontology.backend.services import auto_ontology, http_api
+
         from .serializers import MapResultSerializer
 
-        if not store.count(Service, name=name):
+        service = store.first(Service, name=name)
+        if not service:
             return _envelope(
                 False, f"Service '{name}' not found.", serializer=MapResultSerializer
+            )
+        if service.adapter in (auto_ontology.ADAPTER, http_api.ADAPTER):
+            # Neither holds tables: what an Auto Ontology server keeps as rows are its terms.
+            return _envelope(
+                False,
+                f"'{name}' holds no tables to map.",
+                serializer=MapResultSerializer,
             )
         try:
             from iblai_ontology.backend.discovery.engine import DiscoveryEngine
@@ -907,10 +1076,21 @@ _EMPTY_GRAPH = {
 }
 
 
-def _graph_services():
+def _graph_services() -> tuple[list, dict[str, list[dict]]]:
+    """Every system with its tables and, apart, the terms each Auto Ontology server was read for."""
+    from iblai_ontology.backend.services import auto_ontology
     from iblai_ontology.backend.services.registry import with_tables
 
-    return [with_tables(s) for s in store.filter(Service)]
+    found = [with_tables(s) for s in store.filter(Service)]
+    # Such a server's rows are terms, not tables: it is never passed on as a system.
+    return (
+        [s for s in found if s.adapter != auto_ontology.ADAPTER],
+        {
+            s.name: s.schema_manifest["tables"]
+            for s in found
+            if s.adapter == auto_ontology.ADAPTER
+        },
+    )
 
 
 class GraphView(ConsoleAPIView):
@@ -927,13 +1107,15 @@ class GraphView(ConsoleAPIView):
         query.is_valid(raise_exception=True)
         reader = ConfigReader()
         try:
+            systems, terms = _graph_services()
             data = build_graph(
-                _graph_services(),
+                systems,
                 reader=reader,
                 roles=load_roles(),
                 schedules=schedules.all(),
                 by_domain=check_storage().by_domain,
                 columns=query.validated_data["columns"],
+                terms=terms,
             )
         # RuntimeError: the platform refused or did not answer (dm mode).
         except (OSError, ValueError, RuntimeError, yaml.YAMLError) as exc:
@@ -957,7 +1139,7 @@ class GraphRecordsView(ConsoleAPIView):
         found = domain_records(
             v["domain"],
             files_root=os.environ.get("ONTOLOGY_FILES_ROOT", "/ontology"),
-            fk_map=record_fk_map(_graph_services()),
+            fk_map=record_fk_map(_graph_services()[0]),
             limit=v["limit"],
         )
         if found is None:
@@ -1050,6 +1232,14 @@ class RoleDetailView(ConsoleAPIView):
         ]
         if bad:
             return _envelope(False, f"Unknown toolsets: {', '.join(bad)}")
+        # A tool is held by a name tools.yaml holds; one the role held before may stay.
+        tools = {str(t.get("name")) for t in ConfigReader().get_tools()}
+        before = set((existing or {}).get("mcp_tools") or [])
+        bad = [
+            t for t in spec.get("mcp_tools") or [] if t not in tools and t not in before
+        ]
+        if bad:
+            return _envelope(False, f"Unknown tools: {', '.join(bad)}")
         try:
             role_source.put_role(name, spec)
         except RuntimeError as exc:  # the platform's own words (dm mode)
@@ -1182,7 +1372,7 @@ class McpResourceView(ConsoleAPIView):
             report,
             action=f"mcp.{kind}.upsert",
             resource=name,
-            ok_message=f"{kind} '{name}' saved. Build and restart the MCP Toolbox to apply.",
+            ok_message=f"{kind} '{name}' saved.",
         )
 
     def delete(self, request, name, kind):
@@ -1209,7 +1399,7 @@ class McpResourceView(ConsoleAPIView):
             report,
             action=f"mcp.{kind}.delete",
             resource=name,
-            ok_message=f"{kind} '{name}' removed. Build and restart the MCP Toolbox to apply.",
+            ok_message=f"{kind} '{name}' removed.",
         )
 
 
@@ -1242,5 +1432,5 @@ class McpConfigView(ConsoleAPIView):
             report,
             action="mcp.config.save",
             resource="tools.yaml",
-            ok_message="tools.yaml saved. Build and restart the MCP Toolbox to apply.",
+            ok_message="tools.yaml saved.",
         )

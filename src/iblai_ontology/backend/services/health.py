@@ -47,9 +47,21 @@ def check_connectivity(service_name: str) -> ConnectivityResult:
     service = store.get(Service, name=service_name)
     start = time.time()
     if service.service_type == "api":
-        from iblai_ontology.backend.services import twenty
+        from iblai_ontology.backend.services import auto_ontology, http_api, twenty
         from iblai_ontology.backend.services.encryption import decrypt_connection_config
 
+        if service.adapter == auto_ontology.ADAPTER:
+            auto_ontology.check(service)
+            # Only its terms are read: nothing here can change it.
+            return ConnectivityResult(
+                connected=True,
+                read_only=True,
+                latency_ms=int((time.time() - start) * 1000),
+            )
+        if service.adapter == http_api.ADAPTER:
+            raise RuntimeError(
+                "A custom API has no check of its own: try one of its endpoints."
+            )
         if service.adapter != twenty.ADAPTER:
             raise RuntimeError(
                 f"{service.display_name or service_name} is read by a connector container "

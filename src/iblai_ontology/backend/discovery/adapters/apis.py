@@ -16,6 +16,10 @@ from .base import BaseAdapter, register
 # referenced by catalog.yaml (derived so the two never drift apart).
 _BARE_NAMES = ["canvas", "slate", "workday", "navigate"]
 _API_ADAPTERS = _BARE_NAMES + [e.adapter for e in list_entries() if e.type == "api"]
+# Any HTTP API, with the endpoints an administrator names (services/http_api.py).
+_API_ADAPTERS.append("http_api")
+# An NVIDIA Auto Ontology server, read for its business terms (services/auto_ontology.py).
+_API_ADAPTERS.append("auto_ontology")
 
 
 @register(*_API_ADAPTERS)

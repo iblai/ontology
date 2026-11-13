@@ -24,9 +24,9 @@ test("a database is added through typed fields, a digits-only port and a looked-
   await seedAuth(page);
   await page.goto("/services/add");
 
-  // Only what connects is offered: Twenty and the nine engines, searchable.
+  // Only what connects is offered: Twenty, a custom API, Auto Ontology and the nine engines, searchable.
   const system = page.getByRole("combobox", { name: "System" });
-  await expect(page.getByRole("option")).toHaveCount(10);
+  await expect(page.getByRole("option")).toHaveCount(12);
   await system.fill("post");
   await expect(page.getByRole("option")).toHaveCount(1);
   await page.getByRole("option", { name: "PostgreSQL", exact: true }).click();
@@ -114,7 +114,7 @@ test("Twenty is connected with its key alone, and a wrong key is said at once", 
   await seedAuth(page);
   // A catalog entry that connects opens the form on itself; one that does not, on the list.
   await page.goto("/services/add?from=canvas");
-  await expect(page.getByRole("option")).toHaveCount(10);
+  await expect(page.getByRole("option")).toHaveCount(12);
   await page.goto("/services/add?from=twenty");
   await expect(page.getByRole("button", { name: "Change" })).toBeVisible();
 
@@ -164,4 +164,109 @@ test("Twenty is connected with its key alone, and a wrong key is said at once", 
   await page.request.delete("/api/ontology/services/twenty");
   const roles: { name: string }[] = await (await page.request.get("/api/ontology/roles")).json();
   expect(roles.map((r) => r.name)).not.toContain("twenty");
+});
+
+test("a custom API is connected, and its endpoints are named one by one", async ({ page }) => {
+  await seedAuth(page);
+  await page.goto("/services/add");
+  await page.getByRole("combobox", { name: "System" }).fill("custom");
+  await page.getByRole("option", { name: "Custom API", exact: true }).click();
+
+  const connect = page.getByRole("button", { name: "Connect", exact: true });
+  const address = page.getByLabel("Address", { exact: true });
+  const token = page.getByLabel("Token", { exact: true });
+  await expect(address).toHaveAttribute("type", "url");
+  await expect(token).toHaveAttribute("type", "password");
+  await expect(page.getByRole("combobox", { name: "Sign-in" })).toHaveText("Bearer token");
+  await expect(connect).toBeDisabled();
+
+  // A key in a header of its own asks for the header's name; none asks for nothing.
+  await page.getByRole("combobox", { name: "Sign-in" }).click();
+  await page.getByRole("option", { name: "A key in a header" }).click();
+  await expect(page.getByLabel("Header name", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Sign-in" }).click();
+  await page.getByRole("option", { name: "Bearer token" }).click();
+
+  // An address the backend refuses is said in its words.
+  await address.fill("https://localhost/v1");
+  await token.fill("a-working-token");
+  await page.getByLabel("Name", { exact: true }).fill("acme");
+  await connect.click();
+  await expect(page.getByText("localhost is this machine or a link-local address")).toBeVisible();
+  await expect(page).toHaveURL(/\/services\/add/);
+  await address.fill("https://api.acme.example/v1");
+  await connect.click();
+  await expect(page).toHaveURL(/\/services\/acme$/);
+  expect(await sideways(page)).toBe(0);
+
+  // It opens on its endpoints, of which there are none, and it has nothing to sync.
+  await expect(page.getByText("No endpoints yet.")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Sync" })).toHaveCount(0);
+  const dialog = page.getByRole("dialog");
+  const path = dialog.getByLabel("Path", { exact: true });
+  const save = dialog.getByRole("button", { name: "Save" });
+
+  await page.getByRole("button", { name: "Add an endpoint" }).click();
+  await dialog.getByLabel("Name", { exact: true }).fill("List invoices");
+  await expect(dialog.getByText("Agents see it as acme-list-invoices.")).toBeVisible();
+  await dialog.getByLabel("What it does", { exact: true }).fill("Open invoices of a client.");
+  await path.fill("invoices");
+  await save.click();
+  await expect(dialog.getByText("A path starts with /")).toBeVisible();
+  await path.fill("/clients/{client_id}/invoices");
+  await dialog.getByLabel("Query", { exact: true }).fill("status, limit");
+  // A GET sends no body: the switch is for a method that does.
+  await expect(dialog.getByRole("switch")).toHaveCount(0);
+  await save.click();
+  const listed = page.getByRole("row", { name: /acme-list-invoices/ });
+  await expect(listed).toBeVisible();
+
+  await page.getByRole("button", { name: "Add an endpoint" }).click();
+  await dialog.getByLabel("Name", { exact: true }).fill("Add note");
+  await dialog.getByLabel("What it does", { exact: true }).fill("Add a note to an invoice.");
+  await dialog.getByRole("combobox", { name: "Method" }).click();
+  await page.getByRole("option", { name: "POST", exact: true }).click();
+  await expect(dialog.getByRole("switch")).toBeChecked();
+  await path.fill("/invoices/{invoice_id}/notes");
+  await save.click();
+  const noted = page.getByRole("row", { name: /acme-add-note/ });
+  await expect(noted).toContainText("changes data");
+  // Only an endpoint that reads is tried: a change is always recorded.
+  await expect(noted.getByRole("link", { name: "Try" })).toHaveCount(0);
+
+  // Each is a tool of the toolset of its kind, and the key never comes back.
+  type Endpoint = { tool: string; method: string; path: string; query: string[]; write: boolean };
+  const endpoints: Endpoint[] = await (
+    await page.request.get("/api/ontology/services/acme/endpoints")
+  ).json();
+  expect(endpoints.map((e) => [e.tool, e.method, e.write])).toEqual([
+    ["acme-list-invoices", "GET", false],
+    ["acme-add-note", "POST", true],
+  ]);
+  expect(endpoints[0].query).toEqual(["status", "limit"]);
+  const toolsets: { name: string; tools: string[]; write?: boolean }[] = await (
+    await page.request.get("/api/ontology/mcp/toolsets")
+  ).json();
+  expect(toolsets.find((t) => t.name === "acme-reads")?.tools).toEqual(["acme-list-invoices"]);
+  expect(toolsets.find((t) => t.name === "acme-writes")).toMatchObject({
+    write: true,
+    tools: ["acme-add-note"],
+  });
+  const stored = await (await page.request.get("/api/ontology/services/acme")).json();
+  expect([stored.adapter, stored.status]).toEqual(["http_api", "active"]);
+  expect(JSON.stringify(stored)).not.toContain("a-working-token");
+
+  // Try opens the playground on the endpoint's tool, with its values to fill in.
+  await listed.getByRole("link", { name: "Try" }).click();
+  await expect(page).toHaveURL(/\/mcp\/playground\?tool=acme-list-invoices$/);
+  await expect(page.getByText("client_id")).toBeVisible();
+
+  // Removing the system takes its endpoints, its toolsets and its role with it.
+  await page.request.delete("/api/ontology/services/acme");
+  const left: { name: string }[] = await (
+    await page.request.get("/api/ontology/mcp/toolsets")
+  ).json();
+  expect(left.map((t) => t.name).filter((n) => n.startsWith("acme-"))).toEqual([]);
+  const roles: { name: string }[] = await (await page.request.get("/api/ontology/roles")).json();
+  expect(roles.map((r) => r.name)).not.toContain("acme");
 });

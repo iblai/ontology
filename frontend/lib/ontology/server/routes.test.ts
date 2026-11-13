@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { route } from "./routes";
 import { configFromBackend, maskSecrets } from "../config-files";
 import { getDb, resetDb } from "../mock/store";
-import type { BackendConfigSnapshot, Role, Service, SyncRun } from "../types";
+import type { BackendConfigSnapshot, Role, Service, SyncRun, TermDetail } from "../types";
 
 const call = (method: string, path: string, query = "", body?: unknown) => {
   const handler = route(method, path.split("/").filter(Boolean).map(decodeURIComponent));
@@ -29,6 +29,10 @@ describe("route table", () => {
       ["POST", "services/peoplesoft/approve"],
       ["POST", "services/peoplesoft/sync"],
       ["PATCH", "services/peoplesoft/tables"],
+      ["GET", "services/acme/endpoints"],
+      ["PUT", "services/acme/endpoints/list-invoices"],
+      ["DELETE", "services/acme/endpoints/list-invoices"],
+      ["GET", "services/terms/terms/student"],
       ["GET", "graph"],
       ["GET", "graph/records"],
       ["POST", "sync/run"],
@@ -92,6 +96,19 @@ describe("route table", () => {
     expect(names()).toContain("Auditor");
     expect(call("POST", "reset")).toBeUndefined();
     expect(names()).not.toContain("Auditor");
+  });
+
+  it("passes a system and a term to the term route", () => {
+    call("POST", "services", "", {
+      name: "terms",
+      service_type: "api",
+      adapter: "auto_ontology",
+      host: "https://auto-ontology.example",
+      api_key: "",
+      domain: "higher-ed",
+    });
+    const detail = call("GET", "services/terms/terms/student") as TermDetail;
+    expect([detail.ok, detail.columns[0].column]).toEqual([true, "EMPLID"]);
   });
 
   it("renders the config snapshot from the mock state with secrets masked", () => {

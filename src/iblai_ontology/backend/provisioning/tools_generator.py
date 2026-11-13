@@ -32,8 +32,14 @@ class ToolsGenerator:
         merged = list(index.values())
         return yaml.dump_all(merged, default_flow_style=False, sort_keys=False)
 
-    def apply(self, generated_tools_yaml: str) -> str:
-        merged = self.merge(generated_tools_yaml)
+    def write(self, text: str) -> str:
+        """Replace tools.yaml, and write the Toolbox's file from it."""
+        from iblai_ontology.backend.mcp_server.toolbox_config import publish
+
         self.dir.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(merged)
+        self.path.write_text(text)
+        publish(self.path)
         return str(self.path)
+
+    def apply(self, generated_tools_yaml: str) -> str:
+        return self.write(self.merge(generated_tools_yaml))

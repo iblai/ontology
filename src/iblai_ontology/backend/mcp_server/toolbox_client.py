@@ -10,6 +10,7 @@ drift apart.
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -90,3 +91,32 @@ def call_tool(
         # A tool failure travels as content with isError (Toolbox and FastMCP alike).
         raise ToolboxError(" ".join(str(r) for r in _rows_from_result(result)))
     return _rows_from_result(result)
+
+
+def loaded(toolbox_url: str, mark: str, *, wait: float = 5.0) -> str | None:
+    """Why the Toolbox does not serve the file named ``mark`` yet, or None once it does.
+
+    A written file holds an empty toolset of that name (``write_toolbox_config``); the
+    Toolbox answers for it only after loading that file, and keeps the file before when
+    it refuses the new one. Raises ``ToolboxError`` when the Toolbox does not answer.
+    """
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            resp = httpx.post(
+                f"{toolbox_url.rstrip('/')}/mcp/{mark}",
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                headers={"Accept": "application/json, text/event-stream"},
+                timeout=3.0,
+            )
+        except httpx.HTTPError as exc:
+            raise ToolboxError(f"the MCP Toolbox does not answer ({exc})") from exc
+        try:
+            message = _parse_message(resp)
+        except ToolboxError:
+            message = None  # no JSON-RPC answer: not that toolset's
+        if isinstance(message, dict) and "result" in message:
+            return None
+        if time.monotonic() >= deadline:
+            return "the MCP Toolbox did not take it (its own log says why)"
+        time.sleep(0.25)

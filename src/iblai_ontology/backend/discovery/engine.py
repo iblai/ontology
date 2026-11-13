@@ -159,6 +159,7 @@ class DiscoveryEngine:
         skip_safety: bool = False,
         output_dir: str | None = None,
         options: dict | None = None,
+        display_name: str = "",
     ):
         from django.utils import timezone
 
@@ -180,14 +181,17 @@ class DiscoveryEngine:
         }
         adapter = get_adapter(service_type)
 
+        service = store.first(Service, name=name) or Service(name=name)
         defaults = {
-            "display_name": f"{service_type} @ {host}",
+            # The name people read: the one given, else the one it has, else what it is.
+            "display_name": display_name
+            or service.display_name
+            or f"{service_type} @ {host}",
             "service_type": adapter.SERVICE_TYPE,
             "adapter": service_type,
             "host": host,
             "connection_config_encrypted": encrypt_connection_config(config),
         }
-        service = store.first(Service, name=name) or Service(name=name)
         for field, value in defaults.items():
             setattr(service, field, value)
         store.save(service, [*defaults, "updated_at"])
@@ -282,6 +286,7 @@ class DiscoveryEngine:
         host: str = "",
         api_key: str = "",
         output_dir: str | None = None,
+        display_name: str = "",
     ):
         """Register an API source without database discovery.
 
@@ -289,6 +294,8 @@ class DiscoveryEngine:
         by the backend itself with ``api_key``, which is tried before anything is saved,
         and gets its create and update tools; another system's custom MCP server
         (``mcp-servers/``, reached at ``MCP_<NAME>_URL``) does the pulling once approved.
+        A further Twenty keeps its records in tables and folders named after it, so two
+        workspaces never mix and each one's role reaches its own alone.
         """
         from iblai_ontology.backend import store
         from iblai_ontology.backend.services import twenty
@@ -297,7 +304,13 @@ class DiscoveryEngine:
         from iblai_ontology.catalog import list_entries
 
         entry = next((e for e in list_entries() if adapter in (e.adapter, e.key)), None)
-        display = entry.display_name if entry else adapter
+        service = store.first(Service, name=name) or Service(name=name)
+        # The name people read: the one given, else the one it has, else the catalog's.
+        display = (
+            display_name
+            or service.display_name
+            or (entry.display_name if entry else adapter)
+        )
         host = host or (
             str(
                 entry.connection.get("base_url")
@@ -319,13 +332,22 @@ class DiscoveryEngine:
             # A wrong address or key is said now, not by the first sync.
             twenty.check(config)
             host, adapter = config["host"], entry.adapter
+            # The first of its kind keeps the house table names; one connected after it
+            # carries its own name on its tables and folders.
+            earlier = [
+                other
+                for other in store.filter(Service, adapter=adapter)
+                if other.name != name
+                and (service.pk is None or other.created_at < service.created_at)
+            ]
+            prefix = name.replace("-", "_") + "_" if earlier else ""
         else:
+            prefix = ""
             config = {
                 "db_type": "api",
                 "host": host,
                 "env": list(entry.env) if entry else [],
             }
-        service = store.first(Service, name=name) or Service(name=name)
         defaults = {
             "display_name": display,
             "service_type": "api",
@@ -347,6 +369,7 @@ class DiscoveryEngine:
                 entry.sync_defaults if entry else {},
                 entry.mapping if entry else None,
                 in_process=in_process,
+                prefix=prefix,
             )
         )
         tools = api_tools_yaml(name, display, entry) if in_process else ""

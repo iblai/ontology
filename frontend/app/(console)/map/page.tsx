@@ -18,8 +18,9 @@ import {
   SURFACE,
   type ToggleKind,
 } from "@/lib/ontology/graph";
+import { useRoleLabel } from "@/lib/ontology/use-role-label";
 import { EmptyState } from "@/components/console/empty-state";
-import { NodePanel } from "@/components/graph/node-panel";
+import { KindDot, NodePanel } from "@/components/graph/node-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,18 +45,19 @@ const GraphCanvas = dynamic(() => import("@/components/graph/graph-canvas"), {
 const EMPTY: GraphData = { nodes: [], links: [], stats: { hubs: [], orphans: 0, dangling: 0 } };
 const HIDDEN_DEFAULT: GraphKind[] = ["column", "memory_record"];
 /** The floating panels over the canvas. */
-const GLASS = "rounded-xl border border-white/10 bg-[#0f1526]/75 shadow-xl backdrop-blur-md";
-/** A faint dot grid and a soft glow behind the graph; the canvas itself is transparent. */
+const GLASS = "rounded-xl border bg-background/80 shadow-lg shadow-black/5 backdrop-blur-md";
+/** A faint dot grid and a very soft blue wash behind the graph; the canvas itself is transparent. */
 const SKY = {
   backgroundColor: SURFACE,
   backgroundImage:
-    "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1.3px), radial-gradient(ellipse 70% 55% at 50% 40%, rgba(57,135,229,0.14), transparent 65%)",
+    "radial-gradient(rgba(11,11,11,0.08) 1px, transparent 1.3px), radial-gradient(ellipse 70% 55% at 50% 40%, rgba(0,88,204,0.07), transparent 65%)",
   backgroundSize: "24px 24px, 100% 100%",
 };
 
 export default function GraphPage() {
   const t = useTranslations("graph");
   const tc = useTranslations("common");
+  const roleLabel = useRoleLabel();
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [columns, setColumns] = useState(false);
@@ -134,6 +136,8 @@ export default function GraphPage() {
       setRoles((rs) => rs.map((x) => (x.name === role.name ? patch.role : x)));
       setData((d) => d && { ...d, links: patch.links });
       toast.success(t(patch.had ? "revoked" : "granted", { role: role.display_name, name }));
+      // How far the role now reaches is the backend's to say: the names in the list follow.
+      void apiClient.roles.list().then(setRoles, () => undefined);
     } catch {
       toast.error(tc("failed"));
     } finally {
@@ -242,14 +246,14 @@ export default function GraphPage() {
             "pointer-events-auto px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-500",
           )}
         >
-          <h1 className="text-base font-semibold tracking-tight text-white">{t("title")}</h1>
-          <p className="mt-0.5 text-[11px] text-white/55">
+          <h1 className="text-foreground text-base font-semibold tracking-tight">{t("title")}</h1>
+          <p className="text-muted-foreground mt-0.5 text-[11px]">
             {data ? (
               <>
                 {t("statNodes", { n: graph.nodes.length })} ·{" "}
                 {t("statLinks", { n: graph.links.length })} ·{" "}
                 {t("statOrphans", { n: graph.stats.orphans })} ·{" "}
-                <span className={cn(graph.stats.dangling > 0 && "text-[#e66767]")}>
+                <span className={cn(graph.stats.dangling > 0 && "text-destructive")}>
                   {t("statDangling", { n: graph.stats.dangling })}
                 </span>
               </>
@@ -265,23 +269,20 @@ export default function GraphPage() {
           )}
         >
           <Select value={focusRole} onValueChange={setFocusRole}>
-            <SelectTrigger
-              className="h-8 w-44 border-white/10 bg-white/5 text-xs text-white"
-              aria-label={t("focusRole")}
-            >
+            <SelectTrigger className="bg-background h-8 w-56 text-xs" aria-label={t("focusRole")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("allRoles")}</SelectItem>
               {roles.map((r) => (
                 <SelectItem key={r.name} value={r.name}>
-                  {r.display_name}
+                  {roleLabel(r)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-white/40" />
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
             <Input
               aria-label={t("search")}
               placeholder={t("search")}
@@ -293,7 +294,7 @@ export default function GraphPage() {
                   setQuery("");
                 }
               }}
-              className="h-8 w-56 border-white/10 bg-white/5 pl-8 text-xs text-white placeholder:text-white/40"
+              className="bg-background h-8 w-56 pl-8 text-xs"
             />
             {query.trim() && (
               <div className={cn(GLASS, "absolute top-9 left-0 z-20 flex w-72 flex-col p-1")}>
@@ -301,38 +302,35 @@ export default function GraphPage() {
                   <button
                     key={m.id}
                     type="button"
-                    className="flex items-center gap-2 rounded px-2 py-1 text-left text-xs text-white/85 hover:bg-white/10"
+                    className="text-foreground hover:bg-muted flex items-center gap-2 rounded px-2 py-1 text-left text-xs"
                     onClick={() => {
                       setSelectedId(m.id);
                       setQuery("");
                     }}
                   >
-                    <span
-                      className="inline-block size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: KIND_COLORS[m.kind] }}
-                    />
+                    <KindDot kind={m.kind} />
                     <span className="truncate">{m.label}</span>
-                    <span className="ml-auto text-white/40">{t(`kinds.${m.kind}`)}</span>
+                    <span className="text-muted-foreground ml-auto">{t(`kinds.${m.kind}`)}</span>
                   </button>
                 ))}
-                <span className="px-2 py-1 text-xs text-white/40">
+                <span className="text-muted-foreground px-2 py-1 text-xs">
                   {t("matches", { n: matches.length })}
                 </span>
               </div>
             )}
           </div>
-          <label className="flex h-8 items-center gap-2 px-2 text-xs text-white/70">
+          <label className="text-muted-foreground flex h-8 items-center gap-2 px-2 text-xs">
             <Switch checked={columns} onCheckedChange={(v) => setColumns(v === true)} />
             {t("columns")}
           </label>
-          <label className="flex h-8 items-center gap-2 px-2 text-xs text-white/70">
+          <label className="text-muted-foreground flex h-8 items-center gap-2 px-2 text-xs">
             <Switch checked={issues} onCheckedChange={(v) => setIssues(v === true)} />
             {t("issues")}
           </label>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 text-white/70 hover:bg-white/10 hover:text-white"
+            className="text-muted-foreground h-8 w-8 p-0"
             aria-label={t("fit")}
             onClick={() => setFitSignal((n) => n + 1)}
           >
@@ -348,7 +346,7 @@ export default function GraphPage() {
           onClick={() => setLegendOpen((v) => !v)}
           className={cn(
             GLASS,
-            "absolute bottom-6 left-6 z-10 flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-white/70 hover:text-white",
+            "text-muted-foreground hover:text-foreground absolute bottom-6 left-6 z-10 flex items-center gap-1.5 px-2.5 py-1.5 text-xs",
           )}
         >
           <List className="size-3.5" />
@@ -371,23 +369,20 @@ export default function GraphPage() {
                   aria-label={t("toggleKind", { label: t(`kinds.${k}`), n: counts.get(k) ?? 0 })}
                   onClick={() => toggleKind(k)}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[11px] text-white/80 hover:bg-white/10",
-                    hidden.has(k) && "text-white/35 line-through",
+                    "text-foreground hover:bg-muted flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[11px]",
+                    hidden.has(k) && "text-muted-foreground/70 line-through",
                   )}
                 >
-                  <span
-                    className="inline-block size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: KIND_COLORS[k] }}
-                  />
+                  <KindDot kind={k} />
                   <span className="truncate">{t(`kinds.${k}`)}</span>
-                  <span className="ml-auto pl-3 text-white/40 tabular-nums">{counts.get(k)}</span>
+                  <span className="text-muted-foreground ml-auto pl-3 tabular-nums">
+                    {counts.get(k)}
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[10px] text-white/35">
-            {t("hint")}
-          </p>
+          <p className="text-muted-foreground mt-1.5 border-t pt-1.5 text-[10px]">{t("hint")}</p>
         </div>
       )}
 
@@ -409,7 +404,7 @@ export default function GraphPage() {
       )}
 
       {loading && (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-[#0f1526]/40">
+        <div className="bg-background/50 absolute inset-0 z-20 grid place-items-center">
           <Spinner />
         </div>
       )}

@@ -16,11 +16,11 @@
 # Only `proxy` listens on the server (80 for the certificate and the redirect,
 # 443 for everything else). The database, Redis and the search index sit on a
 # network with no way out; the gateway and the sync worker are also on one that
-# reaches the ibl.ai platform and the connected systems.
+# reaches the ibl.ai platform and the connected systems. The MCP Toolbox, which
+# calls the custom APIs an administrator connects, is on a third with the
+# gateway alone.
 #
-# Not here: the MCP Toolbox and the connector containers of the developer
-# stack. The gateway's own tools and a connected application's operations do
-# not go through them.
+# Not here: the connector containers of the developer stack.
 # ============================================================
 name: iblai-ontology
 
@@ -100,10 +100,16 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # Runs once at every start, before the gateway and the worker; it also fills a new config volume.
+  # Runs once at every start, before the gateway and the worker; it also fills a new config volume
+  # and writes the Toolbox's file from tools.yaml, so the Toolbox finds one on a server from before it.
   migrate:
     <<: *backend
-    command: ["python", "-m", "iblai_ontology.backend.manage", "migrate", "--no-input"]
+    command:
+      - sh
+      - -c
+      - >-
+        python -m iblai_ontology.backend.manage migrate --no-input
+        && (ontology mcp build || echo "The MCP Toolbox's file was not written: custom APIs will not answer.")
     restart: "no"
     volumes:
       - config:/app/config
@@ -120,10 +126,13 @@ services:
       # The address agents reach it at: "Connect an agent" registers this one.
       ONTOLOGY_GATEWAY_URL: https://${ONTOLOGY_HOST:?missing in .env}/mcp
       ONTOLOGY_ALLOWED_HOSTS: ${ONTOLOGY_HOST:?missing in .env},127.0.0.1
+      # Set, so a save of tools.yaml is checked against the Toolbox and undone when it refuses.
+      MCP_TOOLBOX_URL: http://mcp-toolbox:5000
     volumes:
       # Memory files are the worker's to write.
       - memory:/ontology:ro
-      # Writable: connecting a system and the console's MCP page change tools.yaml.
+      # Writable: connecting a system and the console's MCP page change tools.yaml,
+      # and the Toolbox's file is written from it.
       - config:/app/config
     healthcheck:
       # No sign-in needed: the gateway answers GET /mcp with 405.
@@ -152,6 +161,32 @@ services:
     networks:
       - internal
       - exposed
+      - toolbox
+
+  # Google MCP Toolbox: calls the custom APIs an administrator connects. It holds no key (the
+  # gateway adds one to each call) and reloads its file by itself when the gateway writes it.
+  # The gateway does not wait for it: a file it refuses must not stop the frontend that fixes it.
+  mcp-toolbox:
+    image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.5.0
+    command:
+      - --config
+      - /config/generated/toolbox.yaml
+      - --address
+      - 0.0.0.0
+      - --port
+      - "5000"
+      # Also looks every 2 s, where a volume passes no file events.
+      - --poll-interval
+      - "2"
+    volumes:
+      - config:/config:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - toolbox
+    restart: unless-stopped
+    logging: *logging
 
   # The Celery worker with its scheduler: one tick a minute queues every schedule that is due.
   sync-engine:
@@ -207,6 +242,8 @@ networks:
   internal:
     internal: true # no way out to the internet
   exposed:
+  # The Toolbox's way out to the APIs; the gateway is the only other container on it.
+  toolbox:
 
 volumes:
   db:

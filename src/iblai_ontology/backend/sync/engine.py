@@ -92,10 +92,15 @@ class SyncRunner:
         from iblai_ontology.backend.mcp_server.toolbox_compat import writing_tools
         from iblai_ontology.config.reader import ConfigReader
 
-        why = writing_tools(ConfigReader().get_tools()).get(tool)
-        return (
-            f"{tool} can change data ({why}): a schedule only reads." if why else None
-        )
+        tools = ConfigReader().get_tools()
+        why = writing_tools(tools).get(tool)
+        if why:
+            return f"{tool} can change data ({why}): a schedule only reads."
+        spec = next((t for t in tools if t.get("name") == tool), {})
+        if spec.get("type") == "http" and spec.get("service"):
+            # Only the gateway adds a custom API's key: the sync would call it without one.
+            return f"{tool} is a custom API's endpoint: it is called when an agent asks, not synced."
+        return None
 
     def pull_table(
         self, service, table: str, *, limit: int | None = None

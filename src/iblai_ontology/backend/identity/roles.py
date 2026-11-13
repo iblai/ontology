@@ -38,6 +38,8 @@ class Permissions:
     display_name: str
     memory_paths: list[str] = field(default_factory=list)
     mcp_toolsets: list[str] = field(default_factory=list)
+    # Tools held by their own name, beside what the toolsets lend: one that changes data too.
+    mcp_tools: list[str] = field(default_factory=list)
     cache_tables: list[str] = field(default_factory=list)
     concurrency_limits: dict = field(default_factory=dict)
     agents: list[str] = field(default_factory=list)
@@ -97,6 +99,7 @@ def permissions(
         display_name=spec.get("display_name", role),
         memory_paths=memory_paths,
         mcp_toolsets=list(spec.get("mcp_toolsets", [])),
+        mcp_tools=list(spec.get("mcp_tools") or []),
         cache_tables=list(spec.get("cache_tables", [])),
         concurrency_limits=dict(spec.get("concurrency_limits", {})),
         agents=list(spec.get("agents", [])),

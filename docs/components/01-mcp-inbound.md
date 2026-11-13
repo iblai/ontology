@@ -203,11 +203,11 @@ parameters:
     description: Why it is released
 statement: UPDATE holds SET released = true, released_note = $2 WHERE id = $1 RETURNING id, released
 ---
-# An API system: the Toolbox's `http` source and tool. The token stays in the Toolbox's env.
+# An API system, written by hand: the Toolbox's `http` source and tool. The token stays in the Toolbox's env.
 kind: source
 name: crm
 type: http
-baseUrl: https://crm.example.edu
+baseUrl: https://crm.example.edu/api/
 headers:
   Authorization: Bearer ${CRM_TOKEN}
 ---
@@ -217,7 +217,7 @@ type: http
 source: crm
 description: Add a note to a person's record.
 method: POST
-path: /people/{{.person}}/notes
+path: people/{{pathEscape .person}}/notes
 headers:
   Content-Type: application/json
 requestBody: '{"body": "{{.body}}"}'
@@ -242,7 +242,10 @@ tools:
 - **A role gets the toolset by name**: `mcp_toolsets: [enrollment-tools, registrar-writes]`, or the switch on the console's Access page. `"*"` does not include it.
 - **Secrets are references.** A password, a token, an `Authorization` or `Cookie` header, at any depth of a source or a tool, must be `${VAR}` (a scheme word may come first: `Bearer ${VAR}`); a literal is refused on save. The Toolbox reads the values from its own environment (`.env.mcp`).
 - **An `http` source on a private address needs saying so.** The Toolbox refuses loopback, private and link-local addresses unless the source lists them (`allowedIpRanges: [10.20.0.0/16]`) or sets `allowPrivateNetworks: true`. An API inside the network is exactly that case.
-- **`http` tools are written in the YAML editor** (console → MCP → tools.yaml). The tool dialog has no method or body fields.
+- **An API is connected in the frontend, not written here.** Add a system → **Custom API** takes its address and its key, and each endpoint named on the system's page becomes one `http` tool that carries `service: <system>`, on the system's own two sources (`<system>-reads`, `<system>-writes`) and in its two toolsets of the same names. Its key is kept encrypted with the system and added to each call by the gateway, as the header parameter the tool declares: it is in no file and in no environment, an agent is never shown that parameter, and it is sent only while the tool's source still has the system's address. See [Install](../install.md#a-system-with-a-web-api).
+- **`http` tools written by hand go in the YAML editor** (console → MCP → tools.yaml), with their token in the Toolbox's environment as above. The tool dialog has no method or body fields.
+- **A path is resolved against `baseUrl`, and a value is inserted as it is.** When the address has a path of its own, end it with `/` and start the tool's path without one: `/people` under `https://crm.example.edu/api` is refused as leaving the address. Write `{{pathEscape .person}}`, not `{{.person}}`: unescaped, a value such as `7/notes` reaches another endpoint.
+- **`${` is the Toolbox's own.** It expands `${NAME}` over its whole file, a description included, and refuses the file when `NAME` is not set.
 - The Toolbox does not add a `Content-Type`: set it on the tool, as above.
 - Not available: a tool where the agent writes the SQL (`*-execute-sql`). It would count as a write, and it is not a named operation.
 - **A connector can ship its operations.** A tool of type `twenty` is generated when Twenty CRM is connected and runs in the gateway, not the Toolbox: `ontology mcp build` leaves it out of the Toolbox's config, and the console's MCP page lists it under its system without an editor. Its toolset, `<system>-writes`, is granted like any other that changes data.

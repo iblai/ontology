@@ -39,6 +39,7 @@ const BLANK: Role = {
   name: "",
   display_name: "",
   mcp_toolsets: [],
+  mcp_tools: [],
   memory_paths: [],
   cache_tables: [],
   admin_dashboard: false,
@@ -297,6 +298,12 @@ export function RoleDialog({
                         </label>
                       ))}
                     </div>
+                    {/* Held one by one on Access, and left as they are here. */}
+                    {(role.mcp_tools?.length ?? 0) > 0 && (
+                      <p className="text-muted-foreground text-xs">
+                        {t("namedTools", { n: role.mcp_tools?.length ?? 0 })}
+                      </p>
+                    )}
                   </section>
                   <div className={ROW}>
                     <div className="flex flex-col gap-1">

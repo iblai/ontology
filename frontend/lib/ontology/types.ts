@@ -95,6 +95,8 @@ export interface SchemaManifestTable {
   table_name: string;
   row_count: number;
   column_count: number;
+  /** The business term generated for it, where it has one. */
+  term?: string;
   // Mock-only: the real API keeps these in llm_analysis and the map response.
   entity_group?: string;
   description?: string;
@@ -105,6 +107,13 @@ export interface SchemaManifest {
   total_tables: number;
   total_rows: number;
   tables: SchemaManifestTable[];
+  /** The database a system holds, as its own server names it. */
+  database?: string;
+  /** An Auto Ontology server's reading: the terms read, out of `of` it has. */
+  terms?: number;
+  of?: number;
+  /** That reading's terms, counted per database NVIDIA knows. */
+  databases?: { name: string; terms: number }[];
 }
 
 export interface ServiceHealth {
@@ -202,8 +211,40 @@ export interface McpTool {
   description: string;
   parameters: McpToolParameter[];
   statement?: string;
-  /** The system an API operation runs on; such a tool comes and goes with its system. */
+  /** The system a tool is an operation or an endpoint of; such a tool comes and goes with it. */
   service?: string;
+  /** What such a tool sends: an endpoint's method and path, or POST and PATCH for Twenty's. */
+  method?: string;
+  path?: string;
+}
+
+/** One endpoint of a custom API, as it was entered; `tool` is what an agent calls. */
+export interface ServiceEndpoint {
+  name: string;
+  tool: string;
+  description: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** Under the system's address, with `{name}` where a value goes. */
+  path: string;
+  query: string[];
+  /** It takes a JSON body, as one object. */
+  body: boolean;
+  /** It changes data: every method but GET. */
+  write: boolean;
+}
+
+/** A term's columns and calculations, read from its Auto Ontology server when its panel opens. */
+export interface TermDetail {
+  ok: boolean;
+  message: string;
+  columns: {
+    name: string;
+    description: string;
+    certified: boolean;
+    table: string;
+    column: string;
+  }[];
+  calculations: { name: string; description: string; expression: string; certified: boolean }[];
 }
 
 export interface McpToolset {
@@ -295,10 +336,17 @@ export interface CatalogEntry {
   sync_defaults: Record<string, string>;
 }
 
+/** How far a role reaches, worked out from its grants. */
+export type RoleAccess = "none" | "read" | "write" | "read_write";
+
 export interface Role {
   name: string;
   display_name: string;
   mcp_toolsets: string[];
+  /** Tools held by their own name, beside what the toolsets lend; absent from an older backend. */
+  mcp_tools?: string[];
+  /** Sent by the backend, never saved; absent from an older one. */
+  access?: RoleAccess;
   memory_paths: string[];
   cache_tables: string[];
   admin_dashboard: boolean;
@@ -394,6 +442,7 @@ export type GraphKind =
   | "table"
   | "column"
   | "entity_group"
+  | "term"
   | "source"
   | "tool"
   | "toolset"
@@ -408,6 +457,8 @@ export type GraphLinkKind =
   | "has_column"
   | "in_group"
   | "references"
+  | "represents"
+  | "joins"
   | "exposes"
   | "uses_source"
   | "contains"

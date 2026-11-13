@@ -1,19 +1,23 @@
 import type { GraphData, GraphKind, GraphLink, GraphLinkKind, GraphNode, Role } from "./types";
 
-/** The viewport background (dataviz dark surface the palette was validated on). */
-export const SURFACE = "#0f1526";
+/** The viewport background: white, the surface the palette's light steps are made for. */
+export const SURFACE = "#ffffff";
+/** Ink on that surface: hubs, labels and links. */
+export const INK = "#0b0b0b";
 
-/** Dark-surface palette slots per kind; hubs (memory domains) are white, leaves grey. */
+/** Light-surface palette slots per kind; hubs (memory domains) are ink, leaves grey. */
 export const KIND_COLORS: Record<GraphKind, string> = {
-  service: "#3987e5",
-  table: "#199e70",
+  service: "#2a78d6",
+  table: "#1baf7a",
   entity_group: "#008300",
-  source: "#d95926",
-  tool: "#c98500",
-  toolset: "#9085e9",
-  role: "#d55181",
-  schedule: "#e66767",
-  memory_domain: "#f5f5f4",
+  // The palette has no ninth hue: a term wears its tables' colour and is drawn as a diamond.
+  term: "#1baf7a",
+  source: "#eb6834",
+  tool: "#eda100",
+  toolset: "#6250d6",
+  role: "#e87ba4",
+  schedule: "#e34948",
+  memory_domain: INK,
   column: "#898781",
   memory_record: "#898781",
   missing: "#898781",
@@ -61,7 +65,7 @@ export function neighbourhood(links: GraphLink[], id: string, hops = 1): Set<str
   return seen;
 }
 
-/** What a role can reach: grants → toolsets → tools → sources/tables, plus memory and cache grants. */
+/** What a role can reach: grants → toolsets and tools → sources/tables and the terms they hold, plus memory and cache grants. */
 export function reach(
   links: GraphLink[],
   roleId: string,
@@ -71,7 +75,8 @@ export function reach(
     toolset: ["contains"],
     tool: ["uses_source", "queries"],
     service: ["has_table"],
-    table: ["has_column", "in_group"],
+    // An inferred join is not followed: reaching one table is not reaching the other.
+    table: ["has_column", "in_group", "represents"],
   };
   const nodes = new Set([roleId]);
   const granted = new Set<string>();
@@ -84,7 +89,12 @@ export function reach(
       for (const l of links) {
         let t: string | null = null;
         if (wanted.has(l.kind) && endId(l.source) === id) t = endId(l.target);
-        else if (kind === "source" && l.kind === "exposes" && endId(l.target) === id)
+        // The system behind a source, or behind a tool the gateway runs on the system itself.
+        else if (
+          (kind === "source" || kind === "tool") &&
+          l.kind === "exposes" &&
+          endId(l.target) === id
+        )
           t = endId(l.source);
         if (t === null) continue;
         if (GRANT.has(l.kind) && endId(l.source) === id) granted.add(t);
@@ -223,7 +233,10 @@ export function searchGraph(nodes: GraphNode[], query: string, limit = 8): Graph
     .filter(
       (n) =>
         n.kind !== "missing" &&
-        (n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)),
+        // A term is found by its other names too.
+        [n.label, n.id, ...(Array.isArray(n.meta.synonyms) ? n.meta.synonyms : [])].some((s) =>
+          String(s).toLowerCase().includes(q),
+        ),
     )
     .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
     .slice(0, limit);

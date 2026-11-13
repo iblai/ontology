@@ -7,6 +7,57 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Read and Write on every node of Access.** With a role picked, a system, a source, a tool and
+  a toolset each carry a Read switch (the tools under it that only read) and a Write switch
+  (those that change data); a system reached over a web API also carries one switch per HTTP
+  method its tools send (a custom API: GET, POST, PUT, PATCH, DELETE as used; Twenty CRM: POST
+  and PATCH). A switch is on, off, or rests in the middle when the role holds some. Behind it a
+  role can now hold **a tool by its own name** (`mcp_tools`), beside its toolsets: on the
+  platform the resource `/custom/ontology/tools/<name>/` of the role's policy, with the verb
+  `Ontology/Tools/action`. Switching off a tool that a toolset lent replaces that toolset by its
+  other tools, by name. A tool that is removed, or edited from one that reads into one that
+  changes data, leaves every role that holds it by name.
+- **A role says how far it reaches**: "Student (Read-Only)", "Academic Advisor (Read-Write)",
+  also "No access" and "Write-Only", wherever a role is picked, and as a column on Roles. The
+  backend works it out from the role's grants (`access` on `GET /roles`); the role's own name
+  does not change.
+- **Names for systems.** Add a system asks for the name people read ("Admissions CRM"); the
+  technical name is worked out from it and shown under the field, with the next free number
+  when it is taken (`display_name` on `POST /services`). **A second Twenty CRM is kept apart**:
+  its tables and memory folders carry its name (`admissions_crm_persons`), so two workspaces
+  never mix and each one's role reaches its own records alone. The first keeps today's names.
+- **Terms generated here.** A database system's page has a Terms tab: Generate terms asks the
+  platform's model (its OpenAI-compatible chat endpoint, or the model configured in
+  `ontology.yaml`) for a business term, a sentence, other names and a plain name per column
+  for each table that has none. The model is sent table and column names, types and keys,
+  never a row, and only when an administrator presses the button. One press works for 45
+  seconds, biggest tables first, and says how many are left; each answer is kept on its
+  table. The map draws a generated term like one read from NVIDIA Auto Ontology, marked as
+  generated here and not certified. Discovering again keeps a table's term while its columns
+  stay the same. New route: `POST /services/<name>/terms`; `GET /services/<name>/terms/<term>`
+  also answers for a generated term.
+- **NVIDIA Auto Ontology's terms on the Semantic map**: an Auto Ontology server is connected
+  from the frontend (Add a system → NVIDIA Auto Ontology: its address and a viewer's API token)
+  and read for its business terms. The map draws each term on the tables that hold it (`term`
+  nodes, `represents` links) and the joins it inferred where the database declares none
+  (`joins` links, dashed). Focusing a role shows the terms its agents reach, and search finds
+  a term by its other names. A term's panel reads its columns and calculations from the server
+  when it opens. A reading is kept with the system, one row per term, and read again from the
+  system's page (`POST /services/<name>/discover`); it makes only GETs, takes at most 1,000
+  terms and 45 seconds, and never keeps the sample values the server's answers carry. Tables
+  match by database, schema and table name; a database two systems here hold gets no terms.
+  New route: `GET /services/<name>/terms/<term>`.
+- **Custom API**: any system with a web API is connected from the frontend (Add a system →
+  Custom API: its address and one secret header), and each endpoint an administrator names on
+  the system's page (a name, what it does, the method, the path, query names, a JSON body)
+  becomes one tool, called through the MCP Toolbox when an agent asks. Nothing is synced. A GET
+  is in the system's `-reads` toolset; any other method is in `-writes`, granted by name and
+  recorded before it runs; the role named after the system holds both. The key is kept encrypted
+  with the system and added to each call by the gateway: it is in no file, no agent is shown it,
+  it is masked in an answer that echoes it, and it is sent only to the address the system was
+  connected with. A path value is escaped, so an agent cannot reach another endpoint through
+  one. New routes: `GET /services/<name>/endpoints`, `PUT` and `DELETE
+  /services/<name>/endpoints/<endpoint>`.
 - `docs/install.md`: the one-command install for a platform's administrator, step by step: what
   to have ready, what the script prints, setting the server up from its link, every setting in
   `.env`, what runs, where things are kept, day-to-day commands and what each message the script
@@ -17,6 +68,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   A folder that holds nothing the role may read is refused as a file would be.
 
 ### Changed
+- **The Semantic map is white.** Dots take the palette's light steps with a ring of the page's
+  white and a soft shadow, memory domains are ink, and a term is a diamond in its tables'
+  colour. The dark colour block, used by the map alone, is gone.
+- The demo data (no backend configured) is one university: a PeopleSoft SIS, a Canvas LMS and
+  two CRMs (Slate for admissions, Salesforce for advising), with seven roles whose grants go
+  down to single tools.
+- `GET /services` names each system's database in `schema_manifest.database`, and for an Auto
+  Ontology server what its last reading took (`terms`, `of`, `databases`).
+- `POST /services/<name>/map` refuses a system that holds no tables (a custom API, an Auto
+  Ontology server), and the Sync page no longer offers either as a schedule's source.
+- **The install runs the MCP Toolbox** (`deploy/compose.yaml`), on a network of its own with the
+  gateway alone, to call custom APIs. The gateway writes the Toolbox's file whenever `tools.yaml`
+  changes and the Toolbox reloads it by itself: "Build and restart the MCP Toolbox to apply" is
+  gone from the save messages. Where `MCP_TOOLBOX_URL` is set, a save of `tools.yaml` stands
+  only once the Toolbox has loaded the new file (it answers for an empty toolset named after a
+  hash of the file); one it refuses is put back. A source no tool uses is left out of the file,
+  so a database connected for syncing no longer leaves the Toolbox an entry it cannot open.
 - **The install asks for no key and no platform.** `deploy/install.sh` takes the host name alone
   and ends with a link, `https://ontology.ibl.ai/#host=<host>&code=<code>`, that works once.
   Opened, the Ontology Frontend asks which of the administrator's platforms the server is for

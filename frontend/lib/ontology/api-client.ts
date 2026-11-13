@@ -15,10 +15,12 @@ import type {
   Role,
   SafetyReport,
   Service,
+  ServiceEndpoint,
   ServiceHealth,
   SyncRun,
   SyncSchedule,
   TableEdit,
+  TermDetail,
 } from "./types";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 
@@ -98,6 +100,8 @@ export const apiClient = {
     remove: (name: string): Promise<Ok> => del(`/services/${enc(name)}`),
     add: (input: {
       name: string;
+      /** The name people read, when one was typed; else the backend's own for that kind. */
+      display_name?: string;
       service_type: "database" | "api";
       adapter: string;
       host: string;
@@ -105,10 +109,24 @@ export const apiClient = {
       database?: string;
       user?: string;
       password?: string;
-      /** An API system the backend reads itself (Twenty): its key. */
+      /** Twenty's key; a custom API's whole header value; an Auto Ontology server's token. */
       api_key?: string;
+      /** A custom API: `header`, the name of the header its key goes in. */
+      options?: Record<string, string>;
       domain: string;
     }): Promise<Ok> => post("/services", input),
+    // A custom API's endpoints: each is one tool an agent may call.
+    endpoints: (name: string): Promise<ServiceEndpoint[]> =>
+      http(`/services/${enc(name)}/endpoints`),
+    saveEndpoint: (name: string, endpoint: Omit<ServiceEndpoint, "tool" | "write">): Promise<Ok> =>
+      put(`/services/${enc(name)}/endpoints/${enc(endpoint.name)}`, endpoint),
+    removeEndpoint: (name: string, endpoint: string): Promise<Ok> =>
+      del(`/services/${enc(name)}/endpoints/${enc(endpoint)}`),
+    // A database system: a term for each table that has none, written by the platform's model.
+    generateTerms: (name: string): Promise<Ok> => post(`/services/${enc(name)}/terms`),
+    // A term's columns and calculations: read live from its Auto Ontology server, or generated here.
+    term: (name: string, term: string): Promise<TermDetail> =>
+      http(`/services/${enc(name)}/terms/${enc(term)}`),
     // The databases a PostgreSQL or MySQL login may open, so the form offers the name.
     databases: (login: {
       adapter: string;

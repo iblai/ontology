@@ -316,6 +316,10 @@ ontology mcp build          # writes config/generated/toolbox.yaml
 # ontology deploy up runs this automatically before starting the stack
 ```
 
+The gateway also writes that file by itself whenever `tools.yaml` changes: a save from the
+frontend, a system connected or removed. The Toolbox watches the file and reloads it, so nothing
+is restarted.
+
 Translation rules: `type` → `kind`; Oracle's `database` → `serviceName`; `${VAR}`
 tokens are left intact so the Toolbox expands them from `.env.mcp` (secrets never
 land in the generated file). Tools whose statement is a `${...}` raw-SQL
@@ -331,6 +335,32 @@ endpoint (the legacy `/api/tool/<name>` REST path is disabled in Toolbox ≥1.5)
 > default `tools.yaml` — it lives in `config/tools.higher-ed.example.yaml` (paired
 > with `config/roles.higher-ed.example.yaml`). Merge it in only when you have a
 > real PeopleSoft to point at; otherwise the `mcp-toolbox` container crash-loops.
+> A source that no tool uses is left out of the generated file, so a database connected for
+> syncing alone (its source carries placeholders and no tool) never stops the Toolbox.
+
+### The Toolbox in the one-command install
+
+`deploy/compose.yaml` runs the Toolbox to call the **custom APIs** an administrator connects in
+the frontend (see [Install](install.md#a-system-with-a-web-api)).
+
+- **Its network.** `toolbox`, shared with the gateway alone. It has a way out, to reach the
+  APIs; the database, Redis and the search index are not on it. No port is published.
+- **Its file.** The `config` volume, read-only, at `/config/generated/toolbox.yaml`. `migrate`
+  writes it at every start (`ontology mcp build`), so the Toolbox finds one on a new server and
+  on one installed before it. The gateway rewrites it on every change, and the Toolbox reloads
+  it: it watches the file, and also looks every two seconds (`--poll-interval 2`).
+- **No key.** The Toolbox has no environment and its file holds no secret. A custom API's key is
+  kept encrypted with its system, and the gateway adds it to each call.
+- **One wrong entry stops it whole.** The Toolbox refuses its entire file when one entry is
+  wrong: at start it then exits, and on a reload it keeps the file before. So each written file
+  holds an empty toolset named after a hash of its content, and after a save the gateway asks
+  the Toolbox for that toolset for up to five seconds. A save the Toolbox does not take is put
+  back and refused ("the MCP Toolbox did not take it"); `docker compose logs mcp-toolbox` says
+  which entry. This check runs wherever `MCP_TOOLBOX_URL` is set, the developer stack included.
+- **Where it may call.** A custom API's address is `https://`, or `http://` inside a private
+  network. Only a system whose own address is private may reach private addresses
+  (`allowedIpRanges` on its sources); this server's own address and link-local ones are refused
+  when the system is connected.
 
 ### Reaching source databases (local or remote)
 

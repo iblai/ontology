@@ -263,16 +263,24 @@ def api_schedules_yaml(
     mapping: dict | None = None,
     *,
     in_process: bool = False,
+    prefix: str = "",
 ) -> str:
     """Schedules for an API service: one per catalog ``sync_defaults`` entry, landing in a
     table built from the first row. A system the backend reads itself (``in_process``) takes
     the database shape, ``service`` and ``table``; another is read by the ``list-<entity>``
     tool of its custom MCP server. The catalog's ``mapping`` names the house table, column
-    renames and template per entity."""
+    renames and template per entity. ``prefix`` goes before every table and folder: a
+    further system of one kind keeps its records apart from the first's."""
     schedules = []
     for entity, cadence in sync_defaults.items():
         m = (mapping or {}).get(entity) or {}
-        target = m.get("entity") or entity
+        house = m.get("entity") or entity
+        target = prefix + house
+        if len(target) > 63:  # what PostgreSQL takes for a table's name
+            raise ValueError(
+                f"'{service_name}' is too long a name for a further {display_name}: its "
+                f"table {target} would pass 63 characters. Give it a shorter name."
+            )
         output = {
             "structured_cache": target,
             "text_memories": f"/ontology/{target}/",
@@ -285,6 +293,9 @@ def api_schedules_yaml(
             }
         if m.get("template"):
             output["template"] = m["template"]
+        elif prefix:
+            # A memory's template is found by its folder: a prefixed one names the house's.
+            output["template"] = house
         read = (
             {"source": service_name, "service": service_name, "table": entity}
             if in_process

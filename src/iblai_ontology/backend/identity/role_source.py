@@ -27,6 +27,7 @@ ROOT = "/custom/ontology/"
 # Per kind of resource under ROOT, the verb a role must hold for the resource to count.
 VERBS = {
     "toolsets": "Ontology/Toolsets/action",
+    "tools": "Ontology/Tools/action",  # one tool, held by its own name
     "tables": "Ontology/Tables/read",
     "memory": "Ontology/Memory/read",
     "console": "Ontology/Console/action",
@@ -163,9 +164,14 @@ def _memory(pattern: str) -> str:
 def _resources(spec: dict[str, Any]) -> list[str]:
     """The policy resources that say what ``spec`` grants; refuses what a resource cannot spell."""
     out: list[str] = []
-    for kind, field in (("toolsets", "mcp_toolsets"), ("tables", "cache_tables")):
+    for kind, field in (
+        ("toolsets", "mcp_toolsets"),
+        ("tools", "mcp_tools"),
+        ("tables", "cache_tables"),
+    ):
         names = spec.get(field) or []
-        if "*" in names:
+        # A tool is held by its name only: `*` among them is refused below, as no name.
+        if "*" in names and kind != "tools":
             out.append(f"{ROOT}{kind}/")
             # Beside the whole kind only a toolset's name says more: one that writes is granted by name.
             names = [n for n in names if n != "*"] if kind == "toolsets" else []
@@ -190,7 +196,7 @@ def _resources(spec: dict[str, Any]) -> list[str]:
 
 def _name(kind: str, tail: str) -> str | None:
     """The toolset, table or memory pattern a resource names under its kind; None if no such shape."""
-    if kind in ("toolsets", "tables"):
+    if kind in ("toolsets", "tools", "tables"):
         return tail if _NAME.fullmatch(tail) else None
     if kind != "memory":
         return None  # console and subjects are granted whole
@@ -236,14 +242,17 @@ def _spec(name: str, role: dict, resources: list[str], kept: dict) -> dict[str, 
     def reach(kind: str) -> list[str]:
         # A resource counts only when the role holds its kind's verb.
         names = granted[kind] if _holds(role, VERBS[kind]) else set()
-        # `*` sorts first; a toolset's name stays beside it, as a write toolset is granted by name.
-        return sorted(names) if kind == "toolsets" or "*" not in names else ["*"]
+        # `*` sorts first; a name stays beside it: a write toolset and a tool are granted by name.
+        named = kind in ("toolsets", "tools")
+        return sorted(names) if named or "*" not in names else ["*"]
 
     memory = reach("memory")
     return {
         "display_name": kept.get("display_name") or name,
         "memory_paths": ["/ontology/**"] if memory == ["*"] else memory,
         "mcp_toolsets": reach("toolsets"),
+        # The whole kind lends no tool: one is held by its name.
+        "mcp_tools": [tool for tool in reach("tools") if tool != "*"],
         "cache_tables": reach("tables"),
         "agents": list(kept.get("agents") or []),
         "concurrency_limits": dict(kept.get("concurrency_limits") or {}),
@@ -272,6 +281,7 @@ def combine(specs: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "memory_paths": union("memory_paths"),
         "mcp_toolsets": union("mcp_toolsets"),
+        "mcp_tools": union("mcp_tools"),
         "cache_tables": union("cache_tables"),
         "agents": union("agents"),
         "concurrency_limits": limits,
@@ -466,10 +476,19 @@ def reduce_role(name: str, reach: dict[str, list[str]]) -> None:
     for field in _REACH:
         gone = reach.get(field) or []
         spec[field] = [held for held in spec.get(field) or [] if held not in gone]
-    if any(spec[field] for field in _REACH) or spec.get("admin_dashboard"):
+    reaches = any(spec[field] for field in _REACH) or spec.get("mcp_tools")
+    if reaches or spec.get("admin_dashboard"):
         put_role(name, spec)
     else:
         delete_role(name)
+
+
+def drop_tools(tools: set[str]) -> None:
+    """Take these tools from every role that holds one by name: they are gone, or now change data."""
+    for name, spec in load_roles().items():
+        held = spec.get("mcp_tools") or []
+        if tools & set(held):
+            put_role(name, {**spec, "mcp_tools": [t for t in held if t not in tools]})
 
 
 _seed_asked = False  # each process asks the platform once

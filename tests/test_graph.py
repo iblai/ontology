@@ -374,3 +374,126 @@ def test_records_parse_link_and_cap(tmp_path):
         gb.domain_records("nope", files_root=str(tmp_path), fk_map=fk_map, limit=1)
         is None
     )
+
+
+# -- terms ---------------------------------------------------------------------
+
+BIO = "table:campus:SYSADM.PS_STDNT_BIO"
+ENRL = "table:campus:SYSADM.PS_STDNT_ENRL"
+DATE = "table:campus:SYSADM.PS_FROM_DATE"
+
+
+def _campus(name="campus", database="Campus"):
+    """The fixture system, holding the database an Auto Ontology server names."""
+    system = _service(name)
+    system.schema_manifest = {**system.schema_manifest, "database": database}
+    return system
+
+
+def _term(id, name, tables, joins=()):
+    """A term as services/auto_ontology.py keeps it; a table is (database, schema, table, holds)."""
+    return {
+        "id": id,
+        "name": name,
+        "description": f"What {name} means.",
+        "synonyms": ["learner"],
+        "certification": "certified",
+        "tables": [
+            {"database": d, "schema": s, "table": t, "holds": holds}
+            for d, s, t, holds in tables
+        ],
+        "joins": [[list(a), list(b)] for a, b in joins],
+    }
+
+
+def _with_terms(terms, systems=None):
+    return gb.build_graph(
+        systems or [_campus()],
+        reader=_Reader(),
+        roles={},
+        schedules=[],
+        by_domain={},
+        terms={"nvidia": terms},
+    )
+
+
+def test_a_term_is_drawn_on_the_tables_that_hold_it():
+    student = _term(
+        "t1",
+        "Student",
+        [
+            # Letter case aside, as two catalogues of one database differ.
+            ("CAMPUS", "sysadm", "ps_stdnt_bio", True),
+            # Only points at the term: no `represents`.
+            ("campus", "SYSADM", "PS_STDNT_ENRL", False),
+            # Held in a database no system here has, and in a view we do not catalogue.
+            ("warehouse", "dbo", "DIM_STUDENT", True),
+            ("campus", "SYSADM", "V_STUDENT", True),
+        ],
+    )
+    data = _with_terms([student])
+    node = _node(data, "term:nvidia:t1")
+    assert (node["kind"], node["label"], node["group"], node["health"]) == (
+        "term",
+        "Student",
+        "",
+        None,
+    )
+    assert node["meta"] == {
+        "service": "nvidia",
+        "description": "What Student means.",
+        "synonyms": ["learner"],
+        "certification": "certified",
+        "elsewhere": 2,
+    }
+    assert _links(data, "represents") == {(BIO, "term:nvidia:t1")}
+    # The server is where the terms were read from, not a system of tables.
+    assert not any(n["id"] == "service:nvidia" for n in data["nodes"])
+
+
+def test_a_term_with_no_table_on_the_map_is_not_drawn():
+    elsewhere = _term("t1", "Supplier", [("warehouse", "dbo", "DIM_SUPPLIER", True)])
+    pointed_at = _term("t2", "Course", [("campus", "SYSADM", "PS_STDNT_ENRL", False)])
+    data = _with_terms([elsewhere, pointed_at])
+    assert not any(n["kind"] == "term" for n in data["nodes"])
+    # A system that names no database is matched to nothing.
+    held = _term("t3", "Student", [("campus", "SYSADM", "PS_STDNT_BIO", True)])
+    assert not any(
+        n["kind"] == "term" for n in _with_terms([held], [_service()])["nodes"]
+    )
+
+
+def test_a_database_two_systems_hold_gets_no_terms():
+    held = _term("t1", "Student", [("campus", "SYSADM", "PS_STDNT_BIO", True)])
+    twice = _with_terms([held], [_campus("dev"), _campus("prod")])
+    assert not any(n["kind"] == "term" for n in twice["nodes"])
+    # One of them alone is unambiguous.
+    once = _with_terms([held], [_campus("dev"), _campus("prod", database="other")])
+    assert _links(once, "represents") == {
+        ("table:dev:SYSADM.PS_STDNT_BIO", "term:nvidia:t1")
+    }
+
+
+def test_an_inferred_join_is_drawn_once_and_not_beside_a_foreign_key():
+    bio = ("campus", "SYSADM", "PS_STDNT_BIO")
+    enrl = ("campus", "SYSADM", "PS_STDNT_ENRL")
+    date = ("campus", "SYSADM", "PS_FROM_DATE")
+    far = ("warehouse", "dbo", "FACT_ENROLLMENT")
+    student = _term(
+        "t1",
+        "Student",
+        [(*bio, True)],
+        # Declared already (`references`); new; one end not on this map.
+        joins=[(enrl, bio), (date, bio), (far, bio)],
+    )
+    again = _term("t2", "Person", [(*bio, True)], joins=[(bio, date), (bio, bio)])
+    data = _with_terms([student, again])
+    assert _links(data, "references") == {(ENRL, BIO)}
+    assert _links(data, "joins") == {(DATE, BIO)}
+
+
+def test_without_terms_the_graph_is_what_it_was():
+    plain = _graph()
+    assert not any(n["kind"] == "term" for n in plain["nodes"])
+    assert not _links(plain, "represents") and not _links(plain, "joins")
+    assert _graph(terms={}) == plain

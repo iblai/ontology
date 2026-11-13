@@ -88,6 +88,14 @@ Produce a JSON response with keys: table_descriptions[], entity_groups{{}},
 suggested_tools[], suggested_sync_schedules{{}}, cache_schema_sql."""
 
 
+class LLMRefused(RuntimeError):
+    """The platform's chat endpoint answered with an error; ``status`` is its HTTP status."""
+
+    def __init__(self, status: int, text: str):
+        super().__init__(f"DM chat/completions: HTTP {status} {text[:500]}")
+        self.status = status
+
+
 def _llm_settings():
     from django.conf import settings
 
@@ -100,32 +108,43 @@ def _llm_settings():
     return settings
 
 
-def call_llm(system: str, prompt: str) -> str:
-    """One completion from the configured provider.
+def call_llm(
+    system: str, prompt: str, *, default: str = "", timeout: float | None = None
+) -> str:
+    """One completion from the configured provider, or from ``default`` when none is configured.
 
     ``iblai`` posts an OpenAI chat body to the DM's ``/v1/chat/completions`` with the
     platform credentials of ``PlatformConfig`` (``Api-Token`` or ``Token``), at
-    ``llm.base_url`` when the deployment serves completions from another host.
+    ``llm.base_url`` when the deployment serves completions from another host; what it
+    refuses is raised as :class:`LLMRefused`. ``timeout`` is one call's, in seconds.
     """
-    s = _llm_settings()
-    if s.LLM_PROVIDER == "anthropic":
+    from django.conf import settings
+
+    from iblai_ontology.config import LLM_DEFAULT_MODELS
+
+    # A server set up from a link has no llm block: the platform's own model needs none.
+    s = settings if default and not settings.LLM_PROVIDER else _llm_settings()
+    provider = s.LLM_PROVIDER or default
+    model = s.LLM_MODEL or LLM_DEFAULT_MODELS.get(provider)
+    limit = {"timeout": timeout} if timeout else {}
+    if provider == "anthropic":
         import anthropic
 
-        client = anthropic.Anthropic(api_key=s.LLM_API_KEY)
+        client = anthropic.Anthropic(api_key=s.LLM_API_KEY, **limit)
         resp = client.messages.create(
-            model=s.LLM_MODEL,
+            model=model,
             max_tokens=s.LLM_MAX_TOKENS,
             temperature=s.LLM_TEMPERATURE,
             system=system,
             messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text
-    if s.LLM_PROVIDER == "openai":
+    if provider == "openai":
         import openai
 
-        client = openai.OpenAI(api_key=s.LLM_API_KEY)
+        client = openai.OpenAI(api_key=s.LLM_API_KEY, **limit)
         resp = client.chat.completions.create(
-            model=s.LLM_MODEL,
+            model=model,
             max_tokens=s.LLM_MAX_TOKENS,
             temperature=s.LLM_TEMPERATURE,
             messages=[
@@ -134,7 +153,7 @@ def call_llm(system: str, prompt: str) -> str:
             ],
         )
         return resp.choices[0].message.content
-    if s.LLM_PROVIDER == "iblai":
+    if provider == "iblai":
         import httpx
 
         from iblai_ontology.backend.platform.client import PlatformConfig
@@ -145,7 +164,7 @@ def call_llm(system: str, prompt: str) -> str:
             f"{base}/api/ai-mentor/orgs/{cfg.org}/v1/chat/completions",
             headers={"Authorization": f"{cfg.auth_scheme} {cfg.admin_token}"},
             json={
-                "model": s.LLM_MODEL,
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt},
@@ -154,14 +173,12 @@ def call_llm(system: str, prompt: str) -> str:
                 "max_tokens": s.LLM_MAX_TOKENS,
                 "stream": False,
             },
-            timeout=180,
+            timeout=timeout or 180,
         )
         if resp.is_error:
-            raise RuntimeError(
-                f"DM chat/completions: HTTP {resp.status_code} {resp.text[:500]}"
-            )
+            raise LLMRefused(resp.status_code, resp.text)
         return resp.json()["choices"][0]["message"]["content"]
-    raise ValueError(f"Unknown LLM provider: {s.LLM_PROVIDER}")
+    raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 def _json_block(raw: str) -> dict:

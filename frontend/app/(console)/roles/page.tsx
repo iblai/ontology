@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function RolesPage() {
   const t = useTranslations("roles");
   const tc = useTranslations("common");
+  const ta = useTranslations("access.levelName");
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [editing, setEditing] = useState<Role | "new" | null>(null);
   useCreateParam("role", () => setEditing("new"));
@@ -55,12 +56,32 @@ export default function RolesPage() {
       header: sortableHeader(t("colTechnicalName")),
       cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.name}</span>,
     },
+    // How far each role reaches, where the backend says so.
+    ...(roles?.some((r) => r.access)
+      ? [
+          {
+            id: "access",
+            header: t("colAccess"),
+            cell: ({ row }) => (
+              <span className="text-muted-foreground text-xs">
+                {row.original.access ? ta(row.original.access) : ""}
+              </span>
+            ),
+          } satisfies ColumnDef<Role, unknown>,
+        ]
+      : []),
     {
       accessorKey: "mcp_toolsets",
       header: t("colToolsets"),
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {row.original.mcp_toolsets.map((n) => (n === "*" ? t("allToolsets") : n)).join(", ")}
+          {[
+            ...row.original.mcp_toolsets.map((n) => (n === "*" ? t("allToolsets") : n)),
+            // The tools it holds by name, beside its toolsets.
+            ...(row.original.mcp_tools?.length
+              ? [t("toolCount", { n: row.original.mcp_tools.length })]
+              : []),
+          ].join(", ")}
         </span>
       ),
     },
@@ -112,13 +133,15 @@ export default function RolesPage() {
         initial={editing === "new" ? undefined : (editing ?? undefined)}
         taken={(roles ?? []).map((r) => r.name)}
         // The row follows each save in place: an open dialog saves with every switch.
-        onSaved={(saved) =>
+        onSaved={(saved) => {
           setRoles((prev) =>
             prev?.some((r) => r.name === saved.name)
               ? prev.map((r) => (r.name === saved.name ? saved : r))
               : [...(prev ?? []), saved],
-          )
-        }
+          );
+          // How far it now reaches is the backend's to say.
+          load();
+        }}
       />
     </div>
   );

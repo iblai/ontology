@@ -201,8 +201,14 @@ def resolve_platform_request(
         subject, role = f"ibl:{who.username}", "platform-user"
         default = (resolver or RoleResolver()).spec(DEFAULT_ROLE)
         spec = role_source.combine([held, default])
-    reach = ("memory_paths", "mcp_toolsets", "cache_tables", "admin_dashboard")
-    if not any(spec[field] for field in reach):
+    reach = (
+        "memory_paths",
+        "mcp_toolsets",
+        "mcp_tools",
+        "cache_tables",
+        "admin_dashboard",
+    )
+    if not any(spec.get(field) for field in reach):
         raise CredentialRefused(
             "This credential holds no ontology grant on this platform.", 403
         )

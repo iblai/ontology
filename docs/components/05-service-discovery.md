@@ -201,12 +201,48 @@ iblai-ontology ships pre-built adapters for common higher-ed systems. Database a
 | **Snowflake** | Snowflake | NVIDIA auto-ontology connector (`[auto-ontology]` extra) | Schema discovery only; `--option warehouse=…` required |
 | **Generic Trino** | Trino | NVIDIA auto-ontology connector (`[auto-ontology]` extra) | Schema discovery only; Trino declares no key constraints |
 | **Generic ClickHouse** | ClickHouse (HTTP) | NVIDIA auto-ontology connector (`[auto-ontology]` extra) | Schema discovery only; the sorting key is reported as the PK |
+| **NVIDIA Auto Ontology** | An Auto Ontology server | HTTPS, a viewer's API token | Nothing is synced: its business terms are read for the semantic map (below) |
 
 The CLI exposes these as the `--service-type` choices on `ontology service add`: `peoplesoft`, `banner`, `workday`, `canvas`, `slate`, `navigate`, `generic-oracle`, `generic-postgres`, `generic-mysql`, `generic-mssql`, `snowflake`, `generic-trino`, `generic-clickhouse`.
 
 The last three ride on [NVIDIA auto-ontology](https://github.com/NVIDIA/auto-ontology)'s connectors (`uv sync --extra auto-ontology`, Python 3.13). Engine-specific fields travel as repeatable `--option KEY=VALUE` (`warehouse`, `schema`, `http_scheme`) and as `options` on `POST /services`; the safety suite and introspection run unchanged on top of them, with one difference — the connector contract carries no row counts, so sync cadences for these engines fall back to the size-agnostic default. Databricks and DuckDB connectors exist upstream but are not exposed: MCP Toolbox 1.5.0 has no kind to serve them.
 
 ---
+
+## Business terms from NVIDIA Auto Ontology
+
+A server of [NVIDIA Auto Ontology](https://github.com/NVIDIA/auto-ontology) is connected as a system of its own (`adapter: auto_ontology`, `services/auto_ontology.py`): an address and, through its gateway, the API token of a user with the viewer role. Nothing is synced from it and it gets no role. Its **terms** are read, kept, and drawn on the semantic map (`graph/builder.py`). Its package is not imported for this: only its HTTP API is called, so the pinned connector version does not matter here.
+
+**What a reading calls.** Only GETs, each of which its gateway allows to `catalog: read`:
+
+| Call | For |
+|---|---|
+| `GET api/terms` | Every term: name, description, synonyms, certification |
+| `GET api/exploration/terms/<id>/details` | Per term, the tables linked to it (`database_name`, `schema_name`, `name`) and how: `REPRESENTS`, `HAS_ATTRIBUTE`, `SEMANTIC_FK` |
+| `GET api/terms/<id>/column-attributes` | For a term some table reaches by `SEMANTIC_FK`: the columns that point at one of its attributes, which are the inferred joins |
+
+`POST /services/<name>/discover` reads again. A reading is built in memory and written last: one `ServiceTable` row per term (id, name, description, synonyms, certification, its tables, its joins) and the header (`terms`, `of`, `databases`) on the service, so a reading that fails leaves the one before. Limits: `TERM_CAP` terms (1,000, the first by name), `WORKERS` calls at a time (8) and `DEADLINE` seconds (45, under the 60 the hosted frontend gives a request); past the deadline nothing is written. Sample values in the answers are never kept. An error names the status the server answered, never its body. `POST /api/model/export` would give all of it in one call and is not used: it is admin-only and carries sample values of every column.
+
+**What the map draws.** `build_graph(..., terms=...)` gets each such system's rows apart from the systems (`api/views.py`, `_graph_services`); the server itself is not a node. A term's table is ours when exactly one system here has that `database` in its manifest header and a table of that schema and name, letter case aside. Auto Ontology names a database by its connector's `database_name`, which is what our header holds too. Drawn: a `term:<system>:<id>` node for a term with at least one such table, `represents` from each table that holds it (`REPRESENTS` or `HAS_ATTRIBUTE`), and `joins` from the table of a pointing column to the table it points at, unless a `references` link already joins the two. `meta.elsewhere` counts the tables holding it that are not on the map: in a system not connected here, or a view, which discovery does not catalogue. A database two systems here hold gets no terms.
+
+**A term's columns and calculations** are not stored: `GET /services/<name>/terms/<id>` reads `column-attributes` and `sql-attributes` for that one term when its panel opens.
+
+---
+
+## Business terms generated here
+
+With no Auto Ontology server, `POST /services/<name>/terms` (the **Generate terms** button of a
+database system's Terms tab; `discovery/terms.py`) asks a model for a term per table: the model
+configured under `llm`, else the platform's own through its OpenAI-compatible chat endpoint. One
+question per table that has no term yet, biggest first, four at a time, for 45 seconds a press.
+A question holds the table's name, discovery's one-line description and each column's name,
+type and key flags, never a row. The answer (`term`, `description`, `synonyms`, `columns`) is
+cut to size, keeps only the table's own columns and is stored on the table's `ServiceTable` row
+as `payload["term"]`; an answer that cannot be read is counted and left out. The map draws it
+as a `term` node (`term:<system>:<id>`, `represents`), `certification: pending`,
+`generated: true`. `save_manifest` carries a term across a rediscovery while the table's column
+names are the same. Joins are not inferred: that takes embeddings, which the platform's
+endpoint does not serve.
 
 ## Service Registry
 

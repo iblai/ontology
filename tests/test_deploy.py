@@ -49,7 +49,13 @@ def test_compose_runs_the_one_image_behind_the_proxy_alone():
     services = yaml.safe_load(COMPOSE)["services"]
     ours = {name for name, service in services.items() if IMAGE in service["image"]}
     assert ours == {"migrate", "ontology-gateway", "sync-engine"}
-    assert set(services) - ours == {"ontology-db", "redis", "vector-store", "proxy"}
+    assert set(services) - ours == {
+        "ontology-db",
+        "redis",
+        "vector-store",
+        "proxy",
+        "mcp-toolbox",
+    }
     assert [name for name, service in services.items() if "ports" in service] == [
         "proxy"
     ]
@@ -76,3 +82,25 @@ def test_the_release_stamps_match_what_the_files_hold():
 def test_the_starting_config_offers_no_tool_that_cannot_run():
     tools = (ROOT / "deploy" / "config" / "tools.yaml").read_text()
     assert [doc for doc in yaml.safe_load_all(tools) if doc] == []
+
+
+def test_the_toolbox_is_reached_by_the_gateway_alone_and_always_finds_its_file():
+    services = yaml.safe_load(COMPOSE)["services"]
+    toolbox, gateway = services["mcp-toolbox"], services["ontology-gateway"]
+    # Its own network, which has a way out to the APIs, with the gateway and nobody else.
+    on_it = {name for name, s in services.items() if "toolbox" in s.get("networks", [])}
+    assert on_it == {"mcp-toolbox", "ontology-gateway"}
+    assert toolbox["networks"] == ["toolbox"]
+    assert not (yaml.safe_load(COMPOSE)["networks"]["toolbox"] or {}).get("internal")
+    assert gateway["environment"]["MCP_TOOLBOX_URL"] == "http://mcp-toolbox:5000"
+    # It reads the file the gateway writes, and holds no key: no environment of its own.
+    assert toolbox["volumes"] == ["config:/config:ro"]
+    assert "/config/generated/toolbox.yaml" in toolbox["command"]
+    assert "environment" not in toolbox and "env_file" not in toolbox
+    # Written before it starts, on a new server and on one from before it.
+    assert toolbox["depends_on"] == {
+        "migrate": {"condition": "service_completed_successfully"}
+    }
+    assert "ontology mcp build" in services["migrate"]["command"][-1]
+    # The gateway does not wait for it: a file it refuses must not stop the console.
+    assert "mcp-toolbox" not in gateway["depends_on"]

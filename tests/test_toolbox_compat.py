@@ -310,3 +310,59 @@ def test_save_refuses_a_literal_secret_at_any_depth_of_a_source_or_a_tool(tmp_pa
     assert "'password'" in refused(
         good + "---\nkind: source\nname: db\ntype: postgres\npassword: 12345\n"
     )
+
+
+def test_a_save_is_published_and_stands_only_if_the_toolbox_takes_it(
+    tmp_path, monkeypatch
+):
+    from iblai_ontology.backend.mcp_server import toolbox_client
+    from iblai_ontology.backend.mcp_server.toolbox_client import ToolboxError
+    from iblai_ontology.backend.mcp_server.toolbox_compat import save_tools_yaml
+
+    path, served = tmp_path / "tools.yaml", tmp_path / "generated" / "toolbox.yaml"
+    good = (
+        "kind: source\nname: s\ntype: postgres\npassword: ${DB_PASSWORD}\n"
+        "---\nkind: tool\nname: t\ntype: postgres-sql\nsource: s\nstatement: SELECT 1\n"
+    )
+    other = good.replace("name: t\n", "name: u\n")
+    said = {"why": None, "asked": []}
+
+    def loaded(url, mark, **kwargs):
+        said["asked"].append((url, mark))
+        if isinstance(said["why"], Exception):
+            raise said["why"]
+        return said["why"]
+
+    monkeypatch.setattr(toolbox_client, "loaded", loaded)
+
+    # No Toolbox on this server: the file is written for one all the same, unasked.
+    monkeypatch.delenv("MCP_TOOLBOX_URL", raising=False)
+    assert save_tools_yaml(good, path).ok
+    first = yaml.safe_load(served.read_text())
+    assert "t" in first["tools"] and said["asked"] == []
+    needed = save_tools_yaml(other, path, needs_toolbox=True)
+    assert not needed.ok and "runs no MCP Toolbox" in needed.issues[-1].message
+    assert path.read_text() == good
+
+    # With one, it is asked for the very file that was written.
+    monkeypatch.setenv("MCP_TOOLBOX_URL", "http://tb:5000")
+    assert save_tools_yaml(other, path).ok
+    url, mark = said["asked"][-1]
+    assert (
+        url == "http://tb:5000"
+        and mark in yaml.safe_load(served.read_text())["toolsets"]
+    )
+
+    # One it refuses is put back, with the file it was serving.
+    kept = served.read_text()
+    said["why"] = "the MCP Toolbox did not take it (its own log says why)"
+    refused = save_tools_yaml(good, path)
+    assert not refused.ok and "did not take it" in refused.issues[-1].message
+    assert path.read_text() == other and served.read_text() == kept
+
+    # One that does not answer cannot be asked: the save stands, unless it needed it.
+    said["why"] = ToolboxError("the MCP Toolbox does not answer (refused)")
+    assert save_tools_yaml(good, path).ok and path.read_text() == good
+    silent = save_tools_yaml(other, path, needs_toolbox=True)
+    assert not silent.ok and "does not answer" in silent.issues[-1].message
+    assert path.read_text() == good

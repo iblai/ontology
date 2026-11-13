@@ -131,12 +131,90 @@ it under **Advanced**.
 
 - **Twenty CRM**: "Twenty cloud" or "Self-hosted" with its address, and an API key from Twenty's
   Settings → APIs. The key is tried on the spot. Its records start arriving at once, and a role
-  named after the system now exists that may read those records and change them.
+  named after the system now exists that may read those records and change them. A second
+  Twenty CRM connects the same way: give it a name of its own, and its records are kept in
+  tables and folders of their own, apart from the first's.
 - **A database** (PostgreSQL, MySQL, Oracle, SQL Server, Snowflake and others): its host, port, a
   read-only login and the database. You then see its structure, run the read-only test and approve
   it before anything is synced.
+- **Custom API**: any other system that has a web API. See below.
+- **NVIDIA Auto Ontology**: a server of it that you already run. Its business terms then show
+  on the Semantic map. See below.
 
 ![The Twenty CRM system's page after its first sync: eight tables and about ten thousand rows](images/install/twenty-connected.png)
+
+**Name** is what people will call the system, for example "Admissions CRM". The technical name
+its schedules, tools and role carry is worked out from it and shown under the field.
+
+### A system with a web API
+
+Pick **Custom API** for a system that is not in the list. Nothing is copied from it: an agent
+calls it when it needs to, and only the calls you name.
+
+1. Give its **address** (where its endpoints start, for example `https://api.example.edu/v1`),
+   how it is signed in to (a bearer token, a key in a header of its own, or nothing) and a name,
+   then **Connect**. The key is kept encrypted on your server and is never shown again.
+2. On the system's page, under **Endpoints**, press **Add an endpoint** for each call an agent
+   may make: a name, what it does (the agent reads this to decide when to call it), the method
+   and the path. Put a part of the path that changes in braces, as in
+   `/invoices/{invoice_id}`; list the names an agent may add after the `?` under **Query**.
+3. Press **Try** on an endpoint that only reads to see what the system answers.
+
+An endpoint with the method GET only reads. Any other method changes data: an agent may call it
+only when its role holds the system's `-writes` toolset by name, and each such call is recorded
+before it is made. A role named after the system holds both of its toolsets; give them to other
+roles on **Access**.
+
+The address is `https://`. `http://` is taken only for a system inside your own network. A system
+at this server's own address is refused.
+
+### Business terms from NVIDIA Auto Ontology
+
+If you run an [NVIDIA Auto Ontology](https://github.com/NVIDIA/auto-ontology) server, it has
+already worked out business terms for your databases, such as *Student* or *Invoice line*: what
+each one means, which tables and columns hold it, and how tables join where the database does
+not say. Connecting it puts those terms on the **Semantic map**, on the tables you connected
+here. This server only reads from it: nothing is sent there and nothing in it is changed.
+
+1. In Auto Ontology, as a user with the **viewer** role, open the user menu → **API Tokens** →
+   **New token** and copy the token. A viewer's token is enough.
+2. **Add a system** → **NVIDIA Auto Ontology**. Give its **address** (the one you open it at,
+   for example `https://auto-ontology.example.edu`), the **token** and a name, then **Connect**.
+   Its terms are read at once. The token is kept encrypted on your server and is never shown
+   again.
+3. Open the **Semantic map**. **Terms** is now a kind in the legend. A term is linked to each
+   table that holds it, and a dashed line between two tables is a join Auto Ontology inferred.
+   Select a term to read what it means, its other names, whether it is certified, the business
+   name of each of its columns and its named calculations. Pick a role under **Focus role** to
+   see which terms its agents can reach.
+4. The terms are read again when you press **Read again** on the system's page, under **Terms**.
+   Do it after Auto Ontology has rebuilt its layer, or someone there has certified a term.
+
+A term shows on the map when one of its tables is in a system connected here. The two are
+matched by name: the database, the schema and the table are called the same on both sides,
+letter case aside. The **Terms** tab lists each database Auto Ontology knows, with the system
+here that holds it. When two systems here hold a database of the same name, nothing says which
+one is meant, and its terms are not drawn.
+
+Only a database Auto Ontology can read gets terms: PostgreSQL, MySQL, Snowflake, Trino and
+ClickHouse. Oracle, SQL Server, Twenty and a custom API get none. One reading takes at most
+1,000 terms and 45 seconds, and says so when it stopped short.
+
+The address follows a custom API's rules: `https://`, or `http://` for a server inside your own
+network, and never this server's own address.
+
+### Business terms written here
+
+Without an Auto Ontology server, a database system can still get a business term for each of its
+tables. On the system's page, under **Terms**, press **Generate terms**. Your ibl.ai platform's
+model is asked, one table at a time, and is sent the names and types of the table and its columns
+and which columns are keys. It is never sent a row, and nothing is sent before you press the
+button. Each question uses your platform's credits.
+
+One press works for about 45 seconds, the biggest tables first, and says how many tables are
+left; press again to go on. The terms show on the **Semantic map** like those of Auto Ontology,
+marked as generated here and not certified. Discovering the system again keeps a table's term
+while its columns stay the same.
 
 ## Step 4. Connect an agent
 
@@ -147,6 +225,11 @@ it under **Advanced**.
 The frontend makes a key that carries that role and nothing more, registers your server on that
 agent, and switches the agent's MCP tool on. **Remove** on the same page deletes the key, so the
 agent's access ends at once.
+
+What a role may do is set on **Access**. Pick a role: each system, source, tool and toolset then
+has a **Read** switch and a **Write** switch, and a system with a web API also has one switch per
+method (GET, POST and so on). A switch resting in the middle means the role holds some of what is
+under it. The role's name says how far it reaches, as in "Academic Advisor (Read-Write)".
 
 ## Step 5. Ask the agent
 
@@ -205,6 +288,7 @@ and press **Connect** on the frontend's **Backend** page: the server makes itsel
 | `proxy` | Caddy: gets and renews the certificate, sends http on to https | The only one that listens on the server (80, 443) |
 | `ontology-gateway` | The gateway agents call, and the frontend's API | Your platform, the connected systems |
 | `sync-engine` | The worker that copies your systems on their schedules | Your platform, the connected systems |
+| `mcp-toolbox` | Google MCP Toolbox: makes the calls to the custom APIs you connected | Those APIs. Only the gateway reaches it |
 | `migrate` | Database migrations; runs once at every start, then exits | The server's database |
 | `ontology-db` | PostgreSQL: the synced copy, the sync history, the audit log | Nothing outside |
 | `redis` | The worker's queue, kept in memory only | Nothing outside |
@@ -220,6 +304,10 @@ The database, the queue and the search index sit on a network with no way out to
 | The backend's key, and each connected agent's key and MCP server | Your ibl.ai platform |
 | Which platform the server belongs to, and its copy of the backend's key, encrypted | This server, always |
 | The connected systems with their encrypted logins, the sync schedules, the list of connected agents | This server (`rbac`), or your platform (`dm`) |
+| A custom API's key | With its system, encrypted. The gateway adds it to each call: it is in no file, and the MCP Toolbox keeps none |
+| A custom API's endpoints | This server, always (`tools.yaml`, in the `config` volume) |
+| An Auto Ontology server's token | With its system, encrypted. It is sent only to that server, on the calls that read its terms |
+| The terms read from an Auto Ontology server | With its system: this server (`rbac`), or your platform (`dm`) |
 | The synced copy of your systems, the memory files, the search index, the audit log | This server, always |
 | Which server is your platform's backend | ibl.ai Ontology, for each computer you connect from, until your platform keeps ontology records; then your platform |
 

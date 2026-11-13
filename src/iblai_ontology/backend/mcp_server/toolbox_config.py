@@ -17,10 +17,15 @@ passthrough like ``statement: ${sql}``) cannot be expressed as a Toolbox
 parameterized query. They are reported as *native* tools — served directly by
 the gateway, not the Toolbox — and are omitted from the generated config and
 from any toolset that referenced them.
+
+The Toolbox refuses its whole file when one entry is wrong, so only what it can
+load is written: a source no tool uses is left out, and ``service`` (whose key the
+gateway adds to a system's ``http`` tool) is the gateway's word, not passed on.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,7 +41,9 @@ _INJECTION_RE = re.compile(r"\$\{[A-Za-z0-9_]+\}")
 GATEWAY_TYPES = {"twenty"}
 
 # DSL keys that are consumed by the translation itself rather than copied through.
-_DROP_KEYS = {"kind", "name", "type"}
+_DROP_KEYS = {"kind", "name", "type", "service"}
+# What the empty toolset that names a written file starts with (see write_toolbox_config).
+MARK = "loaded-"
 
 # Per-source-kind field renames: the DSL uses a uniform ``database`` field, but
 # some Toolbox source kinds name it differently (Oracle uses ``serviceName``).
@@ -54,6 +61,9 @@ class ToolboxBuildResult:
     sources: int = 0
     tools: int = 0
     toolsets: int = 0
+    mark: str = (
+        ""  # the toolset the Toolbox answers for once it has loaded the written file
+    )
 
 
 def _load_raw_docs(tools_path: Path) -> list[dict[str, Any]]:
@@ -112,6 +122,9 @@ def build_toolbox_config(tools_path: str | Path) -> ToolboxBuildResult:
         for ts, members in toolsets.items()
         if (kept := [t for t in members if t not in native_set]) or not members
     }
+    # A source no tool uses is of no use to the Toolbox, and one it cannot open stops it whole.
+    used = {tool.get("source") for tool in tools.values()}
+    sources = {name: source for name, source in sources.items() if name in used}
 
     config = {"sources": sources, "tools": tools, "toolsets": toolsets}
     return ToolboxBuildResult(
@@ -126,10 +139,20 @@ def build_toolbox_config(tools_path: str | Path) -> ToolboxBuildResult:
 def write_toolbox_config(
     tools_path: str | Path, dest: str | Path
 ) -> ToolboxBuildResult:
-    """Generate the Toolbox config and write it to ``dest`` (parents created)."""
+    """Generate the Toolbox config and write it to ``dest`` (parents created).
+
+    The file also holds one empty toolset named after a hash of its content
+    (``result.mark``): the Toolbox answers for it only once it has loaded this very file.
+    """
     result = build_toolbox_config(tools_path)
+    # An empty map is left out: the Toolbox's reader was only seen with filled ones.
+    config = {key: value for key, value in result.config.items() if value}
+    body = yaml.safe_dump(config, default_flow_style=False, sort_keys=False)
+    result.mark = MARK + hashlib.sha256(body.encode()).hexdigest()[:12]
+    config["toolsets"] = {**config.get("toolsets", {}), result.mark: []}
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    # Written in place, not swapped in: a Toolbox that mounts this one file keeps seeing it.
     with open(dest, "w") as f:
         f.write(
             "# GENERATED from config/tools.yaml by `ontology mcp build` — do not edit.\n"
@@ -137,5 +160,13 @@ def write_toolbox_config(
         f.write(
             "# Placeholder tokens are expanded by the Toolbox from its environment (.env.mcp).\n"
         )
-        yaml.safe_dump(result.config, f, default_flow_style=False, sort_keys=False)
+        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
     return result
+
+
+def publish(tools_path: str | Path) -> ToolboxBuildResult:
+    """Write the Toolbox's file where it watches for it: ``generated/toolbox.yaml`` beside tools.yaml."""
+    tools_path = Path(tools_path)
+    return write_toolbox_config(
+        tools_path, tools_path.parent / "generated" / "toolbox.yaml"
+    )
