@@ -46,24 +46,79 @@ export function validHost(host: string): boolean {
 
 /** The ibl.ai platform's address, which the install script takes when it is given no other. */
 export const PLATFORM_URL = "https://api.iblai.app/dm";
+/** The frontend the install's link opens when the script is given no other. */
+export const FRONTEND_URL = "https://ontology.ibl.ai";
+// As the script takes it: https, or a developer's own machine.
+const FRONTEND = /^(https:\/\/[\w.:/-]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)$/;
 
-/** The command that installs a backend; a value not known, or not one plain word, is left for the script to ask. */
+/** The command that installs a backend: no key and no platform; a host name not known is left for the script to ask. */
 export function installCommand(known: {
-  platform: string;
-  platformUrl: string;
   host: string;
+  platformUrl: string;
+  /** Where this frontend is, so the link the install prints comes back to it. */
+  frontend: string;
 }): string {
   const flags = [
-    /^[\w.-]+$/.test(known.platform) && `--platform ${known.platform}`,
-    // Named only where it is not the script's own default.
+    validHost(known.host) && `--host ${known.host}`,
+    // Named only where they are not the script's own defaults.
     known.platformUrl !== PLATFORM_URL &&
       /^https?:\/\/[\w.:/-]+$/.test(known.platformUrl) &&
       `--platform-url ${known.platformUrl}`,
-    validHost(known.host) && `--host ${known.host}`,
+    known.frontend !== FRONTEND_URL &&
+      FRONTEND.test(known.frontend) &&
+      `--frontend ${known.frontend}`,
   ].filter(Boolean);
   return [
     `curl -fsSL ${INSTALL_SCRIPT}`,
     flags.length ? "  | sudo bash -s --" : "  | sudo bash",
     ...flags.map((flag) => `    ${flag}`),
   ].join(" \\\n");
+}
+
+/** What the install's link carries after `#`, and the platform picked for it on the way through a switch. */
+export type SetupLink = { host: string; code: string; platform?: string };
+
+const KEPT = "ontology_setup";
+// The code of a link this tab has used or dropped: going back to its address does not bring it back.
+const DONE = "ontology_setup_done";
+
+/** The host name and the one-time code in a link's `#host=…&code=…`; null for anything else. */
+export function setupLink(hash: string): SetupLink | null {
+  const said = new URLSearchParams(hash.replace(/^#/, ""));
+  const host = (said.get("host") ?? "").trim().toLowerCase();
+  const code = said.get("code") ?? "";
+  // A host name Connect would take, and a code as the script makes one.
+  return addressOf(host) && /^[0-9a-f]{32}$/.test(code) ? { host, code } : null;
+}
+
+/** Keep the link this page was opened with for the tab: sign-in and a platform switch keep only the path. */
+export function keepSetupLink(): void {
+  if (typeof window === "undefined") return;
+  const link = setupLink(window.location.hash);
+  if (link && link.code !== window.sessionStorage.getItem(DONE))
+    window.sessionStorage.setItem(KEPT, JSON.stringify(link));
+}
+
+/** The link this tab keeps, until it is used or dropped. */
+export function pendingSetup(): SetupLink | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const kept = JSON.parse(window.sessionStorage.getItem(KEPT) ?? "null") as SetupLink | null;
+    return kept && addressOf(kept.host) && typeof kept.code === "string" ? kept : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Note the platform picked for the kept link, before the switch to it reloads the page. */
+export function noteSetupPlatform(platform: string): void {
+  const kept = pendingSetup();
+  if (kept) window.sessionStorage.setItem(KEPT, JSON.stringify({ ...kept, platform }));
+}
+
+/** Drop the kept link, used or not. */
+export function forgetSetup(): void {
+  const kept = pendingSetup();
+  if (kept) window.sessionStorage.setItem(DONE, kept.code);
+  window.sessionStorage.removeItem(KEPT);
 }

@@ -63,8 +63,11 @@ def write_rows(schedule_name: str, rows: list[dict]) -> dict:
 @app.task(name="iblai_ontology.backend.sync.tasks.tick")
 def tick() -> list[str]:
     """Queue every schedule whose cron has come due since its last run; beat calls this each minute."""
+    from iblai_ontology.backend.platform import setup
     from iblai_ontology.backend.sync import scheduler, schedules
 
+    if setup.pending():
+        return []  # no platform yet to read the schedules from
     queued = []
     for sched in schedules.all():
         try:

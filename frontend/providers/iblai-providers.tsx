@@ -20,6 +20,7 @@ import { LocalStorageService } from "@/lib/iblai/storage-service";
 import config from "@/lib/iblai/config";
 import { resolveAppTenant, checkTenantMismatch } from "@/lib/iblai/tenant";
 import { redirectToAuthSpa } from "@/lib/iblai/auth-utils";
+import { keepSetupLink } from "@/lib/ontology/install";
 
 const storageService = LocalStorageService.getInstance();
 
@@ -38,6 +39,8 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
 
   const [isInitialized] = useState(() => {
     if (typeof window === "undefined") return false;
+    // Before the sign-in redirect below can leave the page: it keeps only the path.
+    keepSetupLink();
     try {
       initializeDataLayer(config.dmUrl(), config.lmsUrl(), config.lmsUrl(), storageService, {
         401: () => redirectToAuthSpa(undefined, undefined, true),

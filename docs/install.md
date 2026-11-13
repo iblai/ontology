@@ -1,12 +1,12 @@
 # Install ibl.ai Ontology on your server
 
 For the administrator of an ibl.ai platform who sets up the Ontology Backend on a server of their
-own. It shows the one command, what it asks and prints, what ends up on the server, and how the
-whole thing is configured afterwards.
+own. It shows the one command, what it prints, how the server is set up for your platform, what
+ends up on the server, and how the whole thing is configured afterwards.
 
-The frontend, **ibl.ai Ontology**, is at `https://ontology.ibl.ai` and will be available soon. It
-walks you through the same steps on its **Connect a backend** screen. This page is the long
-version.
+The frontend, **ibl.ai Ontology**, is at `https://ontology.ibl.ai` and will be available soon. Its
+**Connect a backend** screen shows the same command with your host name filled in. This page is
+the long version.
 
 ## What you end up with
 
@@ -28,43 +28,27 @@ version.
   change, so they cannot be let in by address; every call is checked by sign-in or key instead.
 - **Outbound https** from the server to your ibl.ai platform, to the systems you will connect, and
   to GitHub and `ghcr.io` for the install itself.
-- **An administrator's sign-in** on your ibl.ai platform.
+- **An administrator's sign-in** on your ibl.ai platform, for step 2. The server itself is given
+  no key and no password.
 
-## Step 1. In the frontend: name the server and make its key
-
-1. Sign in on `https://ontology.ibl.ai` (available soon) as an administrator of your platform. A
-   platform with no backend yet opens on **Connect a backend**.
-2. Type the server's **host name**. The install command below it fills in with your platform and
-   that host name.
-3. Press **Create key**. The key is shown once: keep the page open, you paste it in step 2. It is
-   a platform API key that acts as you, and the backend uses it to keep your platform's roles and
-   to connect your agents.
-
-![The card that connects a backend: the host name typed, the install command filled in, Create key and Connect](images/install/connect-a-backend.png)
-
-## Step 2. On the server: run the command
-
-Copy the command from the frontend. It has this shape:
+## Step 1. On the server: run the command
 
 ```bash
 curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
   | sudo bash -s -- \
-    --platform <your platform's key> \
     --host <your server's host name>
 ```
 
 To read the script before running it, download it first:
 `curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh | less`.
 
-The one thing it asks is the key, at a prompt that does not show what you paste. What it prints,
-with Docker's own output left out (this is the script's text, on a fresh server and a platform that
-keeps no ontology records yet; a server that has Docker starts with "Docker with Compose is already
-here: nothing to install."):
+It asks for nothing: no key, no platform. What it prints, with Docker's own output left out (this
+is the script's text, on a fresh server and a platform that keeps no ontology records yet; a
+server that has Docker starts with "Docker with Compose is already here: nothing to install."):
 
 ```text
 Installing Docker and Compose from Ubuntu's own archive (docker.io, docker-compose-v2).
-The backend's key (Connect a backend > Create key; it is not shown as you paste):
-The platform takes the key, and its administrators can grant ontology roles.
+This server reaches the platform.
 This platform keeps no ontology records yet: the connected systems and the schedules will
 live on this server. The roles still live in the platform.
 Writing /opt/iblai-ontology/.env (readable by root alone).
@@ -74,8 +58,13 @@ Waiting for https://ontology.example.edu/mcp: the certificate comes first (up to
 
 The ontology backend is running (version <version>).
 
-  Enter in the frontend, under Connect a backend:    ontology.example.edu
-  The address agents call:                           https://ontology.example.edu/mcp
+  Open this to finish (works once):
+  https://ontology.ibl.ai/#host=ontology.example.edu&code=<32 characters>
+
+  It asks you to sign in to ibl.ai and to choose the platform this server is for.
+  Lost it? Run the install command again.
+
+  The address agents call:   https://ontology.example.edu/mcp
 
   Its two files:   /opt/iblai-ontology/compose.yaml
                    /opt/iblai-ontology/.env
@@ -92,31 +81,47 @@ What it does, in order:
 1. **Checks the server**: root, Ubuntu 22.04 or later, amd64. Otherwise it stops and says why.
 2. **Docker**: uses the one that is there. With none, it installs `docker.io` and
    `docker-compose-v2` from Ubuntu's own archive; no repository or key file is added.
-3. **Asks for the key**, and for the platform and the host name if the command did not carry
-   them.
-4. **Asks your platform two things with that key, before it writes anything.** Whether your
-   administrators can grant ontology roles: if not, it stops with the platform's own words. And
+3. **Asks for the host name** if the command did not carry it. Nothing else is asked.
+4. **Asks the ibl.ai platform two things, with no key, before it writes anything.** Whether this
+   server reaches it: a network the platform does not let through stops the install here. And
    whether the platform keeps ontology records: the answer decides where your settings live (see
    [Where things are kept](#where-things-are-kept)).
-5. **Writes `/opt/iblai-ontology/.env`**, readable by root alone, with four secrets it generates.
+5. **Writes `/opt/iblai-ontology/.env`**, readable by root alone, with four secrets and the
+   link's code, all generated.
 6. **Downloads `compose.yaml`** of the same release beside it and pulls the images.
 7. **Starts the backend** and waits up to three minutes for `https://<host name>/mcp` to answer.
-8. **Says what to do next.**
+8. **Prints the link.**
+
+Until the link is used the server belongs to no platform, and it answers nothing but the link.
+Keep the link to yourself until then: it works once, for whoever opens it and administers an
+ibl.ai platform.
 
 To see every step without changing anything, add `--dry-run`: it asks nothing and prints what it
 would do.
 
-## Step 3. In the frontend: connect
+## Step 2. In the browser: open the link and choose the platform
 
-Back on **Connect a backend**, the host name is still filled in: press **Connect**. The frontend
-checks that the backend answers at `https://<host name>` and takes your sign-in, then opens its
-pages. If your backend answers at another address (a port, a path), give it under **Advanced**.
+1. Open the link the install printed, and sign in to ibl.ai if you are asked.
+2. The frontend names your server and asks which platform it is for. If you administer one
+   platform, you see its name. If you administer several, pick it from the list: nothing is
+   chosen for you, and picking a platform you are not signed in to signs you in to it first.
+3. Press **Set up**.
 
-![The Dashboard as it opens once the backend is connected](images/install/connected.png)
+Your server then checks the link's code, asks your platform that you administer the platform you
+chose and that its administrators can grant ontology roles, and makes its own key in your
+platform, in your name. The key is never shown and never leaves your server. With it the backend
+keeps your platform's roles and connects your agents. The frontend then opens its pages.
 
-On another computer, ibl.ai Ontology asks for the host name once more: enter it and press Connect.
+![The Dashboard as it opens once the server is set up](images/install/connected.png)
 
-## Step 4. Connect a system
+The server now belongs to that platform. To give it to another one, remove it and install it
+again.
+
+On another computer, ibl.ai Ontology asks for the host name once: under **Connect a backend**,
+enter it and press **Connect**. If your backend answers at another address (a port, a path), give
+it under **Advanced**.
+
+## Step 3. Connect a system
 
 **Add a system** → pick it → give what it asks → **Connect**.
 
@@ -131,18 +136,22 @@ On another computer, ibl.ai Ontology asks for the host name once more: enter it 
 
 ![The Twenty CRM system's page after its first sync: eight tables and about ten thousand rows](images/install/twenty-connected.png)
 
-## Step 5. Connect an agent
+## Step 4. Connect an agent
 
 **Agents** → **Connect an agent** → pick one of your platform's agents and a role → **Connect**.
 
 ![The Connect an agent dialog, with an agent picked and the Twenty CRM role chosen](images/install/connect-an-agent.png)
 
 The frontend makes a key that carries that role and nothing more, registers your server on that
-agent, and switches the agent's MCP tool on. The agent can then list the tables it may query,
-query them, and, with a role that allows it, create and update records through named operations
-(for Twenty CRM: people, companies, opportunities, notes and tasks; nothing is deleted). Each
-change is recorded before it runs. **Remove** on the same page deletes the key, so the agent's
-access ends at once.
+agent, and switches the agent's MCP tool on. **Remove** on the same page deletes the key, so the
+agent's access ends at once.
+
+## Step 5. Ask the agent
+
+Open the agent's chat on your platform. It can list the tables it may query, query them, and,
+with a role that allows it, create and update records through named operations (for Twenty CRM:
+people, companies, opportunities, notes and tasks; nothing is deleted). Each change is recorded
+before it runs.
 
 ![The agent, asked to check the ontology's data, saying what it holds and how the last syncs went](images/install/agent-answers.png)
 
@@ -165,22 +174,27 @@ Everything the install leaves outside Docker is one folder:
 |---|---|---|
 | `ONTOLOGY_HOST` | `--host` | The server's host name: the certificate is issued for it, and agents call `https://<it>/mcp`. |
 | `IBLAI_BASE_URL` | Set by the install | The ibl.ai platform's address, `https://api.iblai.app/dm`: where every sign-in and key is checked, and where the roles are kept. |
-| `IBLAI_ORG` | `--platform` | Your platform's key. Only its administrators get into the frontend, and only its credentials are taken by the gateway. |
-| `IBLAI_ADMIN_TOKEN` | The key you pasted | The backend's platform API key. With it the backend writes the roles, registers itself on an agent and switches that agent's MCP tool on. |
 | `ONTOLOGY_DATA_STORE` | The platform's answer at install | `rbac`: the connected systems and schedules are kept on this server. `dm`: the platform keeps them. The roles are in the platform either way. |
+| `ONTOLOGY_SETUP_CODE` | Generated | The code of the link that sets the server up. Once the server is set up it opens nothing. |
 | `ONTOLOGY_DB_PASSWORD` | Generated | The password of the server's own database. |
 | `CHROMA_TOKEN` | Generated | The token of the search index. |
 | `ONTOLOGY_SECRET_KEY` | Generated | The backend's signing secret. |
-| `ONTOLOGY_CREDENTIAL_KEY` | Generated | Encrypts the logins and API keys of the systems you connect. Without it they must be entered again: **keep a copy of `.env` somewhere safe.** |
+| `ONTOLOGY_CREDENTIAL_KEY` | Generated | Encrypts the logins and API keys of the systems you connect, and the backend's own key. Without it they must be entered again: **keep a copy of `.env` somewhere safe.** |
 
-To change one (a new host name, a new key from the frontend's **Backend** page), edit the file and
-apply it:
+The platform the server was set up for and the backend's key are not in `.env`: the server keeps
+them in its own database, the key encrypted.
+
+To change the host name, edit the file and apply it:
 
 ```bash
 sudo docker compose -f /opt/iblai-ontology/compose.yaml up --detach
 ```
 
 After a change of host name, remove and connect your agents again: each was given the old address.
+
+If the backend's key stops working (it was deleted in your platform, or the administrator who set
+the server up no longer administers the platform), sign in as an administrator of the platform
+and press **Connect** on the frontend's **Backend** page: the server makes itself a new one.
 
 ### What runs
 
@@ -202,15 +216,16 @@ The database, the queue and the search index sit on a network with no way out to
 |---|---|
 | The roles, and who or what holds each | Your ibl.ai platform, as its own RBAC roles |
 | The backend's key, and each connected agent's key and MCP server | Your ibl.ai platform |
+| Which platform the server belongs to, and its copy of the backend's key, encrypted | This server, always |
 | The connected systems with their encrypted logins, the sync schedules, the list of connected agents | This server (`rbac`), or your platform (`dm`) |
 | The synced copy of your systems, the memory files, the search index, the audit log | This server, always |
 | Which server is your platform's backend | ibl.ai Ontology, for each computer you connect from, until your platform keeps ontology records; then your platform |
 
 What to back up: `/opt/iblai-ontology/.env`, and two Docker volumes. `iblai-ontology_db` holds
-the audit log, and with `rbac` the connected systems and the list of connected agents.
-`iblai-ontology_config` holds the tools and schedules a connection adds. The synced copy, the
-memory files and the search index are rebuilt by syncing again; the certificate is issued again
-by itself.
+the audit log, the platform the server belongs to with the backend's key, and with `rbac` the
+connected systems and the list of connected agents. `iblai-ontology_config` holds the tools and
+schedules a connection adds. The synced copy, the memory files and the search index are rebuilt
+by syncing again; the certificate is issued again by itself.
 
 ## Day to day
 
@@ -221,7 +236,8 @@ sudo docker compose -f /opt/iblai-ontology/compose.yaml logs --tail 50 sync-engi
 ```
 
 - **Upgrade**: run the install command again. `.env` is kept and nothing is asked; the new
-  release's `compose.yaml` and images replace the old ones, and the migrations run.
+  release's `compose.yaml` and images replace the old ones, and the migrations run. On a server
+  that is not set up yet, it prints the link again.
 - **Remove**: the same command with `--uninstall`. It asks you to type the host name, then removes
   the containers, the volumes, the images and the folder. Docker stays. With `rbac`, remove each
   agent's connection in the frontend first, so its key is deleted. The roles and the backend's own
@@ -238,25 +254,38 @@ again.
 | `run it as root, with sudo.` | The command lacked `sudo`. | Run it as shown. |
 | `this installs on Ubuntu 22.04 or later…` or `…built for amd64…` | Another system or processor. | Use an Ubuntu 22.04 or later server on amd64. |
 | `Docker is installed without Compose…` | Docker is there, its Compose plugin is not. | Add the package the message names, then run it again. |
-| `there is no terminal to ask on…` | It was run where it cannot prompt. | Run it in your own terminal session on the server. |
-| `no answer from the platform at …` | The server cannot reach your platform. | Allow outbound https from the server. |
-| `the platform's edge refused this server (HTTP 403…)` | The network your server is on is not let through to the platform. | Send ibl.ai the server's public address to allow. |
-| `the platform refused the key for …` | The key is not one of this platform, or was deleted. The platform's own words follow the colon. | Make a new one on **Connect a backend**, signed in to that platform. |
-| `the administrators of … cannot grant ontology roles yet…` | Your platform is not set up for ontology roles. | Ask ibl.ai to enable them for your platform. |
+| `there is no terminal to ask on…` | The command carried no host name, and it was run where it cannot prompt. | Give `--host`, or run it in your own terminal session on the server. |
+| `--platform is no longer taken…` | The command is one from an earlier release. | Leave `--platform` out: the platform is chosen when the link is opened. |
+| `no answer from the platform at …` | The server cannot reach the ibl.ai platform. | Allow outbound https from the server. |
+| `the platform's edge refused this server…` | The network your server is on is not let through to the platform. | Send ibl.ai the server's public address to allow. |
 | `the backend did not start…` | A container failed; its last lines are printed above the message. | Read them, fix the cause, run it again. `.env` is kept. |
 | `https://…/mcp did not answer in 3 minutes…` | The certificate could not be issued or the server cannot be reached. | Check that the host name points to the server and that ports 80 and 443 are open, then run it again. |
+
+## When Set up is refused
+
+The frontend shows your server's own words under the button. Until Set up succeeds the server
+keeps nothing and belongs to no platform.
+
+| It says | What it means | What to do |
+|---|---|---|
+| `…that is not its code…` | The link is not this server's, or was not copied whole. | Run the install command again and open the link it prints. |
+| `Only an administrator of … sets up its backend.` | Your sign-in does not administer that platform. | Pick a platform you administer, or sign in as someone who does. |
+| `Your sign-in is for another platform than …` | You are still signed in to another platform. | Pick the platform again on the card. |
+| `The administrators of … cannot grant ontology roles yet…` | Your platform is not set up for ontology roles. | Ask ibl.ai to enable them for your platform, then open the link again. |
+| `This server belongs to another platform than …` | The server is already set up, for another platform. | Sign in to that platform; or remove the server and install it again. |
+| `This server was set up a moment ago by someone else…` | Two people used the link at the same moment. | Delete the unused key the message names, in your platform. |
+| `The ibl.ai platform did not answer…` | Your server could not reach the platform. | Try again; check outbound https from the server. |
 
 ## The script's options
 
 | Option | |
 |---|---|
-| `--platform <key>` | Your platform's key in ibl.ai. |
 | `--host <host name>` | The name the server answers at. |
 | `--dry-run` | Say what would happen; change nothing and ask nothing. |
 | `--uninstall` | Remove the backend, its data and `/opt/iblai-ontology`. |
 | `--help` | Print this list. |
 
-A platform or a host name not given is asked for. The key is always asked for, hidden.
+A host name not given is asked for. Nothing else is.
 
 More for your technical team: [deployment.md](deployment.md) (the same install in reference form,
 and the full stack behind a firewall), [platform-integration.md](platform-integration.md) (how an

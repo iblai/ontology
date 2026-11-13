@@ -44,8 +44,8 @@ def _platform_roles() -> None:
     if not platform_roles():
         raise ConnectionRefused(
             "No agent can be connected to this backend yet: it keeps its roles in a file "
-            "on its own server. Install it with your platform's key, so the roles live in "
-            "the ibl.ai platform."
+            "on its own server. One installed with the install script keeps them in the "
+            "ibl.ai platform."
         )
 
 

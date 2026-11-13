@@ -157,8 +157,13 @@ def resolve_platform_request(
 
     from iblai_ontology.backend.api import auth
     from iblai_ontology.backend.identity import role_source
+    from iblai_ontology.backend.platform import setup
 
-    if not settings.ONTOLOGY_DM_URL or not settings.IBLAI_ORG:
+    if setup.pending():
+        raise CredentialRefused(
+            "This server is not set up yet: it has no platform.", 503
+        )
+    if not settings.ONTOLOGY_DM_URL or not setup.platform():
         raise CredentialRefused(
             "ibl.ai tokens and API keys are not accepted here: this backend needs both "
             "its platform (IBLAI_ORG) and the address that verifies them (ONTOLOGY_DM_URL).",

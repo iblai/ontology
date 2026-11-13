@@ -19,10 +19,12 @@ import yaml
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from iblai_ontology.backend import store
+from iblai_ontology.backend.platform import setup
 from iblai_ontology.backend.services.models import Service, ServiceHealth
 from iblai_ontology.config import data_store, dm_store, platform_roles
 from iblai_ontology.config.reader import ConfigReader, _redact
@@ -66,10 +68,24 @@ def _json_null():
     return JsonResponse(None, safe=False)
 
 
+class NotSetUp(APIException):
+    """A server installed with no platform, before the frontend has set it up."""
+
+    status_code = 503
+    default_code = "not_set_up"
+    default_detail = (
+        "This server is not set up yet: open the link its install printed, or run the "
+        "install command again to print it."
+    )
+
+
 class ConsoleAPIView(APIView):
     """Base view: auth/permission come from REST_FRAMEWORK defaults; adds audit."""
 
     def initial(self, request, *args, **kwargs):
+        # Before any sign-in is judged: with no platform yet, any platform's admin would pass.
+        if setup.pending():
+            raise NotSetUp()
         super().initial(request, *args, **kwargs)
         # Past the admin check: a new platform's first console request gets the example roles.
         from iblai_ontology.backend.identity import role_source
@@ -663,9 +679,63 @@ class CountsView(ConsoleAPIView):
             "toolsets": len(reader.get_toolsets()),
             "roles": len(RoleResolver().role_names()),
             "data_store": data_store(),
-            "platform": settings.IBLAI_ORG,
+            "platform": setup.platform(),
         }
         return Response(CountsSerializer(payload).data)
+
+
+# ---------------------------------------------------------------------------
+# Setting up a server that was installed with no platform
+# ---------------------------------------------------------------------------
+
+
+class SetupView(APIView):
+    """Whether this server is set up, which anyone may ask, and setting it up from the frontend.
+
+    None of DRF's sign-ins: a server that waits has no platform to judge one by. The code
+    its install printed, and the platform's own word about the caller, stand in for it.
+    """
+
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def get(self, request):
+        from .serializers import SetupStatusSerializer
+
+        return Response(SetupStatusSerializer({"set_up": not setup.pending()}).data)
+
+    def post(self, request):
+        from iblai_ontology.backend.identity.models import AuditLog
+
+        from .serializers import SetupInputSerializer
+
+        form = SetupInputSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        v = form.validated_data
+        try:
+            done = setup.set_up(
+                _authorization(request), named=v["platform"], code=v["code"]
+            )
+        except setup.SetupRefused as exc:
+            done = {"message": str(exc), "by": "", "changed": False}
+            ok = False
+        else:
+            ok = True
+        if done["changed"] or not ok:
+            try:
+                store.create(
+                    AuditLog,
+                    user_id=done["by"] or "unknown",
+                    user_email="",
+                    user_role="platform-admin" if done["by"] else "unknown",
+                    action="server.setup",
+                    resource=v["platform"] or setup.platform() or "-",
+                    allowed=ok,
+                    ip_address=ConsoleAPIView._client_ip(request) or None,
+                )
+            except Exception:  # pragma: no cover - auditing must not break requests
+                logger.exception("audit write failed: server.setup")
+        return _envelope(ok, done["message"])
 
 
 # ---------------------------------------------------------------------------

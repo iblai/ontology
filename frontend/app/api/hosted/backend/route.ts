@@ -14,10 +14,18 @@ export async function GET(req: NextRequest): Promise<Response> {
   );
 }
 
-/** Connect the caller's platform to the backend at `url`; a refusal is `{ok: false, message}`. */
+/** Connect the caller's platform to the backend at `url`, set up first with `code` when it is fresh; a refusal is `{ok: false, message}`. */
 export async function PUT(req: NextRequest): Promise<Response> {
   if (!MULTI_PLATFORM) return notHosted();
-  const body = (await req.json().catch(() => null)) as { url?: unknown } | null;
-  const url = typeof body?.url === "string" ? body.url : "";
-  return Response.json(await connectBackend(req.headers.get("authorization"), url));
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  const text = (name: string) => {
+    const value = body?.[name];
+    return typeof value === "string" ? value : "";
+  };
+  return Response.json(
+    await connectBackend(req.headers.get("authorization"), text("url"), {
+      platform: text("platform"),
+      code: text("code"),
+    }),
+  );
 }

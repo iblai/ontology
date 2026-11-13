@@ -13,19 +13,33 @@ SCRIPT = (ROOT / "deploy" / "install.sh").read_text()
 IMAGE = "ghcr.io/iblai/ontology"
 
 
-def test_the_env_file_holds_exactly_what_compose_requires():
+def test_the_env_file_holds_what_compose_requires_and_the_setup_code():
     used = set(re.findall(r"\$\{([A-Z_]+)", COMPOSE))
     required = set(re.findall(r"\$\{([A-Z_]+):\?", COMPOSE))
-    # Every setting stops compose with its name when it is missing.
-    assert used == required
+    # A missing setting stops compose with its name, but for the three that tell a server
+    # waiting to be set up from one installed with its platform and key.
+    code = {"ONTOLOGY_SETUP_CODE"}
+    assert used - required == code | {"IBLAI_ORG", "IBLAI_ADMIN_TOKEN"}
     env_file = SCRIPT.split('cat >"$DIR/.env" <<EOF\n')[1].split("\nEOF\n")[0]
     written = set(re.findall(r"^([A-Z_]+)=", env_file, re.MULTILINE))
-    assert written == required
+    assert written == required | code
+
+
+def test_the_install_takes_no_key_and_no_platform():
+    # The platform is chosen in the frontend, and the server makes its own key there.
+    assert "Api-Token" not in SCRIPT and "hidden" not in SCRIPT
+    assert '--platform) stop "--platform is no longer taken' in SCRIPT
+    assert 'say "  $FRONTEND/#host=$HOST&code=$CODE"' in SCRIPT
+    # The code is made once, and an upgrade prints the same link from .env.
+    assert (
+        "CODE=$(secret 16)" in SCRIPT and "CODE=$(kept ONTOLOGY_SETUP_CODE)" in SCRIPT
+    )
 
 
 def test_the_store_is_asked_of_the_platform_and_kept_through_an_upgrade():
-    # The platform's answer about its records says where the settings live; nothing is guessed.
-    assert "200)\n      STORE=dm\n" in SCRIPT and "404)\n      STORE=rbac\n" in SCRIPT
+    # Whether the platform has the records route says where the settings live; nothing is guessed.
+    assert "404)\n      STORE=rbac\n" in SCRIPT
+    assert "200 | 401 | 403)\n" in SCRIPT and "      STORE=dm\n" in SCRIPT
     # An upgrade reads it back from .env, which compose requires it in.
     assert "STORE=$(kept ONTOLOGY_DATA_STORE)" in SCRIPT
     assert "ONTOLOGY_DATA_STORE: ${ONTOLOGY_DATA_STORE:?missing in .env}" in COMPOSE

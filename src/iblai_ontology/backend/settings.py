@@ -265,7 +265,8 @@ if ONTOLOGY_DATA_STORE not in ("local", "rbac", "dm"):
     raise ImproperlyConfigured(
         f"ONTOLOGY_DATA_STORE must be local, rbac or dm, not {ONTOLOGY_DATA_STORE!r}."
     )
-if ONTOLOGY_DATA_STORE != "local":
+# A server with a setup code has no platform and no key until the frontend sets it up.
+if ONTOLOGY_DATA_STORE != "local" and not os.environ.get("ONTOLOGY_SETUP_CODE"):
     from iblai_ontology.backend.platform.client import PlatformConfig
 
     # Fails here, not on the first request, when IBLAI_ORG / IBLAI_ADMIN_TOKEN are missing.

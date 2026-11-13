@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from functools import cache
 
 from django.db import models
 from django.db.models.deletion import get_candidate_relations_to_delete
@@ -31,12 +30,19 @@ def _dm(model) -> bool:
     return dm_store() and model.__name__ not in _LOCAL
 
 
-@cache
+_client = None
+
+
 def client():
     """The DM client the registry, the sync schedules and the roles share."""
-    from iblai_ontology.backend.platform.client import PlatformClient
+    from iblai_ontology.backend.platform.client import PlatformClient, PlatformConfig
 
-    return PlatformClient()
+    global _client
+    # Read each time: a server set up from the frontend gets its key, or a new one, while it runs.
+    config = PlatformConfig.from_env()
+    if _client is None or _client.config != config:
+        _client = PlatformClient(config)
+    return _client
 
 
 def _text(value) -> str:

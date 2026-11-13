@@ -36,6 +36,8 @@ from rest_framework.authentication import BaseAuthentication, get_authorization_
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
 
+from iblai_ontology.backend.platform import setup
+
 DM_VERIFY_PATH = "/api/core/token/verify/"
 DM_PLATFORMS_PATH = "/api/core/users/platforms/"
 DM_GRANTS_PATH = "/v1/rbac/permissions/"
@@ -89,7 +91,8 @@ def _get_json(path: str, scheme: str, credential: str, what: str, **params):
     return resp.json()
 
 
-def _ask_platform(scheme: str, credential: str) -> PlatformMember:
+def _ask_platform(scheme: str, credential: str, platform: str = "") -> PlatformMember:
+    """``platform`` judges the caller for that platform alone: a server that has none yet."""
     what = "DM token" if scheme == "Token" else "API key"
     user = _get_json(DM_VERIFY_PATH, scheme, credential, what)
     if not isinstance(user, dict):
@@ -109,12 +112,12 @@ def _ask_platform(scheme: str, credential: str) -> PlatformMember:
         raise CredentialRejected("Platform memberships rejected.")
     # The caller's own active memberships on an allowed platform, by its key; an empty
     # allowlist takes any platform.
-    allowed = settings.ONTOLOGY_ADMIN_PLATFORMS
+    allowed = {platform} if platform else setup.admin_platforms()
     active = [
         m for m in memberships if m.get("username") == username and m.get("active")
     ]
     own = [m for m in active if not allowed or m.get("key") in allowed]
-    here = settings.IBLAI_ORG
+    here = platform or setup.platform()
     return PlatformMember(
         user_id=str(user.get("user_id") or ""),
         username=username,
@@ -187,7 +190,7 @@ def platform_grants(scheme: str, credential: str) -> dict[str, dict]:
                 params={"resource_paths": ROOT, "recursive": "true"},
                 headers={
                     "Authorization": f"{scheme} {credential}",
-                    "iblai-org": settings.IBLAI_ORG,
+                    "iblai-org": setup.platform(),
                 },
                 timeout=HTTP_TIMEOUT,
             )

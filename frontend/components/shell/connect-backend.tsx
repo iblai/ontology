@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import config from "@/lib/iblai/config";
-import { resolveAppTenant } from "@/lib/iblai/tenant";
 import { apiClient } from "@/lib/ontology/api-client";
-import { addressOf, hostName, hostOf, installCommand } from "@/lib/ontology/install";
+import { FRONTEND_URL, addressOf, hostName, hostOf, installCommand } from "@/lib/ontology/install";
 import { CodeBlock } from "@/components/console/code-block";
 import { Field, PLAIN } from "@/components/console/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,7 @@ function Part({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-/** Name the backend's server, install it, make its key and connect: one column, top to bottom. */
+/** Name the backend's server and install it, or connect one that is set up: one column, top to bottom. */
 export function ConnectBackend({
   current = "",
   onConnected,
@@ -38,9 +37,6 @@ export function ConnectBackend({
   const [address, setAddress] = useState(() => (hostOf(current) ? "" : current));
   // Advanced starts open only when there is such an address to show.
   const [advanced] = useState(address !== "");
-  const [key, setKey] = useState("");
-  const [keyRefused, setKeyRefused] = useState("");
-  const [making, setMaking] = useState(false);
   const [refused, setRefused] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -48,24 +44,11 @@ export function ConnectBackend({
   const inferred = addressOf(host);
   const target = address.trim() || inferred;
   const command = installCommand({
-    platform: resolveAppTenant(),
-    platformUrl: config.dmUrl(),
     host: name,
+    platformUrl: config.dmUrl(),
+    // The link the install prints comes back to this frontend.
+    frontend: typeof window === "undefined" ? FRONTEND_URL : window.location.origin,
   });
-
-  async function makeKey() {
-    setMaking(true);
-    setKeyRefused("");
-    try {
-      const res = await apiClient.hosted.key();
-      if (res.ok) setKey(res.key);
-      else setKeyRefused(res.message);
-    } catch (e) {
-      setKeyRefused(said(e));
-    } finally {
-      setMaking(false);
-    }
-  }
 
   async function connect(e: React.FormEvent) {
     e.preventDefault();
@@ -110,23 +93,7 @@ export function ConnectBackend({
         <section className="flex flex-col gap-3">
           <Part title={t("install")} hint={t("installHint")} />
           <CodeBlock code={command} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <Part title={t("key")} hint={t("keyHint")} />
-          {key ? (
-            <>
-              <CodeBlock code={key} />
-              <p className="text-muted-foreground text-xs">{t("keyOnce")}</p>
-            </>
-          ) : (
-            <div>
-              <Button type="button" variant="outline" size="sm" onClick={makeKey} disabled={making}>
-                {t(making ? "keyCreating" : "keyCreate")}
-              </Button>
-            </div>
-          )}
-          {keyRefused && <p className="text-xs text-red-600">{keyRefused}</p>}
+          <p className="text-muted-foreground text-xs">{t("installThen")}</p>
         </section>
 
         {/* No browser check of the address: closed, Advanced could not show what it refused. */}

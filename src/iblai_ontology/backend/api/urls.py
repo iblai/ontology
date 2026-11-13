@@ -67,6 +67,7 @@ misc_urls = [
     path("agent-connections", views.AgentConnectionsView.as_view()),
     path("agent-connections/<str:name>", views.AgentConnectionDetailView.as_view()),
     path("counts", views.CountsView.as_view()),
+    path("setup", views.SetupView.as_view()),
     path("config", views.ConfigFilesView.as_view()),
     path("reset", views.ResetView.as_view()),
 ]

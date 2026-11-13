@@ -14,10 +14,17 @@ const resolves = (...addresses: string[]) =>
 const record = (url: unknown) => Response.json({ key: "default", data: { url } });
 const answers = (make: () => Response) => fetchMock.mockImplementation(async () => make());
 
-type World = { record?: () => Response; put?: () => Response; counts?: () => Response };
-/** The platform's record (none yet) and a backend of the platform `acme`, unless said otherwise. */
+type World = {
+  record?: () => Response;
+  put?: () => Response;
+  counts?: () => Response;
+  setup?: () => Response;
+};
+/** The platform's record (none yet) and a backend of the platform `acme`, older than /setup, unless said otherwise. */
 const world = (over: World = {}) =>
   fetchMock.mockImplementation(async (input, init) => {
+    if (String(input).endsWith("/setup"))
+      return over.setup?.() ?? new Response("", { status: 404 });
     if (!String(input).endsWith("/records/default"))
       return over.counts?.() ?? Response.json({ services: 0, platform: "acme" });
     if (init?.method === "PUT") return over.put?.() ?? record("https://ontology.acme.edu");
@@ -354,13 +361,14 @@ describe("where each browser keeps the address", () => {
     vi.resetModules();
     return import("./backend");
   };
-  type Here = { counts?: () => Response };
-  /** A backend of `acme` answers, unless said otherwise; the platform is never asked from this server. */
+  type Here = { counts?: () => Response; setup?: () => Response };
+  /** A backend of `acme`, older than /setup, answers unless said otherwise; the platform is never asked from this server. */
   const here = (over: Here = {}) =>
     fetchMock.mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/v1/ontology/") || url.includes("/api/core/"))
         throw new Error(`the platform was asked: ${url}`);
+      if (url.endsWith("/setup")) return over.setup?.() ?? new Response("", { status: 404 });
       return over.counts?.() ?? Response.json({ services: 0, platform: "acme" });
     });
   const asked = () => fetchMock.mock.calls.map(([url]) => String(url));
@@ -443,12 +451,73 @@ describe("where each browser keeps the address", () => {
       url: NEW,
       browser: true,
     });
-    expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET"]);
+    // The backend is asked to set itself up, or to say it is, before it is asked for its counts.
+    expect(fetchMock.mock.calls.map(([url, init]) => [init?.method ?? "GET", String(url)])).toEqual(
+      [
+        ["POST", `${NEW}/setup`],
+        ["GET", `${NEW}/counts`],
+      ],
+    );
 
     here({ counts: () => Response.json({ detail: "Invalid token." }, { status: 401 }) });
     expect(await connectBackend("Token jane", NEW)).toEqual({
       ok: false,
       message: expect.stringMatching(/does not take your sign-in: Invalid token\.$/),
+    });
+  });
+
+  it("has a fresh backend set itself up with the link's code and the platform chosen", async () => {
+    const { connectBackend } = await load();
+    const code = "c".repeat(32);
+    here({ setup: () => Response.json({ ok: true, message: "This server is set up for acme." }) });
+    expect(await connectBackend("Token jane", NEW, { platform: "acme", code })).toEqual({
+      ok: true,
+      url: NEW,
+      browser: true,
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe(`${NEW}/setup`);
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: { authorization: "Token jane" },
+      body: JSON.stringify({ platform: "acme", code }),
+      redirect: "manual",
+    });
+
+    // The backend's own sentence is the answer, and nothing more is asked of it.
+    fetchMock.mockReset();
+    here({ setup: () => Response.json({ ok: false, message: "That is not its code." }) });
+    expect(await connectBackend("Token jane", NEW, { platform: "acme", code: "x" })).toEqual({
+      ok: false,
+      message: "That is not its code.",
+    });
+    expect(asked()).toEqual([`${NEW}/setup`]);
+
+    // One that fails inside says so in its own words.
+    fetchMock.mockReset();
+    here({ setup: () => Response.json({ detail: "boom" }, { status: 500 }) });
+    expect(await connectBackend("Token jane", NEW)).toEqual({
+      ok: false,
+      message: expect.stringMatching(/could not be set up: boom$/),
+    });
+  });
+
+  it("the route passes the link's code and the platform chosen on", async () => {
+    await load();
+    const { NextRequest } = await import("next/server");
+    const hosted = await import("@/app/api/hosted/backend/route");
+    here({ setup: () => Response.json({ ok: true, message: "" }) });
+    const sent = { url: NEW, platform: "acme", code: "c".repeat(32) };
+    const connected = await hosted.PUT(
+      new NextRequest("http://console.test/api/hosted/backend", {
+        method: "PUT",
+        headers: { authorization: "Token jane" },
+        body: JSON.stringify(sent),
+      }),
+    );
+    expect(await connected.json()).toEqual({ ok: true, url: NEW, browser: true });
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      body: JSON.stringify({ platform: sent.platform, code: sent.code }),
     });
   });
 
@@ -462,6 +531,7 @@ describe("where each browser keeps the address", () => {
       if (url.includes("/v1/ontology/") || url.includes("/api/core/"))
         throw new Error(`the platform was asked: ${url}`);
       if (url.endsWith("/counts")) return Response.json({ services: 0, platform: "acme" });
+      if (url.endsWith("/setup")) return new Response("", { status: 404 });
       return Response.json({ url, named: new Headers(init?.headers).get("x-ontology-backend") });
     });
     const jane = { authorization: "Token jane" };

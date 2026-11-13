@@ -32,11 +32,23 @@ class PlatformConfig:
     def from_env(cls) -> "PlatformConfig":
         org = os.environ.get("IBLAI_ORG")
         token = os.environ.get("IBLAI_ADMIN_TOKEN")
+        scheme = os.environ.get("IBLAI_AUTH_SCHEME") or "Token"
+        from iblai_ontology.backend.platform import setup
+
+        if setup.server_code():
+            # A server set up from the frontend holds its platform and a key of its own.
+            kept_org, kept_token = setup.credentials()
+            if kept_token:
+                org, token, scheme = kept_org or org, kept_token, "Api-Token"
+            if not org or not token:
+                raise RuntimeError(
+                    "This server is not set up yet: it has no platform and no key of "
+                    "its own."
+                )
         if not org or not token:
             raise RuntimeError(
                 "IBLAI_ORG and IBLAI_ADMIN_TOKEN must be set to talk to the ibl.ai platform."
             )
-        scheme = os.environ.get("IBLAI_AUTH_SCHEME") or "Token"
         if scheme not in ("Token", "Api-Token"):
             raise RuntimeError(
                 f"IBLAI_AUTH_SCHEME must be Token or Api-Token, not {scheme!r}."

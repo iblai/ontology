@@ -10,12 +10,11 @@ There are two stacks. A server that works with the ibl.ai platform and the hoste
 
 ## Install on Ubuntu
 
-For a platform's administrator who has a fresh server and no wish to clone anything. The same install step by step, with what the script prints and every setting explained, is [install.md](install.md). The hosted console's **Connect a backend** screen shows this command with the platform and its address filled in:
+For a platform's administrator who has a fresh server and no wish to clone anything. The same install step by step, with what the script prints and every setting explained, is [install.md](install.md). The hosted console's **Connect a backend** screen shows this command with the host name filled in:
 
 ```bash
 curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
   | sudo bash -s -- \
-    --platform <platform key> \
     --host ontology.example.edu
 ```
 
@@ -25,12 +24,26 @@ curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh
 
 1. Checks it runs as root on Ubuntu 22.04 or later, amd64, and stops with the reason otherwise.
 2. Uses the Docker that is there when `docker compose version` works. With none, installs `docker.io` and `docker-compose-v2` from Ubuntu's own archive: no repository and no key file is added. A Docker without Compose stops the script, because mixing Ubuntu's packages with Docker's own breaks both.
-3. Asks for a platform or a host name the command did not give, then for **the backend's key** at a hidden prompt: the platform API key that **Connect a backend → Create key** shows once. It acts as the administrator who made it.
-4. Asks the platform two things with the key, before anything is written. First, what the key's owner may grant under `/custom/ontology/`: a key the platform refuses stops the script with the platform's words, and so does a platform whose administrators cannot grant ontology roles yet (RBAC off, or no custom namespace). Second, whether the platform keeps ontology records: where it does, the connected systems and the schedules live in the platform (`ONTOLOGY_DATA_STORE=dm`); where it does not, they live on this server and only the roles are the platform's (`rbac`). The script says which.
-5. Writes `/opt/iblai-ontology/.env`, readable by root alone: the host name, the platform, the key, where the settings live, and four secrets it generates (the database password, the search index's token, Django's secret and the key that encrypts the logins of the connected systems).
+3. Asks for the host name if the command did not give one. It takes no key and no platform: the platform is chosen in the frontend, when the link is opened.
+4. Asks the platform two things with no key, before anything is written; a token that is none makes the platform itself refuse, in its own words. First `GET /api/core/token/verify/`: a 401 or 403 that carries the platform's `detail` shows this server reaches it, and one without comes from the edge in front of it and stops the script. Second `GET /v1/ontology/kinds/backend/records`: a route that is there answers 401 or 403, and the connected systems and the schedules live in the platform (`ONTOLOGY_DATA_STORE=dm`); a 404 means the platform keeps no ontology records, so they live on this server and only the roles are the platform's (`rbac`). The script says which.
+5. Writes `/opt/iblai-ontology/.env`, readable by root alone: the host name, the platform's address, where the settings live, the code of the link (`ONTOLOGY_SETUP_CODE`), and four secrets it generates (the database password, the search index's token, Django's secret and the key that encrypts the logins of the connected systems and the backend's own key).
 6. Downloads `compose.yaml` of the same release beside it, pulls the images and starts them.
 7. Waits up to three minutes for `https://<host>/mcp` to answer `405`, which the gateway does before any sign-in. If it does not, the last lines of the proxy and the gateway are printed.
-8. Prints the host name to enter in the console, the address agents call (`https://<host>/mcp`) and where its two files are.
+8. Prints the link that sets the server up, `https://ontology.ibl.ai/#host=<host>&code=<code>`, the address agents call (`https://<host>/mcp`) and where its two files are. `--frontend <address>` names another frontend for the link; the command a frontend shows carries it when that frontend is not at `https://ontology.ibl.ai`.
+
+**Setting it up.** A server with a code and no platform is locked: the console's API answers 503, `/mcp` answers 503 and the worker's tick queues nothing. Two routes answer. `GET /setup` tells anyone `{"set_up": false}`, which is how the script knows to print the link. `POST /setup` takes `{platform, code}` with an administrator's own sign-in (`Authorization: Token …`):
+
+1. The code must equal `ONTOLOGY_SETUP_CODE`.
+2. The platform is asked, uncached, who the caller is and whether they are an active administrator of the platform named (`/api/core/token/verify/`, `/api/core/users/platforms/`).
+3. `GET /v1/rbac/permissions/?resource_paths=/custom/ontology/` with the caller's sign-in and `iblai-org: <platform>`: the platform refuses a sign-in of another platform, and the answer must hold `*` or `Ontology/*`, or the platform's administrators cannot grant ontology roles yet.
+4. `POST /api/core/platform/api-tokens/` with the caller's sign-in makes the backend's key, in owner mode: it acts as the administrator who set the server up.
+5. The platform and the key, encrypted with `ONTOLOGY_CREDENTIAL_KEY`, are kept as one row of the server's database (`services.Record`, kind `server`). The row is created once, so a second caller is refused; every process reads it, so nothing restarts.
+
+In the hosted console the link's host name and code sit after `#`, so they reach neither the console's server nor its logs. The page keeps them in the tab's session storage, which sign-in and a platform switch leave alone, and shows the **Set up** card: the platforms the user administers, none preselected when there are several, and the SDK's own switch for one they are not signed in to, since a key is made in the platform of the sign-in that asks. **Set up** is `PUT /api/hosted/backend` with `{url, platform, code}`; the console's server posts `/setup` to the backend and then asks `/counts` as on every Connect. A backend older than this answers 404 to `/setup` and is connected as before.
+
+A server that is set up takes `POST /setup` from its own platform's administrators alone and ignores the code: it does nothing while the platform takes the key it holds, and makes a new one when the platform refuses it. So **Connect** on the console's Backend page is also how a dead key is replaced.
+
+A server installed with a key keeps the platform and the key its `.env` names (`IBLAI_ORG`, `IBLAI_ADMIN_TOKEN`), and none of the above applies to it. To bring one over, take those two lines out of `.env`, add `ONTOLOGY_SETUP_CODE=<32 hex characters>`, apply it with `docker compose … up --detach` and open `https://<frontend>/#host=<host>&code=<code>`; its old key stays in the platform until deleted there.
 
 **What runs** (`deploy/compose.yaml`):
 
@@ -48,7 +61,7 @@ Not there: the MCP Toolbox and the connector containers of the developer stack. 
 
 **What it leaves on the server.** The Docker packages, if it installed them. `/opt/iblai-ontology` with `compose.yaml` and `.env`. Docker's volumes (the database, the memory files, the search index, the config directory, the certificates) and images. No language runtime, no source tree, nothing in a home directory, no firewall change.
 
-**Keep a copy of `.env`.** The logins of the connected systems are kept encrypted, in the platform or in this server's database, and `ONTOLOGY_CREDENTIAL_KEY` in that file is what decrypts them. Without it they must be entered again. Where the server keeps its own settings (`rbac`), the `db` volume holds the connected systems and the list of connected agents, and the `config` volume the schedules: they are this server's to back up.
+**Keep a copy of `.env`.** The logins of the connected systems are kept encrypted, in the platform or in this server's database, and so is the backend's own key; `ONTOLOGY_CREDENTIAL_KEY` in that file is what decrypts them. Without it they must be entered again. The `db` volume holds the platform the server was set up for and that key, and where the server keeps its own settings (`rbac`) the connected systems and the list of connected agents; the `config` volume holds the schedules. They are this server's to back up.
 
 **Day to day.**
 
@@ -57,11 +70,11 @@ docker compose -f /opt/iblai-ontology/compose.yaml ps
 docker compose -f /opt/iblai-ontology/compose.yaml logs --follow ontology-gateway
 ```
 
-- **Upgrade:** run the install command again. An existing `.env` is kept and nothing is asked, so where the settings live does not change; the new release's `compose.yaml` and images replace the old ones, and the migrations run.
+- **Upgrade:** run the install command again. An existing `.env` is kept and nothing is asked, so where the settings live does not change; the new release's `compose.yaml` and images replace the old ones, and the migrations run. On a server that is not set up yet it prints the link again.
 - **Remove:** the same command with `--uninstall`. It asks for the host name to be typed, then removes the containers, the volumes, the images and the directory. Docker itself stays, and so does what the platform keeps: the roles, the key and MCP server of each agent still connected, the backend's API key, and with `dm` the schedules, the connected systems and the backend's address. With `rbac`, remove each agent's connection in the console first: the list goes with the server.
 - **Preview:** `--dry-run` says each step and changes nothing.
 
-Then, in the console: enter the host name under **Connect a backend** and press Connect, add a system, and connect an agent on the **Agents** page. Connecting Twenty CRM makes the role an agent is connected as; for a database, give a role its tables and toolsets first.
+Then open the link, choose the platform and press **Set up**; add a system, and connect an agent on the **Agents** page. Connecting Twenty CRM makes the role an agent is connected as; for a database, give a role its tables and toolsets first. From another computer, enter the host name under **Connect a backend** and press Connect.
 
 ---
 

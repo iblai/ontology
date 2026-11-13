@@ -9,6 +9,9 @@
  * admin's browser keeps the address and names it on every call, and this server uses it
  * once the address answers as a backend that takes the caller's sign-in. The platform is
  * not asked from here in that mode: its edge refuses calls that come from a hosting network.
+ *
+ * A backend installed with no platform is set up from Connect: it is sent the code of its
+ * install's link and the platform chosen, and makes its own key with the caller's sign-in.
  */
 
 import { createHash } from "node:crypto";
@@ -125,10 +128,51 @@ async function said(res: Response): Promise<string> {
 
 type Refused = { status: number; error: string; message: string };
 
+/** What Connect sends a backend to set itself up with: the platform chosen, and an install link's code. */
+export type Setup = { platform?: string; code?: string };
+
+/**
+ * Have the backend at `url` set itself up, or say that it is: a fresh one takes the code of
+ * its install's link and makes its own key with the caller's sign-in. Null when it is set up
+ * for the caller's platform, or older than this and has no such route.
+ */
+async function setUp(authorization: string, url: string, setup: Setup): Promise<Refused | null> {
+  const no = (status: number, message: string) => ({ status, error: message, message });
+  let res: Response;
+  try {
+    res = await fetch(`${url}/setup`, {
+      method: "POST",
+      headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify({ platform: setup.platform ?? "", code: setup.code ?? "" }),
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(ANSWER_MS),
+    });
+  } catch (e) {
+    return no(502, `No answer from ${url}: ${(e as Error).message}`);
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) return no(502, `The backend at ${url} could not be set up: ${await said(res)}`);
+  const answer = (await res.json().catch(() => null)) as {
+    ok?: unknown;
+    message?: unknown;
+  } | null;
+  if (answer?.ok === true) return null;
+  // The backend's own sentence: a wrong code, another platform's server, a platform not ready.
+  return no(
+    409,
+    typeof answer?.message === "string" && answer.message
+      ? answer.message
+      : `The backend at ${url} did not say whether it is set up.`,
+  );
+}
+
 /** `raw` as a backend that takes this sign-in: its address and platform, or the refusal as a code and in words. */
 async function proved(
   authorization: string,
   raw: string,
+  /** Connect alone: the backend sets itself up first, or says it is. */
+  setup?: Setup,
 ): Promise<{ url: string; platform: string } | Refused> {
   const no = (status: number, message: string, error = message) => ({ status, error, message });
   const url = await publicUrl(raw.trim());
@@ -138,6 +182,10 @@ async function proved(
       "The address must be a public https one, such as https://ontology.example.edu.",
       "bad_backend",
     );
+  if (setup) {
+    const refused = await setUp(authorization, url, setup);
+    if (refused) return refused;
+  }
   let counts: Response;
   try {
     counts = await fetch(`${url}/counts`, {
@@ -197,10 +245,12 @@ export async function backendFor(
 /**
  * Keep `raw` as the address of the caller's platform's backend, once it answers as that
  * backend: in the platform's record, or (`browser: true`) for the browser that asked to keep.
+ * A backend installed with no platform is set up first, with the code in `setup`.
  */
 export async function connectBackend(
   authorization: string | null,
   raw: string,
+  setup: Setup = {},
 ): Promise<Answer<{ url: string; browser?: true }>> {
   const no = (message: string) => ({ ok: false as const, message });
   if (!authorization) return no("Sign in first.");
@@ -214,7 +264,7 @@ export async function connectBackend(
     if (held.status >= 500) return no(held.error);
   }
 
-  const found = await proved(authorization, raw);
+  const found = await proved(authorization, raw, setup);
   if (!("url" in found)) return no(found.message);
   const { url, platform } = found;
   if (BROWSER_STORE) {

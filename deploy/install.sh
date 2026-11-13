@@ -3,11 +3,12 @@
 # install.sh — the ibl.ai ontology backend on a fresh Ubuntu server
 #
 #   curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
-#     | sudo bash -s -- --platform <platform> --host <host name>
+#     | sudo bash -s -- --host <host name>
 #
-# The frontend's "Connect a backend" screen shows this command filled in, and makes
-# the key this script asks for. Run it again to upgrade. --uninstall removes it,
-# --dry-run says what would happen and changes nothing.
+# It asks for no key and no platform. It ends with a link: opened in a browser, the
+# frontend asks which platform this server is for and sets it up. Run it again to
+# upgrade, or to print the link once more. --uninstall removes it, --dry-run says
+# what would happen and changes nothing.
 #
 # What it leaves on the server: Docker (only if it had to install it), the
 # directory /opt/iblai-ontology with compose.yaml and .env, and Docker's volumes
@@ -23,15 +24,17 @@ COMPOSE=(docker compose -f "$DIR/compose.yaml")
 
 # What each value must look like; none lets through a character a shell or a .env file reads as more.
 HOST_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])$'
-PLATFORM_RE='^[A-Za-z0-9_.-]+$'
 URL_RE='^https://[A-Za-z0-9._:/-]+$'
-KEY_RE='^[A-Za-z0-9._~+/=-]+$'
+# A frontend on a developer's own machine is the one address taken over http.
+FRONTEND_RE='^(https://[A-Za-z0-9._:/-]+|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)$'
 
-PLATFORM=""
 # The ibl.ai platform's address; --platform-url names another.
 PLATFORM_URL="https://api.iblai.app/dm"
+# The frontend the link opens; --frontend names another.
+FRONTEND="https://ontology.ibl.ai"
 HOST=""
-KEY=""
+# The one-time code of the link that sets this server up.
+CODE=""
 # Where the settings live: dm (the platform keeps ontology records) or rbac (this server does).
 STORE=""
 DRY=0
@@ -41,14 +44,16 @@ usage() {
   cat <<EOF
 Installs the ibl.ai ontology backend on this server (Ubuntu 22.04 or later, amd64).
 
-  --platform <platform>     the platform's key in ibl.ai, such as acme
-  --platform-url <address>  the platform's address, when it is not https://api.iblai.app/dm
   --host <host name>        the name this server answers at, such as ontology.example.edu
+  --platform-url <address>  the platform's address, when it is not https://api.iblai.app/dm
+  --frontend <address>      the frontend the link opens, when it is not https://ontology.ibl.ai
   --dry-run                 say what would happen; change nothing, ask nothing
   --uninstall               remove the backend, its data and $DIR
 
-A platform or a host name not given is asked for. The backend's key is always asked for, hidden.
-Run it again to upgrade: an existing $DIR/.env is kept and nothing is asked.
+A host name not given is asked for. No key and no platform: the install ends with a link,
+and the frontend it opens asks which platform this server is for.
+Run it again to upgrade, or to print the link again: an existing $DIR/.env is kept and
+nothing is asked.
 EOF
 }
 
@@ -77,17 +82,12 @@ run() {
 }
 
 # Asked on the terminal itself: under "curl | bash" the script is what arrives on stdin.
-ask() { # ask <variable> <question> [hidden]
+ask() { # ask <variable> <question>
   local answer=""
   if ! { : </dev/tty; } 2>/dev/null; then
     stop "there is no terminal to ask on. Wanted: $2"
   fi
-  if [ "${3:-}" = hidden ]; then
-    read -r -s -p "$2: " answer </dev/tty
-    printf '\n' >/dev/tty
-  else
-    read -r -p "$2: " answer </dev/tty
-  fi
+  read -r -p "$2: " answer </dev/tty
   printf -v "$1" '%s' "$answer"
 }
 
@@ -139,46 +139,42 @@ ensure_docker() {
   run systemctl enable --now docker
 }
 
-# One read from the platform with the key: its answer, then its HTTP status on a last line.
+# One read from the platform: its answer, then its HTTP status on a last line.
 platform_get() { # platform_get <path>
-  # The key goes to curl on stdin, never on its command line.
-  printf 'header = "Authorization: Api-Token %s"\nheader = "iblai-org: %s"\n' "$KEY" "$PLATFORM" |
-    curl -sS --max-time 30 -w '\n%{http_code}' -K - "$PLATFORM_URL$1"
+  # No key: a token that is none makes the platform itself refuse, in its own words.
+  curl -sS --max-time 30 -w '\n%{http_code}' -H 'Authorization: Token x' "$PLATFORM_URL$1"
 }
 
-# Two reads with the key before anything is installed: may this platform's administrators
-# grant ontology roles, and does the platform keep ontology records.
+# The platform's own refusals say why in "detail"; one without it comes from the edge in front of it.
+from_the_platform() { # from_the_platform <status> <words>
+  [[ "$2" == *'"detail"'* ]] ||
+    stop "the platform's edge refused this server (HTTP $1: ${2:0:200}). Its network is not let through to $PLATFORM_URL: ask ibl.ai to allow this server's address, then run this again. Nothing was installed."
+}
+
+# Two reads with no key before anything is installed: does this server reach the platform,
+# and does the platform keep ontology records.
 check_platform() {
-  local grants="/v1/rbac/permissions/?resource_paths=/custom/ontology/"
+  local reach="/api/core/token/verify/"
   local records="/v1/ontology/kinds/backend/records?page_size=1"
   local answer status words
   if [ "$DRY" = 1 ]; then
-    say "  would ask the platform with the key: GET $PLATFORM_URL$grants"
+    say "  would ask the platform, with no key: GET $PLATFORM_URL$reach"
     say "  would ask it where the settings live: GET $PLATFORM_URL$records"
     STORE="<dm or rbac>"
     return
   fi
 
-  if ! answer=$(platform_get "$grants"); then
+  if ! answer=$(platform_get "$reach"); then
     stop "no answer from the platform at $PLATFORM_URL. Nothing was installed."
   fi
   status=${answer##*$'\n'}
   words=${answer%$'\n'*}
-  # The platform's own refusals say why in "detail"; one without it comes from the edge in front of it.
-  if [ "$status" = 403 ] && [[ "$words" != *'"detail"'* ]]; then
-    stop "the platform's edge refused this server (HTTP 403: ${words:0:200}). Its network is not let through to $PLATFORM_URL: ask ibl.ai to allow this server's address, then run this again. Nothing was installed."
-  fi
   case "$status" in
-    200) ;;
-    401 | 403) stop "the platform refused the key for $PLATFORM: ${words:0:200} Make a new one on the frontend's Connect a backend screen, signed in to $PLATFORM. Nothing was installed." ;;
+    401 | 403) from_the_platform "$status" "$words" ;;
     404) stop "$PLATFORM_URL does not answer as an ibl.ai platform: check the address. Nothing was installed." ;;
     *) stop "the platform answered HTTP $status: ${words:0:200} Nothing was installed." ;;
   esac
-  # ponytail: the answer is read as text, not parsed; these two are the grants that cover an ontology role.
-  if [[ "$words" != *'"*"'* && "$words" != *'"Ontology/*"'* ]]; then
-    stop "the administrators of $PLATFORM cannot grant ontology roles yet: its RBAC has no custom namespace for them. Ask ibl.ai to enable it for $PLATFORM, then run this again. Nothing was installed."
-  fi
-  say "The platform takes the key, and its administrators can grant ontology roles."
+  say "This server reaches the platform."
 
   if ! answer=$(platform_get "$records"); then
     stop "no answer from the platform at $PLATFORM_URL. Nothing was installed."
@@ -186,14 +182,16 @@ check_platform() {
   status=${answer##*$'\n'}
   words=${answer%$'\n'*}
   case "$status" in
-    200)
-      STORE=dm
-      say "The platform keeps ontology records: the connected systems and the schedules will live there."
-      ;;
     404)
       STORE=rbac
       say "This platform keeps no ontology records yet: the connected systems and the schedules will"
       say "live on this server. The roles still live in the platform."
+      ;;
+    # A route that is there wants a key before it says more.
+    200 | 401 | 403)
+      [ "$status" = 200 ] || from_the_platform "$status" "$words"
+      STORE=dm
+      say "The platform keeps ontology records: the connected systems and the schedules will live there."
       ;;
     *) stop "the platform answered HTTP $status about its ontology records: ${words:0:200} Nothing was installed." ;;
   esac
@@ -205,60 +203,51 @@ settings() {
     [ -n "$HOST" ] || refuse "$DIR/.env names no ONTOLOGY_HOST."
     STORE=$(kept ONTOLOGY_DATA_STORE)
     [ -n "$STORE" ] || refuse "$DIR/.env names no ONTOLOGY_DATA_STORE."
+    CODE=$(kept ONTOLOGY_SETUP_CODE)
     say "$DIR/.env is here: this is an upgrade. Its settings are kept and nothing is asked."
     return
   fi
   if [ "$DRY" = 1 ]; then
-    say "  would ask for what is not given, and for the backend's key at a hidden prompt"
+    say "  would ask for the host name if it is not given"
   else
-    [ -n "$PLATFORM" ] || ask PLATFORM "Platform (its key in ibl.ai, such as acme)"
     [ -n "$HOST" ] || ask HOST "Host name of this server (such as ontology.example.edu)"
   fi
   PLATFORM_URL=${PLATFORM_URL%/}
   HOST=${HOST,,}
-  # A dry run judges what was given; a real one has every value by now.
-  if [ -n "$PLATFORM" ] || [ "$DRY" != 1 ]; then
-    [[ "$PLATFORM" =~ $PLATFORM_RE ]] ||
-      refuse "--platform is the platform's key: letters, digits, dots, hyphens and underscores."
-  fi
-  if [ -n "$PLATFORM_URL" ] || [ "$DRY" != 1 ]; then
-    [[ "$PLATFORM_URL" =~ $URL_RE ]] ||
-      refuse "--platform-url is an https address, such as https://api.iblai.app/dm."
-  fi
+  [[ "$PLATFORM_URL" =~ $URL_RE ]] ||
+    refuse "--platform-url is an https address, such as https://api.iblai.app/dm."
+  # A dry run judges what was given; a real one has the host name by now.
   if [ -n "$HOST" ] || [ "$DRY" != 1 ]; then
     valid_host "$HOST" ||
       refuse "--host is a full host name that points to this server, such as ontology.example.edu."
   fi
-  if [ "$DRY" = 1 ]; then
-    PLATFORM=${PLATFORM:-<platform>}
-    PLATFORM_URL=${PLATFORM_URL:-<platform address>}
-    HOST=${HOST:-<host name>}
-  else
-    ask KEY "The backend's key (Connect a backend > Create key; it is not shown as you paste)" hidden
-    [[ "$KEY" =~ $KEY_RE ]] || stop "that is not a key. Nothing was installed."
-  fi
   check_platform
-
-  say "Writing $DIR/.env (readable by root alone)."
   if [ "$DRY" = 1 ]; then
-    say "  would write: ONTOLOGY_HOST, IBLAI_BASE_URL, IBLAI_ORG, IBLAI_ADMIN_TOKEN, ONTOLOGY_DATA_STORE and four generated secrets"
+    HOST=${HOST:-<host name>}
+    CODE="<code>"
+    say "Writing $DIR/.env (readable by root alone)."
+    say "  would write: ONTOLOGY_HOST, IBLAI_BASE_URL, ONTOLOGY_DATA_STORE, ONTOLOGY_SETUP_CODE and four generated secrets"
     return
   fi
+  CODE=$(secret 16)
+
+  say "Writing $DIR/.env (readable by root alone)."
   mkdir -p "$DIR"
   (
     umask 077
     cat >"$DIR/.env" <<EOF
 # The ibl.ai ontology backend: settings of this server, read by compose.yaml beside it.
 # Keep a copy somewhere safe. ONTOLOGY_CREDENTIAL_KEY decrypts the logins of the connected
-# systems: without it they must be entered again.
+# systems and this server's own platform key: without it they must be entered again.
 # ONTOLOGY_DATA_STORE was chosen at install and is not changed by an upgrade: dm when the
 # ibl.ai platform keeps ontology records, rbac when this server keeps them and only the
 # roles are the platform's.
+# ONTOLOGY_SETUP_CODE is the code of the link that sets this server up for a platform.
+# The platform and the key it is set up with are kept in the server's database, not here.
 ONTOLOGY_HOST=$HOST
 IBLAI_BASE_URL=$PLATFORM_URL
-IBLAI_ORG=$PLATFORM
-IBLAI_ADMIN_TOKEN=$KEY
 ONTOLOGY_DATA_STORE=$STORE
+ONTOLOGY_SETUP_CODE=$CODE
 ONTOLOGY_DB_PASSWORD=$(secret 24)
 CHROMA_TOKEN=$(secret 24)
 ONTOLOGY_SECRET_KEY=$(secret 48)
@@ -297,16 +286,29 @@ start() {
 }
 
 finish() {
-  local where="in the ibl.ai platform"
+  local where="in the ibl.ai platform" state=""
   if [ "$STORE" = rbac ]; then
     where="on this server; only the roles are in the ibl.ai platform"
   fi
+  if [ "$DRY" != 1 ]; then
+    # Anyone may ask a server whether it is set up.
+    state=$(curl -s --max-time 10 "https://$HOST/setup" || true)
+  fi
+  say ""
+  say "The ontology backend is running (version $VERSION)."
+  say ""
+  if [[ "${state// /}" == *'"set_up":true'* ]]; then
+    say "  This server is set up: manage it in the frontend, at $FRONTEND"
+  elif [ -n "$CODE" ]; then
+    say "  Open this to finish (works once):"
+    say "  $FRONTEND/#host=$HOST&code=$CODE"
+    say ""
+    say "  It asks you to sign in to ibl.ai and to choose the platform this server is for."
+    say "  Lost it? Run the install command again."
+  fi
   cat <<EOF
 
-The ontology backend is running (version $VERSION).
-
-  Enter in the frontend, under Connect a backend:    $HOST
-  The address agents call:                           https://$HOST/mcp
+  The address agents call:   https://$HOST/mcp
 
   Its two files:   $DIR/compose.yaml
                    $DIR/.env
@@ -355,15 +357,16 @@ EOF
 main() {
   while [ $# -gt 0 ]; do
     case "$1" in
-      --platform | --platform-url | --host)
+      --platform-url | --host | --frontend)
         [ $# -ge 2 ] || stop "$1 needs a value."
         case "$1" in
-          --platform) PLATFORM=$2 ;;
           --platform-url) PLATFORM_URL=$2 ;;
           --host) HOST=$2 ;;
+          --frontend) FRONTEND=$2 ;;
         esac
         shift 2
         ;;
+      --platform) stop "--platform is no longer taken: the platform is chosen in the frontend, when the link this install prints is opened." ;;
       --dry-run)
         DRY=1
         shift
@@ -394,6 +397,9 @@ main() {
   if [ "$VERSION" = dev ]; then
     refuse "this copy of install.sh is not from a release. Use $REPO/releases/latest/download/install.sh"
   fi
+  FRONTEND=${FRONTEND%/}
+  [[ "$FRONTEND" =~ $FRONTEND_RE ]] ||
+    refuse "--frontend is the frontend's address, such as https://ontology.ibl.ai."
   check_server
   ensure_docker
   settings

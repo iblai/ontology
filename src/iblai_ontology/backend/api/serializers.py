@@ -538,6 +538,17 @@ class AgentConnectionInputSerializer(serializers.Serializer):
     role = serializers.CharField()
 
 
+class SetupStatusSerializer(serializers.Serializer):
+    set_up = serializers.BooleanField()
+
+
+class SetupInputSerializer(serializers.Serializer):
+    # The platform chosen in the frontend; a server that is set up needs neither.
+    platform = serializers.CharField(required=False, allow_blank=True, default="")
+    # The one-time code of the link the install printed.
+    code = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class DatabaseLookupSerializer(serializers.Serializer):
     adapter = serializers.ChoiceField(choices=["generic-postgres", "generic-mysql"])
     host = serializers.CharField()

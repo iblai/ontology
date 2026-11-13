@@ -8,22 +8,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - `docs/install.md`: the one-command install for a platform's administrator, step by step: what
-  to have ready, what the script asks and prints, the console's steps before and after, every
-  setting in `.env`, what runs, where things are kept, day-to-day commands and what each message
-  the script stops with means. With screenshots of adding a system and connecting an agent.
+  to have ready, what the script prints, setting the server up from its link, every setting in
+  `.env`, what runs, where things are kept, day-to-day commands and what each message the script
+  or the Set up card stops with means. With screenshots of the Dashboard, adding a system,
+  connecting an agent and the agent's chat.
 - The gateway's `read-memory` answers a folder's path with its listing, so an agent can look
   around: `/ontology` shows the folders its role reaches, and a folder the first 200 names in it.
   A folder that holds nothing the role may read is refused as a file would be.
 
 ### Changed
+- **The install asks for no key and no platform.** `deploy/install.sh` takes the host name alone
+  and ends with a link, `https://ontology.ibl.ai/#host=<host>&code=<code>`, that works once.
+  Opened, the Ontology Frontend asks which of the administrator's platforms the server is for
+  (none is preselected when there are several; picking one they are not signed in to switches
+  to it first) and sets it up: the backend checks the code, asks the platform that the caller
+  administers the platform chosen and that its administrators can grant ontology roles, makes
+  its own platform key in the caller's name and keeps it, encrypted, beside the platform in its
+  database. The key is never shown. Until then a server answers nothing but `/setup`: the
+  console's API and `/mcp` answer 503. **Create key**, the script's hidden prompt and
+  `--platform` are gone; `--frontend` names the frontend the link opens, and the command a
+  frontend shows carries it when that frontend is elsewhere. Run again on a server that is not
+  set up, the script prints the link again. A server installed with its platform and key in
+  `.env` keeps both.
+- **Connect** has the backend set itself up, or say that it is, before anything else
+  (`POST /setup`). On a server set up from a link it also replaces a key the platform no longer
+  takes, with the sign-in of the administrator who pressed it.
+- The script no longer says before installing that a platform cannot grant ontology roles yet:
+  with no key it cannot ask. The Set up card says it, in the platform's words. It still checks
+  first that the server reaches the platform, and where the platform keeps ontology records.
 - The Ontology Frontend carries the favicon the ibl.ai SIS and CRM use (`app/favicon.ico`).
 - **Connect a backend** asks for the server's host name alone and takes the backend's address to
   be `https://<host name>`; an address that differs goes under Advanced. Where the console has no
   address for a platform, it now says "ibl.ai Ontology does not know this platform's backend
-  yet". The install script ends by naming the host name to enter, not an address to paste. The
-  card now fills the page's width, which leaves room for the install command. A console run in
-  development also takes `localhost` (or `127.0.0.1`, `[::1]`, with a port or a local backend's
-  8000) as the host name, for a backend on the same machine; a deployed one never does.
+  yet". The card now fills the page's width, which leaves room for the install command. A
+  console run in development also takes `localhost` (or `127.0.0.1`, `[::1]`, with a port or a
+  local backend's 8000) as the host name, for a backend on the same machine; a deployed one
+  never does.
 - The install script takes the platform's address to be `https://api.iblai.app/dm` and no longer
   asks for it; `--platform-url` names another. The install command the console shows, and the
   ones in the docs, carry the option only for another address.

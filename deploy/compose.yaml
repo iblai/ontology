@@ -5,7 +5,8 @@
 # and starts it; docker-compose.yml at the repo root is the developer stack.
 #
 # Settings come from that .env: a missing one stops compose with its name.
-# The roles live in the ibl.ai platform. The sync schedules and the connected
+# The server's platform is not among them: the frontend sets it up for one, with
+# the link the install prints. The roles live in the ibl.ai platform. The sync schedules and the connected
 # systems live there too where the platform keeps ontology records
 # (ONTOLOGY_DATA_STORE=dm), and on this server where it does not (rbac); the
 # install script asks the platform which. This server always keeps the synced
@@ -44,8 +45,12 @@ x-backend: &backend
     ONTOLOGY_DATA_STORE: ${ONTOLOGY_DATA_STORE:?missing in .env}
     ONTOLOGY_DM_URL: ${IBLAI_BASE_URL:?missing in .env}
     IBLAI_BASE_URL: ${IBLAI_BASE_URL:?missing in .env}
-    IBLAI_ORG: ${IBLAI_ORG:?missing in .env}
-    IBLAI_ADMIN_TOKEN: ${IBLAI_ADMIN_TOKEN:?missing in .env}
+    # The code of the link the install printed: until the frontend sets the server up with
+    # it, the server has no platform and no key. Both are then kept in its database.
+    ONTOLOGY_SETUP_CODE: ${ONTOLOGY_SETUP_CODE:-}
+    # A server installed with a key names its platform and that key here instead.
+    IBLAI_ORG: ${IBLAI_ORG:-}
+    IBLAI_ADMIN_TOKEN: ${IBLAI_ADMIN_TOKEN:-}
     IBLAI_AUTH_SCHEME: Api-Token
 
 services:

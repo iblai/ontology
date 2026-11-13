@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  FRONTEND_URL,
   INSTALL_SCRIPT,
   PLATFORM_URL,
   addressOf,
+  forgetSetup,
   hostName,
   hostOf,
   installCommand,
+  keepSetupLink,
+  noteSetupPlatform,
+  pendingSetup,
+  setupLink,
   validHost,
 } from "./install";
 
@@ -78,35 +84,81 @@ describe("the install command", () => {
     expect(refused.filter((host) => validHost(host))).toEqual([]);
   });
 
-  it("names what is known, one flag a line, and the platform's address only where it is another", () => {
-    const known = { platform: "acme", host: "ontology.acme.edu" };
-    // The ibl.ai platform's own address is the script's default: the command does not carry it.
-    const command = installCommand({ ...known, platformUrl: PLATFORM_URL });
-    expect(command.split(" \\\n")).toEqual([
+  it("names the host, one flag a line, and the two addresses only where they are not the script's own", () => {
+    const own = { host: "ontology.acme.edu", platformUrl: PLATFORM_URL, frontend: FRONTEND_URL };
+    // No key and no platform: the frontend the install's link opens asks which platform.
+    expect(installCommand(own).split(" \\\n")).toEqual([
       `curl -fsSL ${INSTALL_SCRIPT}`,
       "  | sudo bash -s --",
-      "    --platform acme",
       "    --host ontology.acme.edu",
     ]);
-    const elsewhere = installCommand({ ...known, platformUrl: "https://dm.acme.edu" });
+    const elsewhere = installCommand({
+      ...own,
+      platformUrl: "https://dm.acme.edu",
+      frontend: "http://localhost:3000",
+    });
     expect(elsewhere.split(" \\\n")).toEqual([
       `curl -fsSL ${INSTALL_SCRIPT}`,
       "  | sudo bash -s --",
-      "    --platform acme",
-      "    --platform-url https://dm.acme.edu",
       "    --host ontology.acme.edu",
+      "    --platform-url https://dm.acme.edu",
+      "    --frontend http://localhost:3000",
     ]);
   });
 
   it("leaves out what is unknown or more than one plain word, for the script to ask", () => {
-    const bare = installCommand({ platform: "", platformUrl: "", host: "ontology" });
+    const bare = installCommand({ host: "ontology", platformUrl: "", frontend: "" });
     expect(bare).toBe(`curl -fsSL ${INSTALL_SCRIPT} \\\n  | sudo bash`);
     const odd = installCommand({
-      platform: "acme; reboot",
-      platformUrl: "https://api.iblai.app/dm $(id)",
       host: "ontology.acme.edu",
+      platformUrl: "https://api.iblai.app/dm $(id)",
+      frontend: "https://ontology.ibl.ai; reboot",
     });
     expect(odd).not.toMatch(/reboot|\$\(/);
     expect(odd).toContain("--host ontology.acme.edu");
+  });
+});
+
+describe("the install's link", () => {
+  const CODE = "0123456789abcdef0123456789abcdef";
+  const HASH = `#host=ontology.acme.edu&code=${CODE}`;
+
+  it("reads the host name and the code after #, and nothing else", () => {
+    expect(setupLink(HASH)).toEqual({ host: "ontology.acme.edu", code: CODE });
+    expect(setupLink(`#host=Ontology.Acme.edu&code=${CODE}`)?.host).toBe("ontology.acme.edu");
+    const none = [
+      "",
+      "#",
+      `#code=${CODE}`,
+      "#host=ontology.acme.edu",
+      `#host=ontology&code=${CODE}`,
+      "#host=ontology.acme.edu&code=short",
+      `#host=ontology.acme.edu&code=${CODE.toUpperCase()}`,
+    ];
+    expect(none.filter((hash) => setupLink(hash))).toEqual([]);
+  });
+
+  it("keeps the link for the tab, with the platform picked on the way through a switch, until it is used or dropped", () => {
+    const kept = new Map<string, string>();
+    const sessionStorage = {
+      getItem: (key: string) => kept.get(key) ?? null,
+      setItem: (key: string, value: string) => void kept.set(key, value),
+      removeItem: (key: string) => void kept.delete(key),
+    };
+    vi.stubGlobal("window", { sessionStorage, location: { hash: HASH } });
+    try {
+      expect(pendingSetup()).toBeNull();
+      keepSetupLink();
+      expect(pendingSetup()).toEqual({ host: "ontology.acme.edu", code: CODE });
+      noteSetupPlatform("acme");
+      expect(pendingSetup()).toEqual({ host: "ontology.acme.edu", code: CODE, platform: "acme" });
+      forgetSetup();
+      expect(pendingSetup()).toBeNull();
+      // Going back to the link's address does not bring a used link back.
+      keepSetupLink();
+      expect(pendingSetup()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

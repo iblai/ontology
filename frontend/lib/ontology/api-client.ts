@@ -20,7 +20,6 @@ import type {
   SyncSchedule,
   TableEdit,
 } from "./types";
-import config from "@/lib/iblai/config";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 
 /** Same-origin route handlers; the server decides between the mock and a real backend. */
@@ -176,44 +175,19 @@ export const apiClient = {
     snapshot: (): Promise<BackendConfigSnapshot> => http("/config"),
   },
   counts: (): Promise<QuickCounts> => http("/counts"),
-  // Hosted mode only: where the platform keeps its backend, and the key a new one is installed with.
+  // Hosted mode only: where the platform keeps its backend, and connecting or setting one up.
   hosted: {
     backend: (): Promise<{ url: string | null }> => http("/backend", undefined, HOSTED),
-    connect: async (url: string): Promise<{ ok: true; url: string } | Refused> => {
+    // `code` is the one-time code of an install's link: it sets a fresh server up for this platform.
+    connect: async (url: string, code?: string): Promise<{ ok: true; url: string } | Refused> => {
       const res = await http<{ ok: true; url: string; browser?: true } | Refused>(
         "/backend",
-        { method: "PUT", body: JSON.stringify({ url }) },
+        { method: "PUT", body: JSON.stringify({ url, platform: resolveAppTenant(), code }) },
         HOSTED,
       );
       // The console says when the address is this browser's to keep, not the platform's.
       if (res.ok && res.browser) window.localStorage.setItem(backendAt(), res.url);
       return res;
-    },
-    // Asked of the platform by the browser itself: the console's server never holds the key,
-    // and the platform's edge refuses calls that come from a hosting network.
-    key: async (): Promise<{ ok: true; key: string } | Refused> => {
-      const no = (why: string): Refused => ({
-        ok: false,
-        message: `The ibl.ai platform made no key: ${why}`,
-      });
-      const token = window.localStorage.getItem("dm_token");
-      if (!token) return no("sign in first.");
-      const res = await fetch(`${config.dmUrl()}/api/core/platform/api-tokens/`, {
-        method: "POST",
-        // The sign-in and nothing else: a header the platform does not expect fails its CORS check.
-        headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
-        // No mode, so the key acts as its owner; a name is one key's in its platform.
-        body: JSON.stringify({ name: `ontology-backend-${Date.now().toString(36)}` }),
-      });
-      const made = (await res.json().catch(() => null)) as {
-        key?: unknown;
-        detail?: unknown;
-        error?: unknown;
-      } | null;
-      if (!res.ok) return no(String(made?.detail ?? made?.error ?? `HTTP ${res.status}`));
-      return typeof made?.key === "string" && made.key
-        ? { ok: true, key: made.key }
-        : no("its answer held none.");
     },
   },
 };

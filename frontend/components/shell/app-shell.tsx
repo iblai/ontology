@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 import { NavBar } from "@/components/navbar/nav-bar";
 import { BackendNotice, useBackendGate } from "@/components/shell/backend-gate";
 import { PlatformAppSidebar } from "@/components/shell/platform-app-sidebar";
+import { SetupBackend } from "@/components/shell/setup-backend";
 import { CommandPaletteProvider } from "@/components/shell/command-palette";
 import { SidebarInset, SidebarProvider } from "@iblai/iblai-js/web-containers/next";
 import { clearCurrentTenantCookie, handleTenantSwitch } from "@iblai/iblai-js/web-utils";
 import { resolveAppTenant } from "@/lib/iblai/tenant";
 import { handleLogout } from "@/lib/iblai/auth-utils";
+import { pendingSetup } from "@/lib/ontology/install";
 import config from "@/lib/iblai/config";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,8 @@ export function AppShell({
   // The semantic map page's content is dark below the navbar; every other page is light.
   const dark = usePathname() === "/map";
   const gate = useBackendGate(!demo);
+  // An install's link kept for this tab: its card stands in for the page until it is used or dropped.
+  const [setup] = useState(() => (hosted ? pendingSetup() : null));
   const [mounted, setMounted] = useState(false);
   const [tenantKey, setTenantKey] = useState("");
   const [username, setUsername] = useState("");
@@ -111,7 +115,13 @@ export function AppShell({
               dark && "dark overflow-hidden bg-background p-0 text-foreground md:p-0",
             )}
           >
-            {gate === "open" ? children : gate !== "checking" && <BackendNotice gate={gate} />}
+            {setup ? (
+              <SetupBackend link={setup} />
+            ) : gate === "open" ? (
+              children
+            ) : (
+              gate !== "checking" && <BackendNotice gate={gate} />
+            )}
           </main>
         </SidebarInset>
       </SidebarProvider>

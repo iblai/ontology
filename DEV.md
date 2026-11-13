@@ -267,8 +267,7 @@ docker build -t ghcr.io/iblai/ontology:dev .
 cat > /var/tmp/ontology-stack.env <<EOF
 ONTOLOGY_HOST=ontology.localhost
 IBLAI_BASE_URL=https://<dm-host>
-IBLAI_ORG=<platform-key>
-IBLAI_ADMIN_TOKEN=<platform API key>
+ONTOLOGY_SETUP_CODE=$(openssl rand -hex 16)      # no platform and no key: the link sets it up
 ONTOLOGY_DATA_STORE=rbac                         # dm when the platform keeps ontology records
 ONTOLOGY_DB_PASSWORD=$(openssl rand -hex 24)
 CHROMA_TOKEN=$(openssl rand -hex 24)
@@ -278,11 +277,12 @@ EOF
 stack() { docker compose -p ontology-proof --env-file /var/tmp/ontology-stack.env -f deploy/compose.yaml "$@"; }
 stack up -d && stack ps                                     # migrate exited 0; the gateway is healthy
 curl -sk -o /dev/null -w '%{http_code}\n' https://ontology.localhost/mcp   # 405; the proxy signs *.localhost itself
+curl -sk https://ontology.localhost/setup                                  # {"set_up":false}: it waits for its link
 stack down --volumes
 ```
 
 The script is checked without a server: `bash -n deploy/install.sh`, `shellcheck deploy/install.sh`
-and `bash deploy/install.sh --dry-run --platform acme --host ontology.example.edu`
+and `bash deploy/install.sh --dry-run --host ontology.example.edu`
 (and the same with `--uninstall`), which says each step and changes nothing. The copy in the
 source tree carries no version, so a real run of it stops at once; `tests/test_deploy.py` keeps
 the script's `.env`, the compose file's settings and the workflow's two stamps in step.
@@ -412,11 +412,13 @@ backend of the signed-in admin's platform, in either store mode.
 
 An admin of a platform with no backend lands on **Connect a backend**: one field for the server's
 host name, the install command for it ([docs/deployment.md](docs/deployment.md#install-on-ubuntu)),
-a button that makes the backend's platform key, and Connect. The backend's address is taken to be
+and Connect, for a server that is already set up. The backend's address is taken to be
 `https://<host name>`; one that differs is given under Advanced. Outside production the field also
 takes `localhost`, `127.0.0.1` or `[::1]`, with a port or a local backend's 8000, as an `http`
 address on the same machine. Connect checks that the address is
-`https` and public, that the server answers `GET /counts` with the admin's own token and names its
+`https` and public, has the backend set itself up or say that it is (`POST /setup`; a backend
+older than that route answers 404 and is taken as it is), checks that the server answers
+`GET /counts` with the admin's own token and names its
 platform there, then writes the record with `iblai-org: <that platform>`, so the platform itself
 refuses an address that is another platform's backend. The same record from the server's side:
 
@@ -441,9 +443,20 @@ uv run ontology platform address --url https://ontology.<your-domain>   # this b
   so only that platform's admins find the backend, and it sends their calls there with that token
   and nothing else (`Authorization: Token …`). The hosted console's **Backend** page shows it and
   connects another in its place.
-- **The backend's key** is a platform API key that acts as the admin who pressed "Create key"
-  (`POST /api/core/platform/api-tokens/` with their sign-in, no `mode`). The browser asks the
-  platform for it directly, so the frontend's server never holds it; it is shown once.
+- **A fresh server is set up from the link its install prints**
+  (`<frontend>/#host=<host>&code=<code>`). The page keeps the host name and the code for the tab
+  (`sessionStorage`, which sign-in and a platform switch leave alone) and shows the **Set up**
+  card in place of the page: the platforms the user administers, none preselected when there are
+  several, and the SDK's own switch for one they are not signed in to. Set up sends the code and
+  the platform through the same route as Connect. To try it here, start a backend with
+  `ONTOLOGY_DATA_STORE=rbac`, `ONTOLOGY_DM_URL` and `ONTOLOGY_SETUP_CODE=$(openssl rand -hex 16)`
+  and neither `IBLAI_ORG` nor `IBLAI_ADMIN_TOKEN`, then open
+  `http://localhost:3000/#host=localhost:8000&code=<that code>` on a frontend run this way.
+- **The backend's key** is a platform API key that acts as the admin who pressed **Set up**
+  (`POST /api/core/platform/api-tokens/` with their sign-in, no `mode`). The backend asks the
+  platform for it itself and keeps it encrypted in its own database, beside the platform it was
+  set up for: it is never shown, and neither the browser nor the frontend's server holds it. A
+  backend with `IBLAI_ORG` and `IBLAI_ADMIN_TOKEN` in its environment uses those instead.
 - **It must be `https` and public.** The frontend refuses an address that resolves into a private
   network and follows no redirect. A backend that only the campus network reaches cannot be used
   this way: run a frontend beside it instead (`ONTOLOGY_API_URL`).
