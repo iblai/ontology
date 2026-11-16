@@ -4,7 +4,7 @@
     {
       "name": "ontology-frontend",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "frontend", "dev", "--port", "3000"],
+      "runtimeArgs": ["dev", "--port", "3000"],
       "port": 3000
     }
   ]

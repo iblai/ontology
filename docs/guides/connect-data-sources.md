@@ -43,15 +43,15 @@ A data source is either a **database** (dissected into the ontology and served) 
    - **DISSECT** the engine can read it and infer terms (PostgreSQL, MySQL, Snowflake, ClickHouse,
      Trino, Databricks, AlloyDB, Cloud SQL, …).
    - **SERVE** the server runtime can expose it as tools (almost everything).
-   A kind with SERVE only (SQL Server, Oracle, BigQuery, MongoDB, …) can still be exposed through
-   hand-written tools, but it will not appear in the map.
+     A kind with SERVE only (SQL Server, Oracle, BigQuery, MongoDB, …) can still be exposed through
+     hand-written tools, but it will not appear in the map.
 2. Fill in **Name** (short, lower-case; it becomes the schema prefix you see everywhere, e.g.
    `sis.students`) and the **Connection URL** with the read-only login.
 3. **Scope**: add the tables or schemas to include. Everything else is ignored.
 4. **Dissection Options**
-   - *PII detection* tags columns that look personal (email, names, identifiers) and masks their
+   - _PII detection_ tags columns that look personal (email, names, identifiers) and masks their
      sample values before any sample reaches a model. Leave it on.
-   - *Distinct-value probing* samples categorical columns so terms get better names
+   - _Distinct-value probing_ samples categorical columns so terms get better names
      (`enrollments.status → REGISTERED, DROPPED, WAITLIST, WITHDRAWN`).
 5. **Test Connection**. The engine validates the credentials and lists what it can see.
 6. **Connect & Dissect**. The console:
@@ -61,7 +61,7 @@ A data source is either a **database** (dissected into the ontology and served) 
    - writes the same connection as a `source` in the server config on the host, reading the password
      from `/srv/ontology/servers/<slug>/env`, so the credential exists in exactly two places on the
      host and nowhere else.
-   You land on **Map**, which follows the run.
+     You land on **Map**, which follows the run.
 
 ![Map while dissecting](../screenshots/03-map.png)
 
@@ -114,10 +114,10 @@ toolset so it can be granted separately (it shows as **unrestricted reads** in t
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Where to look |
-|---|---|---|
-| Test Connection fails | firewall or wrong login | host can reach `db:port`? `psql`/`mysql` from the host with the same URL |
-| Ingest accepted, nothing appears in the map | compile not finished or failed | **Compilation** page: `last_failure_at`; engine logs on the host |
-| Terms are poorly named | columns are opaque codes, probing off | turn on distinct-value probing; add column descriptions in **Catalog** and re-compile |
-| PII column not tagged | detector missed it | tag the column `pii` in **Catalog**; tags are honored on the next compile |
-| Tool returns permission error | login lacks SELECT on a joined table | grant SELECT; the certified SQL shows the tables involved |
+| Symptom                                     | Likely cause                          | Where to look                                                                         |
+| ------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
+| Test Connection fails                       | firewall or wrong login               | host can reach `db:port`? `psql`/`mysql` from the host with the same URL              |
+| Ingest accepted, nothing appears in the map | compile not finished or failed        | **Compilation** page: `last_failure_at`; engine logs on the host                      |
+| Terms are poorly named                      | columns are opaque codes, probing off | turn on distinct-value probing; add column descriptions in **Catalog** and re-compile |
+| PII column not tagged                       | detector missed it                    | tag the column `pii` in **Catalog**; tags are honored on the next compile             |
+| Tool returns permission error               | login lacks SELECT on a joined table  | grant SELECT; the certified SQL shows the tables involved                             |

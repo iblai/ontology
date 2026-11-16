@@ -73,7 +73,19 @@ Same shape as Claude Desktop: a `url` plus an `Authorization` header. Editors th
 stdio can bridge with `mcp-remote`:
 
 ```json
-{ "mcpServers": { "institution": { "command": "npx", "args": ["mcp-remote", "https://ontology.university.edu/institution/mcp", "--header", "Authorization: Api-Token <token>"] } } }
+{
+  "mcpServers": {
+    "institution": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://ontology.university.edu/institution/mcp",
+        "--header",
+        "Authorization: Api-Token <token>"
+      ]
+    }
+  }
+}
 ```
 
 ## Your own code
@@ -120,11 +132,11 @@ at the token.
 
 ## Troubleshooting
 
-| Response | Meaning | Fix |
-|---|---|---|
-| `403 origin` | browser origin not allowed | add it under Allowed Origins and redeploy |
-| `401` | token missing, expired or revoked | issue a new platform token on ibl.ai |
-| `403 no policy` | token valid but holds no `ontology:*` policy | attach a policy to the token or its group |
-| `404 tool not in toolset` | the tool exists but not for this policy | grant the policy that includes it |
-| timeout from an ibl.ai agent | ibl.ai egress not allowed inbound | firewall rule for ibl.ai egress on 443 |
-| works with cURL, not from Claude Desktop | client not on the VPN | connect to the VPN first |
+| Response                                 | Meaning                                      | Fix                                       |
+| ---------------------------------------- | -------------------------------------------- | ----------------------------------------- |
+| `403 origin`                             | browser origin not allowed                   | add it under Allowed Origins and redeploy |
+| `401`                                    | token missing, expired or revoked            | issue a new platform token on ibl.ai      |
+| `403 no policy`                          | token valid but holds no `ontology:*` policy | attach a policy to the token or its group |
+| `404 tool not in toolset`                | the tool exists but not for this policy      | grant the policy that includes it         |
+| timeout from an ibl.ai agent             | ibl.ai egress not allowed inbound            | firewall rule for ibl.ai egress on 443    |
+| works with cURL, not from Claude Desktop | client not on the VPN                        | connect to the VPN first                  |

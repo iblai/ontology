@@ -22,13 +22,13 @@ signed in to the OS is signed in here. This is the model, taken from `github.com
 
 The SDK's per-tab auth storage, mirrored by the app (`lib/auth-storage.ts`):
 
-| Key | Content | Lifetime |
-|---|---|---|
-| `axd_token`, `axd_token_expires` | token for the analytics/AXD service | short-lived; expiry stored as ISO date |
-| `dm_token`, `dm_token_expires` | token for the data-manager service (`…/dm/api/…`, which is where MCP servers, RBAC, api-tokens, org metadata and analytics live) | short-lived |
-| `edx_jwt_token` | LMS JWT; **not used by this console** (no LMS calls) | — |
-| `userData`, `user_metadata` | the signed-in user and their metadata | session |
-| `current_tenant`, `tenant`, `tenants`, `visiting_tenant` | active organization, default organization, memberships | session |
+| Key                                                      | Content                                                                                                                          | Lifetime                               |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `axd_token`, `axd_token_expires`                         | token for the analytics/AXD service                                                                                              | short-lived; expiry stored as ISO date |
+| `dm_token`, `dm_token_expires`                           | token for the data-manager service (`…/dm/api/…`, which is where MCP servers, RBAC, api-tokens, org metadata and analytics live) | short-lived                            |
+| `edx_jwt_token`                                          | LMS JWT; **not used by this console** (no LMS calls)                                                                             | —                                      |
+| `userData`, `user_metadata`                              | the signed-in user and their metadata                                                                                            | session                                |
+| `current_tenant`, `tenant`, `tenants`, `visiting_tenant` | active organization, default organization, memberships                                                                           | session                                |
 
 Default is plain `localStorage`. With `NEXT_PUBLIC_IBL_PER_TAB_AUTH=true` the SDK keeps
 `sessionStorage` as the per-tab source of truth and `localStorage` as the most-recent-login seed, so
@@ -40,12 +40,12 @@ Tokens never leave the browser except to ibl.ai and to this host's route handler
 
 From `features/utils.ts` in the OS:
 
-| Service | Header |
-|---|---|
-| DM (`config.dmUrl()`, `…/dm/api/…`) | `Authorization: Token <dm_token>` |
-| AXD (`config.axdUrl()`) | `Authorization: Token <axd_token>` |
-| LMS (`config.lmsUrl()`) | `Authorization: JWT <edx_jwt_token>` |
-| anything else | `Authorization: Token <dm_token>` |
+| Service                             | Header                               |
+| ----------------------------------- | ------------------------------------ |
+| DM (`config.dmUrl()`, `…/dm/api/…`) | `Authorization: Token <dm_token>`    |
+| AXD (`config.axdUrl()`)             | `Authorization: Token <axd_token>`   |
+| LMS (`config.lmsUrl()`)             | `Authorization: JWT <edx_jwt_token>` |
+| anything else                       | `Authorization: Token <dm_token>`    |
 
 Two things follow for this console:
 
@@ -83,11 +83,11 @@ caller's tenant matches the server's.
 Route handlers under `/api/host/*` and the gateway at `/<slug>/mcp` receive either a session token
 or a platform token and verify it with ibl.ai before doing anything:
 
-| Presented | Verification |
-|---|---|
-| `Authorization: Token <dm_token>` (browser, console) | `GET https://ext.ibl.ai/dm/api/core/platform/users/?platform_key=<tenant>&page_size=1` with the same header; a `200` with the caller as an admin of the tenant is a pass. `/api/core/token/verify/` is used where the deployment exposes it. |
+| Presented                                                  | Verification                                                                                                                                                                                                                                                            |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Authorization: Token <dm_token>` (browser, console)       | `GET https://ext.ibl.ai/dm/api/core/platform/users/?platform_key=<tenant>&page_size=1` with the same header; a `200` with the caller as an admin of the tenant is a pass. `/api/core/token/verify/` is used where the deployment exposes it.                            |
 | `Authorization: Api-Token <platform token>` (agents, CLIs) | `GET https://ext.ibl.ai/dm/api/core/platform/api-tokens/<name>?platform_key=<tenant>` via the host's own service token to read the token's policies and groups, after a cheap probe call with the presented token confirms it is live. The policies decide the toolset. |
-| OIDC ID token (Entra, Google) | not touched by the gateway; forwarded to the runtime, which verifies issuer, audience, signature and expiry itself. |
+| OIDC ID token (Entra, Google)                              | not touched by the gateway; forwarded to the runtime, which verifies issuer, audience, signature and expiry itself.                                                                                                                                                     |
 
 Verification results are cached in memory for the token's remaining lifetime (minutes), never
 persisted. Revoking a token on ibl.ai takes effect at the next cache miss, at most a few minutes.
@@ -101,16 +101,16 @@ starter's `config.apiKey()` already arranges).
 
 Sign-in is wired with the iblai/vibe starter's provider chain (`/iblai-vibe-auth`), single-organization:
 
-| File | Role |
-|---|---|
-| `frontend/providers/iblai-providers.tsx` | `initializeDataLayer` → Redux store → `AuthProvider` → `TenantProvider`. Redirects to the auth app when there is no valid session; persists re-minted tokens on organization switch. |
-| `frontend/app/(auth)/sso-login-complete/page.tsx` | The SDK `SsoLogin` callback. Lives outside the providers so it can store the tokens before `AuthProvider` checks them. |
-| `frontend/lib/iblai/config.ts` | Service URLs. Defaults to the hosted platform; `NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_AUTH_URL` point it elsewhere (e.g. `https://ext.ibl.ai`). |
-| `frontend/lib/iblai/auth-utils.ts`, `tenant.ts`, `storage-service.ts` | Redirect to the auth app, logout, tenant resolution (`app_tenant` → `NEXT_PUBLIC_MAIN_TENANT_KEY` → `tenant`), the storage adapter the SDK expects. |
-| `frontend/lib/iblai/session.tsx` | Reads the stored session (user, email, tenants, `is_admin`) for the shell. Holds the User/Admin switch state. Stores nothing. |
-| `frontend/store/iblai-store.ts` | The SDK's RTK Query slices. |
+| File                                                         | Role                                                                                                                                                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `providers/iblai-providers.tsx`                              | `initializeDataLayer` → Redux store → `AuthProvider` → `TenantProvider`. Redirects to the auth app when there is no valid session; persists re-minted tokens on organization switch. |
+| `app/(auth)/sso-login-complete/page.tsx`                     | The SDK `SsoLogin` callback. Lives outside the providers so it can store the tokens before `AuthProvider` checks them.                                                               |
+| `lib/iblai/config.ts`                                        | Service URLs. Defaults to the hosted platform; `NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_AUTH_URL` point it elsewhere (e.g. `https://ext.ibl.ai`).                                   |
+| `lib/iblai/auth-utils.ts`, `tenant.ts`, `storage-service.ts` | Redirect to the auth app, logout, tenant resolution (`app_tenant` → `NEXT_PUBLIC_MAIN_TENANT_KEY` → `tenant`), the storage adapter the SDK expects.                                  |
+| `lib/iblai/session.tsx`                                      | Reads the stored session (user, email, tenants, `is_admin`) for the shell. Holds the User/Admin switch state. Stores nothing.                                                        |
+| `store/iblai-store.ts`                                       | The SDK's RTK Query slices.                                                                                                                                                          |
 
-Configuration (`frontend/.env.local`, not committed; template in `.env.example`):
+Configuration (`.env.local`, not committed; template in `.env.example`):
 
 ```bash
 NEXT_PUBLIC_MAIN_TENANT_KEY=highereducation   # your ibl.ai organization key

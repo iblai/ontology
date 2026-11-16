@@ -2,11 +2,11 @@
 
 There are three questions, each answered by one system:
 
-| Question | Answered by | Where you set it |
-|---|---|---|
-| **Who** is calling, and which policy do they hold? | ibl.ai (SSO, RBAC policies, groups, platform tokens) | **Roles**, **Access**, ibl.ai OS |
-| **What** may that policy call? | the server config: toolsets named after policies | **MCP Gateway → server builder** |
-| **Which rows** may a call see? | the certified SQL and, for OIDC callers, claims bound into parameters | **Ontology** (SQL attributes), server builder (auth services) |
+| Question                                           | Answered by                                                           | Where you set it                                              |
+| -------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Who** is calling, and which policy do they hold? | ibl.ai (SSO, RBAC policies, groups, platform tokens)                  | **Roles**, **Access**, ibl.ai OS                              |
+| **What** may that policy call?                     | the server config: toolsets named after policies                      | **MCP Gateway → server builder**                              |
+| **Which rows** may a call see?                     | the certified SQL and, for OIDC callers, claims bound into parameters | **Ontology** (SQL attributes), server builder (auth services) |
 
 Nothing on the ontology host stores a user, a role or a grant. The gateway asks ibl.ai on every
 call.
@@ -18,13 +18,13 @@ call.
 A **toolset** is a named list of tools in a server's config. A **policy** is an ibl.ai RBAC policy
 for your organization. They share a name, and that is the whole mapping:
 
-| Policy on ibl.ai | Toolset in `tools.yaml` | Who typically holds it |
-|---|---|---|
-| `ontology:admin` | all toolsets | platform admins |
-| `ontology:advising` | `advising`, `registrar`, `advising-actions` | advisors group |
-| `ontology:enrollment` | `enrollment`, `registrar` | admissions and IR analysts |
-| `ontology:self-service` | `self-service` (`my_*` tools) | every signed-in student via Entra |
-| `ontology:raw` | `raw-sql` | a few analysts, read-only login |
+| Policy on ibl.ai        | Toolset in `tools.yaml`                     | Who typically holds it            |
+| ----------------------- | ------------------------------------------- | --------------------------------- |
+| `ontology:admin`        | all toolsets                                | platform admins                   |
+| `ontology:advising`     | `advising`, `registrar`, `advising-actions` | advisors group                    |
+| `ontology:enrollment`   | `enrollment`, `registrar`                   | admissions and IR analysts        |
+| `ontology:self-service` | `self-service` (`my_*` tools)               | every signed-in student via Entra |
+| `ontology:raw`          | `raw-sql`                                   | a few analysts, read-only login   |
 
 When a call arrives at `/<slug>/mcp`, the gateway verifies the token with ibl.ai, reads the caller's
 policies, picks the matching toolset and forwards to the runtime at `/mcp/<toolset>`. A caller with
@@ -51,11 +51,11 @@ Set per server, under **Authentication**:
 
 An ibl.ai agent attached to a server has a **sign-in scope** on ibl.ai:
 
-| Scope | Meaning | Use when |
-|---|---|---|
-| `platform` | one token for the whole organization | a shared, read-only analyst agent |
-| `mentor` | one token per agent | a service agent with its own policy |
-| `user` | each person's own credential, obtained in chat | agents that answer "my enrollments" |
+| Scope      | Meaning                                        | Use when                            |
+| ---------- | ---------------------------------------------- | ----------------------------------- |
+| `platform` | one token for the whole organization           | a shared, read-only analyst agent   |
+| `mentor`   | one token per agent                            | a service agent with its own policy |
+| `user`     | each person's own credential, obtained in chat | agents that answer "my enrollments" |
 
 ## 3. Row-level restriction
 
@@ -121,19 +121,19 @@ The console itself is an ibl.ai app. Its pages require the ibl.ai **admin** mode
 switch in the header), and the host route handlers refuse any session that is not an organization
 admin. Suggested split, enforced through ibl.ai RBAC:
 
-| Task | Needs |
-|---|---|
-| Add or edit a system, run dissection | org admin |
-| Certify terms and metrics | org admin, or a `ontology:steward` policy if you create one |
-| Build and deploy a server, issue tokens | org admin |
-| Attach a server to an agent | the agent's owner, per ibl.ai agent access rules |
+| Task                                    | Needs                                                       |
+| --------------------------------------- | ----------------------------------------------------------- |
+| Add or edit a system, run dissection    | org admin                                                   |
+| Certify terms and metrics               | org admin, or a `ontology:steward` policy if you create one |
+| Build and deploy a server, issue tokens | org admin                                                   |
+| Attach a server to an agent             | the agent's owner, per ibl.ai agent access rules            |
 
 ## 8. Audit
 
-| What | Where |
-|---|---|
-| Every tool call an ibl.ai agent made (tool, input, output, user, session) | ibl.ai analytics; shown under the server's **Activity** tab |
-| Direct calls from Claude, Codex, cURL, origin rejections, toolset misses | the runtime's stdout on the host; tail shown under **Activity → Runtime Log**; ship to your SIEM |
-| Who changed a term, when | engine term records (`modified_by`) |
-| Who deployed which config revision | file history under `/srv/ontology/servers/<slug>/` |
-| Token creation and revocation, policy changes | ibl.ai audit logs |
+| What                                                                      | Where                                                                                            |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Every tool call an ibl.ai agent made (tool, input, output, user, session) | ibl.ai analytics; shown under the server's **Activity** tab                                      |
+| Direct calls from Claude, Codex, cURL, origin rejections, toolset misses  | the runtime's stdout on the host; tail shown under **Activity → Runtime Log**; ship to your SIEM |
+| Who changed a term, when                                                  | engine term records (`modified_by`)                                                              |
+| Who deployed which config revision                                        | file history under `/srv/ontology/servers/<slug>/`                                               |
+| Token creation and revocation, policy changes                             | ibl.ai audit logs                                                                                |

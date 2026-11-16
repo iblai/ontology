@@ -36,23 +36,23 @@ need outbound 443 to `ext.ibl.ai` as well.
 
 ### Inbound to the host
 
-| From | Port | Purpose | Notes |
-|---|---|---|---|
-| VPN CIDR(s) | 443 | console, gateway, playground | the only human entry point |
-| ibl.ai agent egress IPs | 443 | `/<slug>/mcp` calls from ibl.ai agents | **Ask ibl.ai for the current egress list.** The A records below are ingress addresses and may not be the source of outbound agent traffic. Alternative: terminate ibl.ai traffic on the VPN concentrator or a private peering so no public inbound rule is needed. |
-| anything else | — | denied | |
+| From                    | Port | Purpose                                | Notes                                                                                                                                                                                                                                                              |
+| ----------------------- | ---- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| VPN CIDR(s)             | 443  | console, gateway, playground           | the only human entry point                                                                                                                                                                                                                                         |
+| ibl.ai agent egress IPs | 443  | `/<slug>/mcp` calls from ibl.ai agents | **Ask ibl.ai for the current egress list.** The A records below are ingress addresses and may not be the source of outbound agent traffic. Alternative: terminate ibl.ai traffic on the VPN concentrator or a private peering so no public inbound rule is needed. |
+| anything else           | —    | denied                                 |                                                                                                                                                                                                                                                                    |
 
 Ports 3000, 3001, 3002, 3100, 5432 and 50xx are bound to loopback or the docker network and are
 never published.
 
 ### Outbound from the host
 
-| To | Port | Purpose | Required by |
-|---|---|---|---|
-| `ext.ibl.ai` → 129.80.99.227 | 443 | token verification, MCP server registration, platform tokens, RBAC, analytics | console route handlers and gateway |
-| data source hosts | per engine (5432 PostgreSQL, 3306 MySQL, 443 Snowflake/BigQuery/HTTP APIs, 1433 SQL Server, 1521 Oracle) | schema reads, profiling, serving tools | auto-ontology and Toolbox |
-| model endpoint for dissection | 443 | naming terms, resolving joins, embeddings | auto-ontology. **Decide one of:** a self-hosted NIM inside the network (no outbound), or NVIDIA's hosted endpoint `integrate.api.nvidia.com` (one extra outbound rule). The console does not need it; only the engine does. |
-| DNS, NTP, internal CA / OS updates | 53, 123, 443 | hygiene | host |
+| To                                 | Port                                                                                                     | Purpose                                                                       | Required by                                                                                                                                                                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ext.ibl.ai` → 129.80.99.227       | 443                                                                                                      | token verification, MCP server registration, platform tokens, RBAC, analytics | console route handlers and gateway                                                                                                                                                                                          |
+| data source hosts                  | per engine (5432 PostgreSQL, 3306 MySQL, 443 Snowflake/BigQuery/HTTP APIs, 1433 SQL Server, 1521 Oracle) | schema reads, profiling, serving tools                                        | auto-ontology and Toolbox                                                                                                                                                                                                   |
+| model endpoint for dissection      | 443                                                                                                      | naming terms, resolving joins, embeddings                                     | auto-ontology. **Decide one of:** a self-hosted NIM inside the network (no outbound), or NVIDIA's hosted endpoint `integrate.api.nvidia.com` (one extra outbound rule). The console does not need it; only the engine does. |
+| DNS, NTP, internal CA / OS updates | 53, 123, 443                                                                                             | hygiene                                                                       | host                                                                                                                                                                                                                        |
 
 At install time only: container registries (`nvcr.io`, `docker.io`, `ghcr.io`) and the Toolbox
 release download. Mirror them internally if the host must stay closed after install.
@@ -71,14 +71,14 @@ hostname at the proxy and by IP at the firewall; re-check the IP when ibl.ai ann
 
 ## What runs where
 
-| Component | Where | Listens | State it keeps |
-|---|---|---|---|
-| Console (this app) | host, `frontend/` | 127.0.0.1:3000 behind the proxy | none |
-| Console route handlers | same process | `/api/host/*` | none; verifies the ibl.ai token per request |
-| Gateway | same process | `/<slug>/mcp` | none; origin check, token verification, policy → toolset, forward |
-| auto-ontology | host, docker compose | internal only | its Postgres + pgvector volume |
-| Toolbox | host, one process per server | 127.0.0.1:5001… | `tools.yaml`, `flags`, `env` under `/srv/ontology/servers/<slug>/` |
-| TLS proxy | host | 0.0.0.0:443 | certificate from the internal CA |
+| Component              | Where                        | Listens                         | State it keeps                                                     |
+| ---------------------- | ---------------------------- | ------------------------------- | ------------------------------------------------------------------ |
+| Console (this app)     | host, repository root        | 127.0.0.1:3000 behind the proxy | none                                                               |
+| Console route handlers | same process                 | `/api/host/*`                   | none; verifies the ibl.ai token per request                        |
+| Gateway                | same process                 | `/<slug>/mcp`                   | none; origin check, token verification, policy → toolset, forward  |
+| auto-ontology          | host, docker compose         | internal only                   | its Postgres + pgvector volume                                     |
+| Toolbox                | host, one process per server | 127.0.0.1:5001…                 | `tools.yaml`, `flags`, `env` under `/srv/ontology/servers/<slug>/` |
+| TLS proxy              | host                         | 0.0.0.0:443                     | certificate from the internal CA                                   |
 
 ## Identity on the wire
 

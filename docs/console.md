@@ -18,15 +18,15 @@ the notifications bell (SDK dropdown) and your profile menu (SDK; profile, help,
 
 **Sidebar footer.** The same items as os.ibl.ai, and they behave the same way:
 
-| Item | Opens | Who sees it |
-|---|---|---|
-| Notifications | the Notifications page (SDK notification center) | everyone |
-| Invites | the SDK invite dialog | admins in Admin mode |
-| Management | dialog with the SDK `Admin` surface: users, groups, roles, policies, teams, alerts | admins in Admin mode |
-| API | dialog with the SDK `ApiTab`: platform API tokens | admins in Admin mode |
-| Secrets | dialog with the SDK `SecretsTab`: LLM keys, service credentials, environment variables | admins in Admin mode |
-| Advanced | dialog with the SDK `AdvancedTab`: organization settings | admins in Admin mode |
-| Support | docs.ibl.ai in a new tab | everyone |
+| Item          | Opens                                                                                  | Who sees it          |
+| ------------- | -------------------------------------------------------------------------------------- | -------------------- |
+| Notifications | the Notifications page (SDK notification center)                                       | everyone             |
+| Invites       | the SDK invite dialog                                                                  | admins in Admin mode |
+| Management    | dialog with the SDK `Admin` surface: users, groups, roles, policies, teams, alerts     | admins in Admin mode |
+| API           | dialog with the SDK `ApiTab`: platform API tokens                                      | admins in Admin mode |
+| Secrets       | dialog with the SDK `SecretsTab`: LLM keys, service credentials, environment variables | admins in Admin mode |
+| Advanced      | dialog with the SDK `AdvancedTab`: organization settings                               | admins in Admin mode |
+| Support       | docs.ibl.ai in a new tab                                                               | everyone             |
 
 ![Management dialog](screenshots/17-management-dialog.png)
 
@@ -43,7 +43,7 @@ reflows to one column, tables and code scroll inside their own box, and nothing 
 
 ![Phone](screenshots/18-mobile.png) ![Phone menu](screenshots/19-mobile-menu.png)
 
-Every page is checked at 375, 768, 1024, 1280, 1440 and 1920px by `frontend/scripts/audit-layout.mjs`
+Every page is checked at 375, 768, 1024, 1280, 1440 and 1920px by `scripts/audit-layout.mjs`
 for content outside its card, text overflowing its box, overlapping siblings and sideways scrolling.
 
 ## Dashboard

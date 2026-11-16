@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y", "vitest"],
+  "ignorePatterns": ["components/ui/**"],
+  "rules": {
+    "react/set-state-in-effect": "off",
+    "jsx-a11y/no-autofocus": "off",
+    "react/no-danger": "error",
+    "react/jsx-no-target-blank": "error",
+    "react/jsx-no-script-url": "error",
+    "no-eval": "error",
+    "no-new-func": "error",
+    "no-script-url": "error"
+  }
+}
