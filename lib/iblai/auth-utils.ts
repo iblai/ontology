@@ -5,8 +5,9 @@
  * redirect behaviour here without touching the provider component.
  */
 
+import { clearCurrentTenantCookie, handleTenantSwitch } from "@iblai/iblai-js/web-utils";
 import config from "./config";
-import { resolveAppTenant } from "./tenant";
+import { currentTenantKey } from "./tenant";
 
 /** Check if running inside a Tauri app. */
 export function isTauri(): boolean {
@@ -47,9 +48,9 @@ export async function redirectToAuthSpa(
     localStorage.setItem("redirectTo", path);
   }
 
-  const tenant = platformKey || resolveAppTenant();
   let authUrl = `${config.authUrl()}/login?app=custom&redirect-to=${redirectOrigin}`;
-  if (tenant) authUrl += `&tenant=${encodeURIComponent(tenant)}`;
+  // With no platform the Auth SPA picks the user's own.
+  if (platformKey) authUrl += `&tenant=${encodeURIComponent(platformKey)}`;
   if (logout) authUrl += "&logout=1";
 
   // All platforms (web, desktop Tauri, mobile Tauri): navigate the window
@@ -71,8 +72,20 @@ export function hasNonExpiredAuthToken(): boolean {
 
 /** Handle logout: clear state and redirect to the Auth SPA logout page. */
 export function handleLogout() {
-  const tenant = resolveAppTenant();
+  const tenant = currentTenantKey();
   const redirectOrigin = getRedirectOrigin();
   localStorage.clear();
-  window.location.href = `${config.authUrl()}/logout?redirect-to=${redirectOrigin}&tenant=${encodeURIComponent(tenant)}`;
+  let url = `${config.authUrl()}/logout?redirect-to=${redirectOrigin}`;
+  if (tenant) url += `&tenant=${encodeURIComponent(tenant)}`;
+  window.location.href = url;
+}
+
+/** Switch to another platform: the SDK clears storage and signs in again through /login/complete. */
+export async function switchPlatform(key: string, saveRedirect = false) {
+  await handleTenantSwitch(key, {
+    authUrl: config.authUrl(),
+    redirectPathStorageKey: "redirectTo",
+    saveRedirect,
+    clearCurrentTenantCookie,
+  });
 }

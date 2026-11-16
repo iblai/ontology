@@ -3,8 +3,7 @@
  *
  * Hosted-iblai.app defaults live in code: with no env vars at all, every
  * service routes through https://api.iblai.app. `.env.local` (copied from
- * `.env.example`) holds the organization key, IBLAI_API_KEY, and any self-hosted
- * overrides.
+ * `.env.example`) holds any self-hosted overrides.
  *
  * Supports two modes:
  *   1. Consolidated API (default on hosted iblai.app): NEXT_PUBLIC_API_BASE_URL
@@ -29,7 +28,6 @@ const env = {
   NEXT_PUBLIC_LEGACY_LMS_URL: process.env.NEXT_PUBLIC_LEGACY_LMS_URL,
   NEXT_PUBLIC_MFE_URL: process.env.NEXT_PUBLIC_MFE_URL,
   NEXT_PUBLIC_PLATFORM_BASE_DOMAIN: process.env.NEXT_PUBLIC_PLATFORM_BASE_DOMAIN,
-  NEXT_PUBLIC_MAIN_TENANT_KEY: process.env.NEXT_PUBLIC_MAIN_TENANT_KEY,
   NEXT_PUBLIC_TAURI_CUSTOM_SCHEME: process.env.NEXT_PUBLIC_TAURI_CUSTOM_SCHEME,
   NEXT_PUBLIC_DEFAULT_AGENT_ID: process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID,
   NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
@@ -93,7 +91,6 @@ const config = {
 
   wsUrl: () => getEnv("NEXT_PUBLIC_BASE_WS_URL", `wss://asgi.data.${domain()}`),
 
-  mainTenantKey: () => getEnv("NEXT_PUBLIC_MAIN_TENANT_KEY", ""),
   tauriCustomScheme: () => getEnv("NEXT_PUBLIC_TAURI_CUSTOM_SCHEME", ""),
   platformBaseDomain: () => domain(),
 
@@ -113,15 +110,6 @@ const config = {
     (
       getEnv("NEXT_PUBLIC_APP_URL") || (typeof window !== "undefined" ? window.location.origin : "")
     ).replace(/\/+$/, ""),
-
-  // Server-only: IBLAI_API_KEY is a secret and not NEXT_PUBLIC_*, so Next.js
-  // never inlines it into the client bundle — in the browser this returns "".
-  // Use it from route handlers / server components for platform API calls
-  // (`Authorization: Api-Token <key>`; on the OpenAI-compatible endpoints,
-  // `https://asgi.data.<domain>/api/ai-mentor/orgs/<tenant>/v1/*`, the same
-  // key is also a standard OpenAI `Bearer` api key). Deliberately not routed
-  // through getEnv/window.__ENV__, which are client-visible.
-  apiKey: () => process.env.IBLAI_API_KEY ?? "",
 };
 
 export default config;

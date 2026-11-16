@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, PageHeader, Pill, Tag } from "@/components/shell/page-header";
-import { apiSystems, catalog, systems, type CatalogKind } from "@/lib/mock";
+import { QueryState } from "@/components/query-state";
+import { catalog, useActions, useSystems, type CatalogKind } from "@/lib/data";
+import type { HostApiEndpoint, HostApiMethod, HostSystemTest } from "@/lib/host/types";
+import { isDemo } from "@/lib/iblai/session";
 import { cn } from "@/lib/utils";
 
 const filters = ["All", "Databases", "Warehouses", "APIs", "Cloud"] as const;
@@ -18,6 +22,93 @@ const groupOf: Record<string, CatalogKind["group"]> = {
   APIs: "api",
   Cloud: "gc",
 };
+
+// The kinds the engine dissects and the runtime serves; any other kind sets nothing.
+const schemeOf: Record<string, string> = {
+  PostgreSQL: "postgresql://",
+  MySQL: "mysql://",
+  Snowflake: "snowflake://",
+  ClickHouse: "clickhouse://",
+};
+
+// The server builder reads this key to tick the same toolsets.
+const PREBUILT_KEY = "ontology.prebuilt";
+
+const demo = isDemo();
+const DEMO_URL = "snowflake://FIN_RO:••••@acme.us-east-1/FIN?warehouse=ANALYTICS";
+const DEMO_SCOPE = ["FIN.AWARDS", "FIN.TUITION_INVOICES", "FIN.LEDGER"];
+const DEMO_BASE = "https://api.crm.example";
+const DEMO_AUTH = "Authorization: Bearer ${CRM_TOKEN}";
+const DEMO_ENDPOINTS = [
+  "GET /v3/objects/contacts",
+  "GET /v3/objects/deals",
+  "GET /v3/objects/companies",
+];
+
+/** The database a connection URL names: the engine names the system after it. */
+function databaseOf(url: string): string {
+  try {
+    return decodeURIComponent(new URL(url).pathname.split("/")[1] ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/** "https://api.crm.example" → "crm". */
+function apiNameOf(baseUrl: string): string {
+  try {
+    const host = new URL(baseUrl).hostname.replace(/^(api|www)\./, "");
+    return (host.split(".")[0] ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  } catch {
+    return "";
+  }
+}
+
+/** "GET /v3/objects/{id}" → a tool named get_v3_objects_id; null when not that shape. */
+function endpointOf(line: string): HostApiEndpoint | null {
+  const m = /^(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s?#]*)$/i.exec(line.trim());
+  if (!m) return null;
+  const method = m[1].toUpperCase() as HostApiMethod;
+  const path = m[2];
+  const name = [method, ...path.split(/[^A-Za-z0-9]+/)].filter(Boolean).join("_").toLowerCase();
+  return { name, method, path, description: "", query: [] };
+}
+
+const keyOf = (ep: HostApiEndpoint) => `${ep.method} ${ep.path}`;
+
+type Row = { ep: HostApiEndpoint; on: boolean };
+const DEMO_ROWS: Row[] = DEMO_ENDPOINTS.map((e) => ({ ep: endpointOf(e)!, on: true }));
+
+/** Adds a document's operations after the rows already there; a small one has its GETs ticked. */
+function mergeSpec(rows: Row[], eps: HostApiEndpoint[]): Row[] {
+  const seen = new Set(rows.map((r) => keyOf(r.ep)));
+  const small = eps.length <= 20;
+  const next = [...rows];
+  for (const ep of eps) {
+    if (seen.has(keyOf(ep))) continue;
+    seen.add(keyOf(ep));
+    next.push({ ep, on: small && ep.method === "GET" });
+  }
+  return next;
+}
+
+/** One action's in-flight flag and rejection message. */
+function useRun() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { busy, error, run };
+}
 
 function Cap({ kind, children }: { kind: "o" | "m" | "x"; children: string }) {
   return (
@@ -35,10 +126,80 @@ function Cap({ kind, children }: { kind: "o" | "m" | "x"; children: string }) {
 }
 
 export default function SystemsPage() {
+  const router = useRouter();
+  const actions = useActions();
+  const systemsQ = useSystems();
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
-  const [name, setName] = useState("finance");
-  const [test, setTest] = useState<"idle" | "running" | "ok">("idle");
   const shown = catalog.filter((c) => filter === "All" || c.group === groupOf[filter]);
+
+  // Database tab
+  const [url, setUrl] = useState(demo ? DEMO_URL : "");
+  const [scope, setScope] = useState<string[]>(demo ? DEMO_SCOPE : []);
+  const [adding, setAdding] = useState(false);
+  const [scopeDraft, setScopeDraft] = useState("");
+  const [pii, setPii] = useState(true);
+  const [probing, setProbing] = useState(true);
+  const [result, setResult] = useState<HostSystemTest | null>(null);
+  const test = useRun();
+  const connect = useRun();
+  // What to call the system: the database's name until the person types one.
+  const [label, setLabel] = useState<string | null>(demo ? "finance" : null);
+  const input = { url, scope, pii, probing, label: (label ?? "").trim() };
+
+  // HTTP API tab
+  const [baseUrl, setBaseUrl] = useState(demo ? DEMO_BASE : "");
+  const [nameDraft, setNameDraft] = useState<string | null>(null); // null follows the address
+  const apiName = nameDraft ?? apiNameOf(baseUrl);
+  const [specUrl, setSpecUrl] = useState("");
+  const [authHeader, setAuthHeader] = useState(demo ? DEMO_AUTH : "");
+  const [rows, setRows] = useState<Row[]>(demo ? DEMO_ROWS : []);
+  const [manual, setManual] = useState("");
+  const [manualBad, setManualBad] = useState(false);
+  const [find, setFind] = useState("");
+  const many = rows.length > 8;
+  const q = find.trim().toLowerCase();
+  const shownRows = many && q ? rows.filter((r) => keyOf(r.ep).toLowerCase().includes(q)) : rows;
+  const fetchSpec = useRun();
+  const addApi = useRun();
+
+  // Prebuilt tab
+  const [ticked, setTicked] = useState<string[]>([]);
+  useEffect(() => {
+    setTicked(JSON.parse(localStorage.getItem(PREBUILT_KEY) ?? "[]") as string[]);
+  }, []);
+  const tick = (toolset: string, on: boolean) => {
+    const next = on ? [...ticked, toolset] : ticked.filter((t) => t !== toolset);
+    setTicked(next);
+    localStorage.setItem(PREBUILT_KEY, JSON.stringify(next));
+  };
+
+  const pickKind = (c: CatalogKind) => {
+    const scheme = schemeOf[c.name];
+    if (scheme && !url) setUrl(scheme);
+  };
+
+  // Closes the scope field, keeping what was typed; null drops it (Escape).
+  const dropScope = useRef(false);
+  const closeScope = (typed: string | null) => {
+    const t = (typed ?? "").trim();
+    if (t) setScope((all) => (all.includes(t) ? all : [...all, t]));
+    setScopeDraft("");
+    setAdding(false);
+  };
+
+  const addManual = () => {
+    const ep = endpointOf(manual);
+    setManualBad(!ep);
+    if (!ep) return;
+    setRows([...rows.filter((r) => keyOf(r.ep) !== keyOf(ep)), { ep, on: true }]);
+    setManual("");
+  };
+
+  // Ticks or unticks the rows the filter shows; every row when it shows them all.
+  const tickShown = (on: boolean) => {
+    const keys = new Set(shownRows.map((r) => keyOf(r.ep)));
+    setRows((all) => all.map((r) => (keys.has(keyOf(r.ep)) ? { ...r, on } : r)));
+  };
 
   return (
     <>
@@ -68,71 +229,76 @@ export default function SystemsPage() {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <div>
           <Card className="mb-3.5">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">Connected to Institution</h3>
-              <span className="text-xs text-gray-600">
-                {systems.length} databases · {apiSystems.length} API
-              </span>
-            </div>
-            {systems.map((s) => (
-              <div
-                key={s.name}
-                className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
-              >
-                <div
-                  className="grid size-[34px] place-items-center rounded-lg text-[11px] font-bold text-white"
-                  style={{
-                    background: ["#336791", "#E48E00", "#FF7A59", "#29B5E8"][
-                      ["sis", "lms", "crm", "fin"].indexOf(s.key)
-                    ],
-                  }}
-                >
-                  {s.abbr}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                    <b className="text-gray-900">{s.name}</b>{" "}
-                    <span className="text-gray-600">· {s.engine}</span>
-                    <Tag tone="blue">dissect</Tag>
-                    <Tag tone="green">serve</Tag>
+            <QueryState query={systemsQ}>
+              {(data) => (
+                <>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Connected to Institution
+                    </h3>
+                    <span className="text-xs text-gray-600">
+                      {data.systems.length} databases · {data.apis.length} API
+                    </span>
                   </div>
-                  <small className="mono block truncate text-[11.5px] text-gray-600">
-                    {s.url} · {s.detail}
-                  </small>
-                </div>
-                {s.status === "ingested" ? (
-                  <Pill tone="green" dot>
-                    ingested
-                  </Pill>
-                ) : (
-                  <Pill tone="amber" dot>
-                    compiling
-                  </Pill>
-                )}
-              </div>
-            ))}
-            {apiSystems.map((a) => (
-              <div
-                key={a.name}
-                className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
-              >
-                <div className="grid size-[34px] place-items-center rounded-lg bg-[#FF7A59] text-[11px] font-bold text-white">
-                  API
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                    <b className="text-gray-900">{a.name}</b>{" "}
-                    <span className="text-gray-600">· HTTP API</span> <Tag tone="green">serve</Tag>
-                  </div>
-                  <small className="mono block truncate text-[11.5px] text-gray-600">
-                    {a.baseUrl} · {a.endpoints} endpoints → {a.tools} tools
-                  </small>
-                </div>
-                <Pill tone="green" dot>
-                  serving
-                </Pill>
-              </div>
-            ))}
+                  {data.systems.map((s) => (
+                    <div
+                      key={s.key}
+                      className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
+                    >
+                      <div
+                        className="grid size-[34px] place-items-center rounded-lg text-[11px] font-bold text-white"
+                        style={{ background: s.color }}
+                      >
+                        {s.abbr}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                          <b className="text-gray-900">{s.name}</b>{" "}
+                          <span className="text-gray-600">· {s.engine}</span>
+                          {s.dissect && <Tag tone="blue">dissect</Tag>}
+                          {s.serve && <Tag tone="green">serve</Tag>}
+                        </div>
+                        <small className="mono block truncate text-[11.5px] text-gray-600">
+                          {s.url} · {s.detail}
+                        </small>
+                      </div>
+                      {s.status === "ingested" ? (
+                        <Pill tone="green" dot>
+                          ingested
+                        </Pill>
+                      ) : (
+                        <Pill tone="amber" dot>
+                          {s.status}
+                        </Pill>
+                      )}
+                    </div>
+                  ))}
+                  {data.apis.map((a) => (
+                    <div
+                      key={a.name}
+                      className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
+                    >
+                      <div className="grid size-[34px] place-items-center rounded-lg bg-[#FF7A59] text-[11px] font-bold text-white">
+                        API
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                          <b className="text-gray-900">{a.name}</b>{" "}
+                          <span className="text-gray-600">· HTTP API</span>{" "}
+                          <Tag tone="green">serve</Tag>
+                        </div>
+                        <small className="mono block truncate text-[11.5px] text-gray-600">
+                          {a.baseUrl} · {a.endpoints} endpoints → {a.tools} tools
+                        </small>
+                      </div>
+                      <Pill tone="green" dot>
+                        serving
+                      </Pill>
+                    </div>
+                  ))}
+                </>
+              )}
+            </QueryState>
           </Card>
 
           <div className="eyebrow mb-2">Catalog</div>
@@ -141,7 +307,7 @@ export default function SystemsPage() {
               <button
                 key={c.name}
                 type="button"
-                onClick={() => setName(c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}
+                onClick={() => pickKind(c)}
                 className="rounded-lg border border-[var(--border-color)] bg-white p-3 text-left transition hover:border-[#0058cc]"
               >
                 <div
@@ -198,8 +364,10 @@ export default function SystemsPage() {
                 <Input
                   id="src-name"
                   className="mono h-9"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={label ?? databaseOf(url)}
+                  placeholder="finance"
+                  maxLength={60}
+                  onChange={(e) => setLabel(e.target.value)}
                 />
               </div>
               <div>
@@ -209,13 +377,15 @@ export default function SystemsPage() {
                 <Input
                   id="src-url"
                   className="mono h-9"
-                  defaultValue="snowflake://FIN_RO:••••@acme.us-east-1/FIN?warehouse=ANALYTICS"
+                  value={url}
+                  placeholder={DEMO_URL}
+                  onChange={(e) => setUrl(e.target.value)}
                 />
               </div>
               <div>
                 <Label className="mb-1.5 text-gray-700">Scope</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  {["FIN.AWARDS", "FIN.TUITION_INVOICES", "FIN.LEDGER"].map((t) => (
+                  {scope.map((t) => (
                     <span
                       key={t}
                       className="mono inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[var(--hover-bg)] px-2.5 text-gray-700"
@@ -225,20 +395,53 @@ export default function SystemsPage() {
                         type="button"
                         className="text-gray-400 hover:text-red-500"
                         aria-label="remove"
+                        onClick={() => setScope(scope.filter((x) => x !== t))}
                       >
                         ×
                       </button>
                     </span>
                   ))}
-                  <span className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400">
-                    + table
-                  </span>
+                  {adding ? (
+                    <span className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400">
+                      <input
+                        autoFocus
+                        aria-label="table"
+                        className="w-56 bg-transparent text-gray-700 outline-none"
+                        placeholder="SCHEMA or SCHEMA.TABLE"
+                        value={scopeDraft}
+                        onChange={(e) => setScopeDraft(e.target.value)}
+                        onBlur={(e) => {
+                          if (!dropScope.current) closeScope(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            closeScope(e.currentTarget.value);
+                          } else if (e.key === "Escape") {
+                            dropScope.current = true;
+                            closeScope(null);
+                          }
+                        }}
+                      />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dropScope.current = false;
+                        setAdding(true);
+                      }}
+                      className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400"
+                    >
+                      + table
+                    </button>
+                  )}
                 </div>
               </div>
               <div>
                 <Label className="mb-1.5 text-gray-700">Dissection Options</Label>
                 <label className="flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
-                  <Checkbox defaultChecked className="mt-0.5" />{" "}
+                  <Checkbox checked={pii} onCheckedChange={setPii} className="mt-0.5" />{" "}
                   <span>
                     PII detection{" "}
                     <span className="text-xs text-gray-600">
@@ -247,7 +450,7 @@ export default function SystemsPage() {
                   </span>
                 </label>
                 <label className="mt-1.5 flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
-                  <Checkbox defaultChecked className="mt-0.5" />{" "}
+                  <Checkbox checked={probing} onCheckedChange={setProbing} className="mt-0.5" />{" "}
                   <span>
                     Distinct-value probing{" "}
                     <span className="text-xs text-gray-600">
@@ -260,90 +463,214 @@ export default function SystemsPage() {
                 <Button
                   size="lg"
                   variant="outline"
+                  disabled={test.busy}
                   onClick={() => {
-                    setTest("running");
-                    setTimeout(() => setTest("ok"), 900);
+                    setResult(null);
+                    void test.run(async () => setResult(await actions.testConnection(input)));
                   }}
                 >
                   Test Connection
                 </Button>
-                <Button size="lg" className="ibl-button-primary" render={<Link href="/map" />}>
+                <Button
+                  size="lg"
+                  className="ibl-button-primary"
+                  disabled={connect.busy}
+                  onClick={() =>
+                    void connect.run(async () => {
+                      await actions.connectSystem(input);
+                      router.push("/map?dissect=1");
+                    })
+                  }
+                >
                   Connect &amp; Dissect
                 </Button>
               </div>
-              {test !== "idle" && (
+              {test.busy && <p className="text-xs text-gray-600">Testing credentials…</p>}
+              {test.error && <p className="text-xs text-red-600">{test.error}</p>}
+              {result?.ok && (
                 <p className="text-xs text-gray-600">
-                  {test === "running" ? (
-                    "Testing credentials…"
-                  ) : (
-                    <>
-                      <span className="font-medium text-emerald-600">✓ Connected</span> · 3 tables
-                      visible · 210 ms · use a read-only login
-                    </>
-                  )}
+                  <span className="font-medium text-emerald-600">✓ Connected</span> ·{" "}
+                  {result.message} · {result.ms} ms · use a read-only login
                 </p>
               )}
+              {result && !result.ok && <p className="text-xs text-red-600">{result.message}</p>}
+              {connect.error && <p className="text-xs text-red-600">{connect.error}</p>}
             </TabsContent>
 
             <TabsContent value="api" className="space-y-3.5">
               <div>
+                <Label className="mb-1.5 text-gray-700">Name</Label>
+                <Input
+                  className="mono h-9"
+                  value={apiName}
+                  placeholder="crm"
+                  onChange={(e) => setNameDraft(e.target.value)}
+                />
+              </div>
+              <div>
                 <Label className="mb-1.5 text-gray-700">Base URL</Label>
-                <Input className="mono h-9" defaultValue="https://api.crm.example" />
+                <Input
+                  className="mono h-9"
+                  value={baseUrl}
+                  placeholder={DEMO_BASE}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                />
               </div>
               <div>
                 <Label className="mb-1.5 text-gray-700">OpenAPI Spec (optional)</Label>
-                <Input className="mono h-9" placeholder="https://…/openapi.json" />
+                <Input
+                  className="mono h-9"
+                  value={specUrl}
+                  placeholder="https://…/openapi.json"
+                  onChange={(e) => setSpecUrl(e.target.value)}
+                />
               </div>
               <div>
                 <Label className="mb-1.5 text-gray-700">Upstream Auth Header</Label>
-                <Input className="mono h-9" defaultValue="Authorization: Bearer ${CRM_TOKEN}" />
+                <Input
+                  className="mono h-9"
+                  value={authHeader}
+                  placeholder={DEMO_AUTH}
+                  onChange={(e) => setAuthHeader(e.target.value)}
+                />
               </div>
               <div>
-                <Label className="mb-1.5 text-gray-700">Endpoints to Wrap</Label>
-                {[
-                  "GET /v3/objects/contacts",
-                  "GET /v3/objects/deals",
-                  "GET /v3/objects/companies",
-                ].map((e) => (
-                  <label
-                    key={e}
-                    className="mb-1.5 flex items-center gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm"
-                  >
-                    <Checkbox defaultChecked /> <code className="mono">{e}</code>
-                  </label>
-                ))}
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <Label className="text-gray-700">Endpoints to Wrap</Label>
+                  {rows.length > 0 && (
+                    <span className="flex gap-3 text-xs text-gray-500">
+                      <button
+                        type="button"
+                        className="hover:text-gray-900"
+                        onClick={() => tickShown(true)}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="hover:text-gray-900"
+                        onClick={() => tickShown(false)}
+                      >
+                        Unselect all
+                      </button>
+                    </span>
+                  )}
+                </div>
+                {many && (
+                  <Input
+                    className="mono mb-1.5 h-9"
+                    aria-label="Filter endpoints"
+                    placeholder="Filter by method or path…"
+                    value={find}
+                    onChange={(e) => setFind(e.target.value)}
+                  />
+                )}
+                <div className={cn(many && "mb-1.5 max-h-96 overflow-y-auto")}>
+                  {shownRows.map((r) => (
+                    <label
+                      key={keyOf(r.ep)}
+                      className="mb-1.5 flex items-center gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm"
+                    >
+                      <Checkbox
+                        checked={r.on}
+                        onCheckedChange={(on) =>
+                          setRows((all) => all.map((x) => (x === r ? { ...x, on } : x)))
+                        }
+                      />{" "}
+                      <code className="mono">
+                        {r.ep.method} {r.ep.path}
+                      </code>
+                    </label>
+                  ))}
+                </div>
+                <Input
+                  className="mono h-9"
+                  aria-label="Add an endpoint"
+                  placeholder="GET /path"
+                  value={manual}
+                  onChange={(e) => {
+                    setManual(e.target.value);
+                    setManualBad(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addManual();
+                    }
+                  }}
+                />
+                {manualBad && (
+                  <p className="mt-1.5 text-xs text-red-600">Write it as METHOD /path.</p>
+                )}
               </div>
               <div className="rounded-[10px] border border-[rgba(0,88,204,.25)] bg-[#eef6fc] p-3 text-[12.5px] text-gray-700">
                 HTTP APIs are served as named tools only. They do not appear in the map or the
                 ontology; map their responses to object types by hand when you expose them.
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="lg" variant="outline">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  disabled={fetchSpec.busy || !specUrl.trim()}
+                  onClick={() =>
+                    void fetchSpec.run(async () => {
+                      const spec = await actions.fetchSpec({ url: specUrl, baseUrl, authHeader });
+                      setRows((all) => mergeSpec(all, spec.endpoints));
+                      if (spec.withoutAuth) {
+                        toast(`Fetched without the auth header. With it, ${spec.withoutAuth}.`);
+                      }
+                    })
+                  }
+                >
                   Fetch Spec
                 </Button>
-                <Button size="lg" className="ibl-button-primary" render={<Link href="/mcp/new" />}>
+                <Button
+                  size="lg"
+                  className="ibl-button-primary"
+                  disabled={addApi.busy}
+                  onClick={() =>
+                    void addApi.run(async () => {
+                      await actions.addApi({
+                        name: apiName.trim(),
+                        baseUrl,
+                        authHeader,
+                        endpoints: rows.filter((r) => r.on).map((r) => r.ep),
+                      });
+                      router.push("/mcp/new");
+                    })
+                  }
+                >
                   Add &amp; Expose
                 </Button>
               </div>
+              {fetchSpec.error && <p className="text-xs text-red-600">{fetchSpec.error}</p>}
+              {addApi.error && <p className="text-xs text-red-600">{addApi.error}</p>}
             </TabsContent>
 
             <TabsContent value="pre" className="space-y-2">
               <p className="text-xs text-gray-600">
                 Prebuilt toolsets give raw, read-only access per engine. Use one when you want SQL
-                access alongside the ontology tools.
+                access alongside the ontology tools. Ticked toolsets are already selected when you
+                build a server.
               </p>
-              {[
-                "postgres · execute_sql, list_tables",
-                "bigquery · execute_sql, get_table_info",
-                "mysql · execute_sql, list_tables",
-              ].map((p) => (
-                <label
-                  key={p}
-                  className="flex items-center gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm"
-                >
-                  <Checkbox /> <code className="mono">{p}</code>
-                </label>
-              ))}
+              <QueryState query={systemsQ}>
+                {(data) => (
+                  <>
+                    {data.prebuilt.map((p) => (
+                      <label
+                        key={p.toolset}
+                        className="flex items-center gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm"
+                      >
+                        <Checkbox
+                          checked={ticked.includes(p.toolset)}
+                          onCheckedChange={(on) => tick(p.toolset, on)}
+                        />{" "}
+                        <code className="mono">{p.label}</code>
+                      </label>
+                    ))}
+                  </>
+                )}
+              </QueryState>
             </TabsContent>
           </Tabs>
         </Card>

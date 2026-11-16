@@ -1,0 +1,15 @@
+# The image builds from the repo root (COPY . .); pnpm install and next build make what is left out.
+.git
+node_modules
+.next
+.env*
+!.env.example
+.ontology
+frontend
+docs
+coverage
+*.tsbuildinfo
+.claude
+CLAUDE.local.md
+.vercel
+*.pem

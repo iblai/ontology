@@ -12,9 +12,12 @@
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import config from "./config";
-import { readTenants, resolveAppTenant, type TenantEntry } from "./tenant";
+import { currentTenantKey, readCurrentTenant, readTenants, type TenantEntry } from "./tenant";
 
 export const isDemo = () => process.env.NEXT_PUBLIC_DEMO === "1";
+
+/** The ibl.ai community platform; UserProfileDropdown's billing tab compares a free trial's platform to it. */
+const MAIN_PLATFORM_KEY = "main";
 
 export type Session = {
   demo: boolean;
@@ -54,7 +57,7 @@ function tenantLabel(t?: TenantEntry, fallback = "") {
 }
 
 function readSession(): Session {
-  const base = { mainPlatformKey: config.mainTenantKey(), authUrl: config.authUrl() };
+  const base = { mainPlatformKey: MAIN_PLATFORM_KEY, authUrl: config.authUrl() };
   if (isDemo()) {
     const tenants: TenantEntry[] = [
       { key: "university", platform_name: "University", is_admin: true },
@@ -88,9 +91,9 @@ function readSession(): Session {
   } catch {
     /* storage unavailable */
   }
-  const tenantKey = resolveAppTenant();
+  const tenantKey = currentTenantKey();
   const tenants = readTenants();
-  const currentTenant = tenants.find((t) => t.key === tenantKey);
+  const currentTenant = readCurrentTenant() ?? tenants.find((t) => t.key === tenantKey);
   return {
     ...base,
     demo: false,

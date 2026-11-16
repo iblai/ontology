@@ -1,0 +1,99 @@
+# Laid over NVIDIA auto-ontology's docker-compose.yml and auto-ontology.override.yml on a client's
+# server; deploy/install.sh puts all three and a .env in /opt/iblai-ontology. Compose 2.24.4+.
+#   docker compose --env-file /opt/iblai-ontology/.env -f engine/docker-compose.yml \
+#     -f auto-ontology.override.yml -f server.yml up -d
+#
+# Caddy alone listens beyond loopback (80 and 443): /iblai/... is the console's server half on
+# 3000, prefix stripped; everything else is NVIDIA's web app on 3100.
+name: iblai-ontology
+
+x-logging: &logging
+  driver: local # rotates by itself
+
+services:
+  # NVIDIA's services read the one .env outside the source tree, which is a build context.
+  auto-ontology:
+    env_file: !override [/opt/iblai-ontology/.env]
+  ingestion-service:
+    env_file: !override [/opt/iblai-ontology/.env]
+  auto-ontology-migrate:
+    env_file: !override [/opt/iblai-ontology/.env]
+  frontend-migrate:
+    env_file: !override [/opt/iblai-ontology/.env]
+  auto-ontology-frontend:
+    env_file: !override [/opt/iblai-ontology/.env]
+  # Not on a server: `--profile pgadmin` starts it on loopback.
+  pgadmin:
+    profiles: [pgadmin]
+
+  ontology:
+    # The release workflow stamps the version here and in install.sh.
+    image: ghcr.io/iblai/ontology:dev
+    network_mode: host
+    init: true # reaps the Toolbox processes it starts
+    environment:
+      # Said here as well as in the image: Caddy must stay the one way in.
+      HOSTNAME: 127.0.0.1
+      PORT: "3000"
+      ONTOLOGY_SETUP_CODE: ${ONTOLOGY_SETUP_CODE:?missing in .env}
+      ONTOLOGY_DM_URL: ${ONTOLOGY_DM_URL:?missing in .env}
+      AO_URL: http://127.0.0.1:3100
+      # Empty until the installer mints it, once the engine is up.
+      AO_API_KEY: ${AO_API_KEY?missing in .env}
+    volumes:
+      - ontology_data:/data
+    healthcheck:
+      # The image has no curl; setup answers without a sign-in.
+      test:
+        - CMD
+        - node
+        - -e
+        - 'fetch("http://127.0.0.1:3000/api/host/setup").then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    logging: *logging
+
+  # Gets and renews the certificate for ONTOLOGY_HOST, and sends http on to https.
+  proxy:
+    image: caddy:2-alpine
+    network_mode: host
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - certificates:/data
+    depends_on:
+      ontology:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+configs:
+  # Compose interpolates this text: a literal $ is $$. Named matchers keep their order.
+  caddyfile:
+    content: |
+      {
+        admin off # no admin API on the host's loopback
+      }
+
+      ${ONTOLOGY_HOST:?missing in .env} {
+        @server path_regexp ^/iblai/(api/host/.*|[^/]+/[^/]+/mcp)$$
+        handle @server {
+          uri strip_prefix /iblai
+          reverse_proxy 127.0.0.1:3000
+        }
+        @iblai path /iblai /iblai/*
+        handle @iblai {
+          respond 404
+        }
+        handle {
+          reverse_proxy 127.0.0.1:3100
+        }
+      }
+
+volumes:
+  ontology_data:
+  certificates:

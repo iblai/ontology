@@ -27,10 +27,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCounts } from "@/lib/data";
 import { useSession } from "@/lib/iblai/session";
+import type { CountsView } from "@/lib/view/types";
 import { useShell, type AccountTab } from "./shell-context";
 
-type NavItem = { label: string; href: string; icon: LucideIcon; count?: number };
+type NavItem = { label: string; href: string; icon: LucideIcon; count?: keyof CountsView };
 
 // Mirrors iblai/ontology frontend/components/shell/nav-config.ts groups.
 const groups: NavItem[][] = [
@@ -39,16 +41,16 @@ const groups: NavItem[][] = [
     { label: "Map", href: "/map", icon: Waypoints },
   ],
   [
-    { label: "Systems", href: "/systems", icon: Database, count: 4 },
-    { label: "Catalog", href: "/catalog", icon: Blocks, count: 109 },
+    { label: "Systems", href: "/systems", icon: Database, count: "systems" },
+    { label: "Catalog", href: "/catalog", icon: Blocks, count: "catalog" },
     { label: "Compilation", href: "/sync", icon: RefreshCw },
   ],
   [
-    { label: "Ontology", href: "/ontology", icon: Box, count: 14 },
-    { label: "MCP Gateway", href: "/mcp", icon: Server, count: 31 },
-    { label: "Roles", href: "/roles", icon: Shield, count: 5 },
+    { label: "Ontology", href: "/ontology", icon: Box, count: "ontology" },
+    { label: "MCP Gateway", href: "/mcp", icon: Server, count: "gateway" },
+    { label: "Roles", href: "/roles", icon: Shield, count: "roles" },
     { label: "Access", href: "/access", icon: Workflow },
-    { label: "Agents", href: "/agents", icon: Bot, count: 3 },
+    { label: "Agents", href: "/agents", icon: Bot, count: "agents" },
     { label: "Config", href: "/config", icon: FileCog },
   ],
 ];
@@ -132,6 +134,7 @@ export function SidebarContent({
   const pathname = usePathname() ?? "/";
   const { liveAdmin } = useSession();
   const shell = useShell();
+  const counts = useCounts();
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const row = (active: boolean) =>
     cn(
@@ -210,6 +213,7 @@ export function SidebarContent({
             {g.map((item) => {
               const active = isActive(item.href);
               const Icon = item.icon;
+              const n = item.count ? counts[item.count] : null;
               return (
                 <Link
                   key={item.href}
@@ -222,9 +226,7 @@ export function SidebarContent({
                 >
                   <Icon className={icon(active)} />
                   {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-                  {!collapsed && item.count !== undefined && (
-                    <Count n={item.count} active={active} />
-                  )}
+                  {!collapsed && n !== null && <Count n={n} active={active} />}
                 </Link>
               );
             })}

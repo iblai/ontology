@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,11 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, PageHeader, Pill } from "@/components/shell/page-header";
-import { servers } from "@/lib/mock";
+import { QueryState } from "@/components/query-state";
+import { useServers } from "@/lib/data";
 
 const th = "text-[11px] font-semibold tracking-wide text-muted-foreground uppercase";
+const headers = ["Server", "Endpoint", "Toolsets", "Tools", "Agents", "Tool calls · 24h", "Status"];
 
 export default function McpPage() {
+  const servers = useServers();
   return (
     <>
       <PageHeader
@@ -27,59 +32,62 @@ export default function McpPage() {
         }
       />
       <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {[
-                "Server",
-                "Endpoint",
-                "Toolsets",
-                "Tools",
-                "Agents",
-                "Tool calls · 24h",
-                "Status",
-              ].map((h) => (
-                <TableHead key={h} className={th + " px-4"}>
-                  {h}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {servers.map((s) => (
-              <TableRow key={s.slug}>
-                <TableCell className="px-4 font-semibold text-gray-900">
-                  <Link href={`/mcp/${s.slug}`} className="hover:text-[#0058cc]">
-                    {s.slug}
-                  </Link>
-                  {s.revision > 0 && (
-                    <span className="ml-1.5 text-xs font-normal text-gray-500">
-                      rev {s.revision}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="mono px-4">
-                  https://ontology.university.edu/{s.slug}/mcp
-                </TableCell>
-                <TableCell className="px-4 tabular-nums">{s.toolsets}</TableCell>
-                <TableCell className="px-4 tabular-nums">{s.tools}</TableCell>
-                <TableCell className="px-4 tabular-nums">{s.agents}</TableCell>
-                <TableCell className="px-4 tabular-nums">{s.calls24h.toLocaleString()}</TableCell>
-                <TableCell className="px-4">
-                  {s.enabled ? (
-                    <Pill tone="green" dot>
-                      enabled
-                    </Pill>
-                  ) : (
-                    <Pill tone="amber" dot>
-                      draft
-                    </Pill>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <QueryState query={servers} className="px-4">
+          {(rows) => (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {headers.map((h) => (
+                    <TableHead key={h} className={th + " px-4"}>
+                      {h}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={headers.length} className="px-4 text-gray-500">
+                      No servers yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {rows.map((s) => (
+                  <TableRow key={s.slug}>
+                    <TableCell className="px-4 font-semibold text-gray-900">
+                      <Link href={`/mcp/${s.slug}`} className="hover:text-[#0058cc]">
+                        {s.slug}
+                      </Link>
+                      {s.revision > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-gray-500">
+                          rev {s.revision}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="mono px-4">{s.url}</TableCell>
+                    <TableCell className="px-4 tabular-nums">{s.toolsets}</TableCell>
+                    <TableCell className="px-4 tabular-nums">{s.tools}</TableCell>
+                    <TableCell className="px-4 tabular-nums">{s.agents}</TableCell>
+                    <TableCell className="px-4 tabular-nums">
+                      {s.calls24h.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="px-4">
+                      {s.enabled ? (
+                        <Pill tone="green" dot>
+                          enabled
+                        </Pill>
+                      ) : (
+                        <Pill tone="amber" dot>
+                          draft
+                        </Pill>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </QueryState>
       </Card>
     </>
   );

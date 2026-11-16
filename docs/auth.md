@@ -9,11 +9,12 @@ signed in to the OS is signed in here. This is the model, taken from `github.com
 ## 1. Sign-in
 
 1. An unauthenticated visit redirects to the auth app:
-   `https://<auth host>/login?app=custom&redirect-to=<this origin>&tenant=<platform key>`.
-   The auth app is `login.<domain>` (hosted) or whatever `NEXT_PUBLIC_AUTH_URL` points at.
-2. The auth app authenticates the person with the organization's SSO (Entra, Google, Shibboleth,
-   whatever the tenant configured on ibl.ai) and, through ibl.ai's consolidated-token proxy, mints
-   the **app token pair** for that tenant.
+   `https://<auth host>/login?app=custom&redirect-to=<this origin>`. The console pins no platform,
+   so the auth app signs the person in to their own. The auth app is `login.<domain>` (hosted) or
+   whatever `NEXT_PUBLIC_AUTH_URL` points at.
+2. The auth app authenticates the person with the institution's SSO (Entra, Google, Shibboleth,
+   whatever the platform configured on ibl.ai) and, through ibl.ai's consolidated-token proxy, mints
+   the **app token pair** for that platform.
 3. It returns to this origin at `/sso-login` (the OS route; the Vibe starter calls it
    `/sso-login-complete`) carrying the session. The page is the SDK's `SsoLogin` component; it writes
    the session to storage and continues to the saved `redirect-to` path.
@@ -28,13 +29,15 @@ The SDK's per-tab auth storage, mirrored by the app (`lib/auth-storage.ts`):
 | `dm_token`, `dm_token_expires`                           | token for the data-manager service (`…/dm/api/…`, which is where MCP servers, RBAC, api-tokens, org metadata and analytics live) | short-lived                            |
 | `edx_jwt_token`                                          | LMS JWT; **not used by this console** (no LMS calls)                                                                             | —                                      |
 | `userData`, `user_metadata`                              | the signed-in user and their metadata                                                                                            | session                                |
-| `current_tenant`, `tenant`, `tenants`, `visiting_tenant` | active organization, default organization, memberships                                                                           | session                                |
+| `current_tenant`, `tenant`, `tenants`, `visiting_tenant` | the active platform (`current_tenant`, an object; `tenant`, its key), memberships                                                | session                                |
 
 Default is plain `localStorage`. With `NEXT_PUBLIC_IBL_PER_TAB_AUTH=true` the SDK keeps
 `sessionStorage` as the per-tab source of truth and `localStorage` as the most-recent-login seed, so
-two tabs can sit in two organizations. We keep the default.
+two tabs can sit in two platforms. We keep the default.
 
-Tokens never leave the browser except to ibl.ai and to this host's route handlers over TLS.
+Tokens never leave the browser except to ibl.ai and to the console's route handlers over TLS. On
+the hosted console those handlers forward the `dm_token` to the platform's own server, so it reaches
+two places besides ibl.ai: the hosted console, in passing, and that server. Neither stores it.
 
 ## 3. Which header goes to which service
 
@@ -49,12 +52,12 @@ From `features/utils.ts` in the OS:
 
 Two things follow for this console:
 
-- Every ibl.ai call we make (MCP servers, api-tokens, RBAC, org metadata, analytics) is a DM call,
-  so the browser sends `Token <dm_token>` to `https://ext.ibl.ai/dm/api/…`.
-- The scheme is `Token`, not `Bearer`. The DM API answers `Bearer` with `401`. Platform API tokens
-  (the long-lived ones created under **API** / **Tokens**) use a third scheme, `Api-Token`, and are
-  what agents and CLIs present to the gateway. The DM endpoints that manage api-tokens accept only a
-  session `Token`, never an `Api-Token`.
+- Every ibl.ai call the console makes (MCP servers, API keys, RBAC, agents) is a DM call, so the
+  browser sends `Token <dm_token>` to `https://ext.ibl.ai/dm/api/…`.
+- The scheme is `Token`, not `Bearer`. The DM API answers `Bearer` with `401`. Platform API keys
+  (the long-lived ones created under **API** or by the console) use a third scheme, `Api-Token`, and
+  are what agents and CLIs present to the gateway. The DM endpoints that manage API keys accept
+  only a session `Token`, never an `Api-Token`.
 
 ## 4. Expiry, refresh, 401
 
@@ -70,62 +73,84 @@ Two things follow for this console:
   The console is not embedded, so it uses the redirect path.
 - Logout: clear storage, redirect to `<auth>/logout?redirect-to=<origin>&tenant=<key>`.
 
-## 5. Tenant
+## 5. Platform
 
-`current_tenant` selects the organization. Every DM call carries `platform_key=<tenant key>` (query
-or body). The organization switcher in our header is the SDK's tenant switch; switching re-mints
-tokens for the new tenant through the same `/login/complete` path. One ontology per tenant follows
-from this: the ontology host is configured per organization, and the gateway checks that the
-caller's tenant matches the server's.
+`current_tenant` selects the platform; the console keeps no platform of its own. Every DM call
+carries `platform_key=<platform key>` (query or body). The platform menu in our header lists the
+platforms the person belongs to and is the SDK's switch; switching re-mints tokens for the new
+platform through the same `/login/complete` path. Every call to the host carries the same
+platform as `x-ontology-platform: <platform key>`, and every check below is made against the
+platform the call names. One ontology per platform follows from this: the host keeps each
+platform's files apart and gives each platform its own engine ([network.md](network.md)). On the
+hosted console each platform has its own server: the browser keeps its address per platform and
+names it in `x-ontology-server` beside the platform.
 
-## 6. How this host verifies a session
+## 6. How this host checks a caller
 
-Route handlers under `/api/host/*` and the gateway at `/<slug>/mcp` receive either a session token
-or a platform token and verify it with ibl.ai before doing anything:
+The host holds no ibl.ai secret. On every call it asks ibl.ai, with the caller's own credential
+and `iblai-org: <platform>`, what that credential is granted under `/custom/ontology/` on that
+platform, and who it belongs to. ibl.ai refuses unless the credential belongs to that platform.
+The platform is `x-ontology-platform` for the route handlers and the first part of the address for
+the gateway (the part after `/iblai` on a client's server). The answers are kept in memory, keyed
+by a hash of the credential and the platform, and never written to disk: what the credential is
+granted for 60 seconds, who it belongs to and whether they administer the platform for 300
+seconds. Revoking a key or removing a policy on ibl.ai takes effect within a minute; removing an
+administrator within five.
 
-| Presented                                                  | Verification                                                                                                                                                                                                                                                            |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Authorization: Token <dm_token>` (browser, console)       | `GET https://ext.ibl.ai/dm/api/core/platform/users/?platform_key=<tenant>&page_size=1` with the same header; a `200` with the caller as an admin of the tenant is a pass. `/api/core/token/verify/` is used where the deployment exposes it.                            |
-| `Authorization: Api-Token <platform token>` (agents, CLIs) | `GET https://ext.ibl.ai/dm/api/core/platform/api-tokens/<name>?platform_key=<tenant>` via the host's own service token to read the token's policies and groups, after a cheap probe call with the presented token confirms it is live. The policies decide the toolset. |
-| OIDC ID token (Entra, Google)                              | not touched by the gateway; forwarded to the runtime, which verifies issuer, audience, signature and expiry itself.                                                                                                                                                     |
+A server installed from a link (`ONTOLOGY_SETUP_CODE` set) serves one platform, the one its link
+was opened for, and checks that before it asks ibl.ai anything: until it is set up every call but
+the setup route answers `503`, and a call for another platform answers `403`. Setting it up takes the link's code
+and the session of an administrator of the platform (`POST /api/host/setup`); it mints no key.
 
-Verification results are cached in memory for the token's remaining lifetime (minutes), never
-persisted. Revoking a token on ibl.ai takes effect at the next cache miss, at most a few minutes.
+| Presented                            | Accepted by                               | Checked as                                                                                               |
+| ------------------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `Authorization: Token <dm_token>`    | the console's route handlers, the gateway | a session                                                                                                |
+| `Authorization: Api-Token <key>`     | the gateway                               | a platform API key                                                                                       |
+| `Authorization: Bearer <credential>` | the gateway                               | tried as a session, then as an API key                                                                   |
+| an OIDC ID token (Entra, Google, …)  | the gateway, beside one of the above      | not checked by the gateway; passed to the runtime, which verifies issuer, audience, signature and expiry |
 
-The host holds one secret of its own for this: a platform **service token** issued on ibl.ai with
-the policy that allows reading api-tokens and RBAC for the organization, stored in the host's
-environment (`IBLAI_API_KEY`, server-side only, never inlined into the client bundle, as the Vibe
-starter's `config.apiKey()` already arranges).
+- **Route handlers** (`/api/host/*`) take a session `Token` only, with `x-ontology-platform`, and
+  only from an admin of that platform or a holder of the console grant there
+  (`/custom/ontology/console/`). A session of another platform is refused.
+- **The gateway** (`/<platform>/<slug>/mcp`, under `/iblai` on a client's server) answers `401` without a usable credential and `403`
+  when the credential reaches no toolset. What a grant reaches is in
+  [guides/permissions.md](guides/permissions.md).
+- When ibl.ai does not answer (a 5xx or a 429), the host answers `503` and keeps nothing. Any other
+  refusal from ibl.ai is passed on in ibl.ai's own words.
 
 ## 7. As implemented in this console
 
-Sign-in is wired with the iblai/vibe starter's provider chain (`/iblai-vibe-auth`), single-organization:
+Sign-in is wired with the iblai/vibe starter's provider chain (`/iblai-vibe-auth`), on the
+platform of the sign-in:
 
-| File                                                         | Role                                                                                                                                                                                 |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `providers/iblai-providers.tsx`                              | `initializeDataLayer` → Redux store → `AuthProvider` → `TenantProvider`. Redirects to the auth app when there is no valid session; persists re-minted tokens on organization switch. |
-| `app/(auth)/sso-login-complete/page.tsx`                     | The SDK `SsoLogin` callback. Lives outside the providers so it can store the tokens before `AuthProvider` checks them.                                                               |
-| `lib/iblai/config.ts`                                        | Service URLs. Defaults to the hosted platform; `NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_AUTH_URL` point it elsewhere (e.g. `https://ext.ibl.ai`).                                   |
-| `lib/iblai/auth-utils.ts`, `tenant.ts`, `storage-service.ts` | Redirect to the auth app, logout, tenant resolution (`app_tenant` → `NEXT_PUBLIC_MAIN_TENANT_KEY` → `tenant`), the storage adapter the SDK expects.                                  |
-| `lib/iblai/session.tsx`                                      | Reads the stored session (user, email, tenants, `is_admin`) for the shell. Holds the User/Admin switch state. Stores nothing.                                                        |
-| `store/iblai-store.ts`                                       | The SDK's RTK Query slices.                                                                                                                                                          |
+| File                                                         | Role                                                                                                                                                                             |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `providers/iblai-providers.tsx`                              | `initializeDataLayer` → Redux store → `AuthProvider` → `TenantProvider`. Redirects to the auth app when there is no valid session; persists re-minted tokens on platform switch. |
+| `app/(auth)/sso-login-complete/page.tsx`                     | The SDK `SsoLogin` callback. Lives outside the providers so it can store the tokens before `AuthProvider` checks them.                                                           |
+| `lib/iblai/config.ts`                                        | Service URLs. Defaults to the hosted platform; `NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_AUTH_URL` point it elsewhere (e.g. `https://ext.ibl.ai`).                               |
+| `lib/iblai/auth-utils.ts`, `tenant.ts`, `storage-service.ts` | Redirect to the auth app, logout, the platform of the sign-in (`current_tenant` / `tenant`), the storage adapter the SDK expects.                                                |
+| `lib/iblai/session.tsx`                                      | Reads the stored session (user, email, tenants, `is_admin`) for the shell. Holds the User/Admin switch state. Stores nothing.                                                    |
+| `store/iblai-store.ts`                                       | The SDK's RTK Query slices.                                                                                                                                                      |
 
 Configuration (`.env.local`, not committed; template in `.env.example`):
 
 ```bash
-NEXT_PUBLIC_MAIN_TENANT_KEY=highereducation   # your ibl.ai organization key
 # NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai  # closed deployment
 ```
 
-Verified on 2026-11-16: an unauthenticated visit to `http://localhost:3000` redirects to
-`https://login.iblai.app/login?app=custom&redirect-to=http://localhost:3000&tenant=highereducation`.
-After sign-in the auth app returns to `/sso-login-complete`. **Every origin the console runs on
-(`http://localhost:3000`, the deployed hostname) must be on the organization's allowed redirect
-origins on ibl.ai**, or the auth app will not return to it.
+No setting names the platform: it is the one the person signs in to.
+
+Verified on 2026-11-16, while the platform was still set in the environment: an unauthenticated
+visit to `http://localhost:3000` redirected to
+`https://login.iblai.app/login?app=custom&redirect-to=http://localhost:3000&tenant=<platform key>`.
+Sign-in without a platform has not been run yet. After sign-in the auth app returns to
+`/sso-login-complete`. **Every origin the console's pages are served from (`http://localhost:3000`,
+the hosted console's, a single host's) must be on the platform's allowed redirect origins on ibl.ai**,
+or the auth app will not return to it. A client's server serves no pages and is not one of them.
 
 Access rules in the shell:
 
-- Signed in but not an admin of the organization → an "Administrators only" page. The console
+- Signed in but not an admin of the platform → an "Administrators only" page. The console
   manages data sources and servers; members have nothing to do here.
 - Admins get the OS User/Admin switch. In User mode the admin items in the sidebar footer
   (Invites, Management, API, Secrets, Advanced) and the Billing icon are hidden, as in the OS.

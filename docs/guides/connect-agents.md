@@ -1,33 +1,42 @@
 # Guide: connecting agents and clients
 
-Every server has one endpoint, `https://<host>/<slug>/mcp`, speaking MCP over streamable HTTP.
-Anything that speaks MCP can use it, provided it can reach the host (VPN or ibl.ai egress) and
-presents a credential the server accepts ([permissions.md](permissions.md)).
+Every server has one endpoint on the platform's ontology server,
+`https://<host>/iblai/<platform>/<slug>/mcp`, speaking MCP over streamable HTTP. When the console
+and the server run as one host the address has no `/iblai`: `<console origin>/<platform>/<slug>/mcp`.
+The examples below use the host `ontology.university.edu`, the platform `acme` and the server
+`institution`. Anything that speaks MCP can use it, provided it can reach the host and presents a
+credential of that platform that the server accepts ([permissions.md](permissions.md)).
 
 ![Server · Connect](../screenshots/07-server-connect.png)
 
 ## ibl.ai OS agents
 
-Deploying a server registers it on ibl.ai as an MCP server for your organization
-(`name`, `url`, `transport: streamable-http`, `auth_type`, `auth_scope`). From there:
+Deploying a server writes its config and starts it on the platform's server. It registers nothing
+on ibl.ai.
+An agent gets the server when you attach it:
 
-1. Open the server in the console, **Connect → ibl.ai agent → Attach**, or in os.ibl.ai open the
-   agent's **Tools / MCP connectors** and enable the server.
-2. Choose the **sign-in scope** for that agent:
-   - `platform` or `mentor`: the console issues a platform token with the right policy and stores it
-     in the agent's MCP server connection on ibl.ai. Nothing to do in chat.
-   - `user`: each person authenticates once in chat; ibl.ai keeps that grant and sends it on every
-     call. Pair with an OIDC auth service on the server when rows must be bound to the person.
+1. Open the server in the console and press **Attach** under **Connect**, or press **Attach a
+   Server to an Agent** on **Agents**.
+2. Pick the agent and the toolsets it may use. The console then, with your ibl.ai session:
+   - makes sure each toolset has its role and its `Ontology: <toolset>` policy,
+   - creates an API key limited to those policies,
+   - registers the server on ibl.ai for that agent alone, with the key as `Api-Token`,
+   - turns on the agent's MCP tool with that server.
+
+   If a step fails, the steps before it are undone and the message says what was undone.
+
 3. Verify from the agent: ask "what tools do you have from institution?" and then a real question.
-   The call appears under the server's **Activity** tab within a minute.
+   The call appears under the server's **Activity** tab.
 
-The agent only ever talks to ibl.ai; ibl.ai talks to your host. Allow ibl.ai's egress addresses
-inbound on 443 ([network.md](../network.md)).
+The agent only ever talks to ibl.ai; ibl.ai calls `https://<host>/iblai/<platform>/<slug>/mcp` on
+your server, which must be reachable on 443 from ibl.ai's egress ([network.md](../network.md)).
 
 ## Claude Desktop and Claude Code
 
-Both read a `mcpServers` map. The person must be on the VPN and hold a platform token issued to
-them on ibl.ai (**MCP Gateway → server → Tokens & Origins → Issue Token**, or **API** in the OS).
+Both read a `mcpServers` map. The person must reach the host (on the VPN, if it sits behind one)
+and hold an API key that reaches the
+server's toolsets: **MCP Gateway → New MCP Server** (or **Edit Server**) **→ Authentication → Issue
+Token** creates one limited to the ticked toolsets and shows it once.
 
 Claude Desktop (`claude_desktop_config.json`):
 
@@ -35,7 +44,7 @@ Claude Desktop (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "institution": {
-      "url": "https://ontology.university.edu/institution/mcp",
+      "url": "https://ontology.university.edu/iblai/acme/institution/mcp",
       "headers": { "Authorization": "Api-Token <token>" }
     }
   }
@@ -45,12 +54,12 @@ Claude Desktop (`claude_desktop_config.json`):
 Claude Code:
 
 ```bash
-claude mcp add --transport http institution https://ontology.university.edu/institution/mcp \
+claude mcp add --transport http institution https://ontology.university.edu/iblai/acme/institution/mcp \
   --header "Authorization: Api-Token <token>"
 ```
 
-With an Entra auth service on the server, omit the header and let the client run the OAuth flow the
-runtime advertises; the runtime verifies the resulting token itself.
+With an Entra auth service on the server, the client also sends the person's ID token in the header
+the runtime expects (`entra_token` for a service named `entra`); the runtime verifies it itself.
 
 ## Codex CLI
 
@@ -58,14 +67,13 @@ runtime advertises; the runtime verifies the resulting token itself.
 
 ```toml
 [mcp_servers.institution]
-url = "https://ontology.university.edu/institution/mcp"
+url = "https://ontology.university.edu/iblai/acme/institution/mcp"
 http_headers = { Authorization = "Api-Token <token>" }
 ```
 
 Keep the token out of the file if you can: put it in an environment variable and reference it the
 way your Codex version supports (`bearer_token_env_var` on recent releases, which sends
-`Authorization: Bearer`; in that case add `Bearer` to the accepted schemes on the server, or use
-`http_headers` as above).
+`Authorization: Bearer`; the gateway accepts it).
 
 ## Cursor, Windsurf, other editors
 
@@ -79,7 +87,7 @@ stdio can bridge with `mcp-remote`:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://ontology.university.edu/institution/mcp",
+        "https://ontology.university.edu/iblai/acme/institution/mcp",
         "--header",
         "Authorization: Api-Token <token>"
       ]
@@ -96,7 +104,7 @@ Python, official MCP SDK:
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-URL = "https://ontology.university.edu/institution/mcp"
+URL = "https://ontology.university.edu/iblai/acme/institution/mcp"
 AUTH = {"Authorization": "Api-Token " + os.environ["ONTOLOGY_TOKEN"]}
 
 async with streamablehttp_client(URL, headers=AUTH) as (read, write, _):
@@ -109,7 +117,7 @@ async with streamablehttp_client(URL, headers=AUTH) as (read, write, _):
 Smoke test with cURL:
 
 ```bash
-curl -sS -X POST https://ontology.university.edu/institution/mcp \
+curl -sS -X POST https://ontology.university.edu/iblai/acme/institution/mcp \
   -H "Authorization: Api-Token $ONTOLOGY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -123,7 +131,7 @@ at the token.
 
 ## What a caller sees
 
-- `tools/list` returns only the tools in the toolsets the caller's policies map to. Two people with
+- `tools/list` returns only the tools in the toolsets the caller's grants reach. Two people with
   different policies see different lists from the same URL.
 - Tool descriptions carry the certified definition of the term ("Student = a person admitted to and
   enrolled in ≥1 program"), which is what makes agents pick the right tool.
@@ -132,11 +140,19 @@ at the token.
 
 ## Troubleshooting
 
-| Response                                 | Meaning                                      | Fix                                       |
-| ---------------------------------------- | -------------------------------------------- | ----------------------------------------- |
-| `403 origin`                             | browser origin not allowed                   | add it under Allowed Origins and redeploy |
-| `401`                                    | token missing, expired or revoked            | issue a new platform token on ibl.ai      |
-| `403 no policy`                          | token valid but holds no `ontology:*` policy | attach a policy to the token or its group |
-| `404 tool not in toolset`                | the tool exists but not for this policy      | grant the policy that includes it         |
-| timeout from an ibl.ai agent             | ibl.ai egress not allowed inbound            | firewall rule for ibl.ai egress on 443    |
-| works with cURL, not from Claude Desktop | client not on the VPN                        | connect to the VPN first                  |
+| Response                                 | Meaning                                             | Fix                                                          |
+| ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------ |
+| `403`, origin not allowed                | browser origin not on the server's list             | add it under Allowed Origins and deploy again                |
+| `403`, host not allowed                  | the address's host name is not on the server's list | add it, or `*.name`, under Allowed Hosts and deploy again    |
+| refused over plain HTTP                  | the credential did not arrive over HTTPS            | call over HTTPS; the proxy must send `X-Forwarded-Proto`     |
+| `401`                                    | credential missing, expired or revoked              | issue a new key                                              |
+| ibl.ai's refusal, in its own words       | the credential belongs to another platform          | use a key issued on the platform in the address              |
+| `403`, no toolset                        | credential valid but reaches no toolset             | add the toolset's `Ontology:` policy to the key or its group |
+| JSON-RPC error `-32003`                  | the tool is outside the toolsets the caller reaches | grant the policy of the toolset that holds it                |
+| `429`                                    | over 120 requests or 30 tool calls a minute         | slow down; the limit is per caller                           |
+| `503`                                    | ibl.ai did not answer the grant check               | retry; nothing was kept                                      |
+| `503`, not set up yet                    | the server's installer link has not been opened     | an administrator of the platform opens the link              |
+| `403`, serves another platform           | the address names a platform this server is not for | use the address of that platform's own server                |
+| `404`, the console's pages               | the address is the hosted console's, not the server | use `https://<host>/iblai/<platform>/<slug>/mcp`             |
+| timeout from an ibl.ai agent             | ibl.ai egress not allowed inbound                   | firewall rule for ibl.ai egress on 443                       |
+| works with cURL, not from Claude Desktop | client not on the VPN                               | connect to the VPN first                                     |

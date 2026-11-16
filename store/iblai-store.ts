@@ -27,6 +27,7 @@ import {
   subscriptionReducer,
   topBannerReducer,
 } from "@iblai/iblai-js/web-utils";
+import { hostApi } from "@/lib/host-api";
 
 export const iblaiStore = configureStore({
   reducer: {
@@ -38,6 +39,8 @@ export const iblaiStore = configureStore({
     // MCP connectors (the agent MCP tab and the chat composer's MCP panel):
     // a separate slice that mentorReducer does not include.
     [mcpApiSlice.reducerPath]: mcpApiSlice.reducer,
+    // The console's host and the engine behind it.
+    [hostApi.reducerPath]: hostApi.reducer,
 
     // The SDK <Chat> selectors hard-code these slice keys (`state.chat`,
     // `state.rbac`, …) — do not rename them.
@@ -53,6 +56,7 @@ export const iblaiStore = configureStore({
     getDefaultMiddleware({ serializableCheck: false })
       .concat(coreApiSlice.middleware)
       .concat(mcpApiSlice.middleware)
+      .concat(hostApi.middleware)
       .concat(...mentorMiddleware),
 });
 

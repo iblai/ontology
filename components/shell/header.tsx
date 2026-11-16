@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { handleLogout, redirectToAuthSpa } from "@/lib/iblai/auth-utils";
+import { handleLogout, switchPlatform } from "@/lib/iblai/auth-utils";
 import { tenantLabel, useSession } from "@/lib/iblai/session";
 import { cn } from "@/lib/utils";
 import { useShell } from "./shell-context";
@@ -51,8 +51,7 @@ function OrgSwitcher() {
       );
       return;
     }
-    localStorage.setItem("app_tenant", key);
-    redirectToAuthSpa(undefined, key, false, true);
+    void switchPlatform(key);
   };
   return (
     <DropdownMenu>

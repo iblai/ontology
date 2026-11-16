@@ -1,7 +1,17 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, Pill, Stat, Tag, type Tone } from "@/components/shell/page-header";
-import { activity, agents, servers, systems, tenant, terms, toolsets } from "@/lib/mock";
+import { Card, Pill, Stat, Tag } from "@/components/shell/page-header";
+import {
+  useActivity,
+  useAgents,
+  useOntology,
+  useServers,
+  useSystems,
+  useToolsets,
+} from "@/lib/data";
+import { useSession } from "@/lib/iblai/session";
 
 const flow = [
   ["Connect", "databases · APIs"],
@@ -12,16 +22,31 @@ const flow = [
 ];
 
 export default function DashboardPage() {
-  const certified = terms.filter((t) => t.certified).length;
-  const tools = toolsets.filter((t) => t.defaultOn).reduce((n, t) => n + t.tools.length, 0);
-  const calls = servers.reduce((n, s) => n + s.calls24h, 0);
-  const live = servers.filter((s) => s.enabled);
+  const { tenantName } = useSession();
+  const systems = useSystems();
+  const ontology = useOntology();
+  const toolsets = useToolsets();
+  const servers = useServers();
+  const agents = useAgents();
+  const activity = useActivity();
+
+  const types = ontology.data?.objectTypes;
+  const certified = types?.filter((t) => t.status === "certified").length;
+  const tools = toolsets.data?.filter((t) => t.defaultOn).reduce((n, t) => n + t.tools.length, 0);
+  const calls = servers.data?.reduce((n, s) => n + s.calls24h, 0);
+  const live = servers.data?.filter((s) => s.enabled);
+
+  // One line per distinct failure; its Retry refetches every read that failed with it.
+  const failures = new Map<string, (() => void)[]>();
+  for (const q of [systems, ontology, toolsets, servers, agents, activity]) {
+    if (q.error) failures.set(q.error, [...(failures.get(q.error) ?? []), q.refetch]);
+  }
 
   return (
     <>
       <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div>
-          <div className="eyebrow">{tenant.name} · Ontology</div>
+          <div className="eyebrow">{tenantName} · Ontology</div>
           <h1 className="mt-1.5 text-[26px] leading-[1.15] font-semibold tracking-tight text-balance text-gray-900">
             One ontology of the institution.
             <br />
@@ -58,17 +83,33 @@ export default function DashboardPage() {
         </div>
         <Card soft className="flex flex-col gap-3">
           <div className="eyebrow">Right now</div>
+          {[...failures].map(([message, retries]) => (
+            <div key={message} className="text-[12.5px] break-words text-gray-500">
+              {message}{" "}
+              <button
+                type="button"
+                className="underline hover:text-gray-700"
+                onClick={() => retries.forEach((r) => r())}
+              >
+                Retry
+              </button>
+            </div>
+          ))}
           <div className="grid grid-cols-2 gap-3">
-            <Stat value={systems.length} label="systems connected" />
-            <Stat value={`${certified} / ${terms.length}`} label="object types certified" />
-            <Stat value={tools} label="tools published" />
-            <Stat value={calls.toLocaleString()} label="agent tool calls · 24h" />
+            <Stat value={systems.data?.systems.length ?? "—"} label="systems connected" />
+            <Stat
+              value={types ? `${certified} / ${types.length}` : "—"}
+              label="object types certified"
+            />
+            <Stat value={tools ?? "—"} label="tools published" />
+            <Stat value={calls?.toLocaleString() ?? "—"} label="agent tool calls · 24h" />
           </div>
           <div className="eyebrow mt-1">Activity</div>
           <div className="grid gap-2 text-[13px]">
-            {activity.map((a) => (
-              <div key={a.text} className="flex flex-wrap items-baseline gap-2">
-                <Tag tone={a.tone as Tone}>{a.tag}</Tag>
+            {activity.data?.length === 0 && <span className="text-gray-400">Nothing yet.</span>}
+            {activity.data?.map((a, i) => (
+              <div key={`${i}-${a.text}`} className="flex flex-wrap items-baseline gap-2">
+                <Tag tone={a.tone}>{a.tag}</Tag>
                 <span className="text-gray-700">{a.text}</span>
                 <span className="text-gray-400">· {a.when}</span>
               </div>
@@ -84,7 +125,7 @@ export default function DashboardPage() {
         </Button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {servers.map((s) => (
+        {servers.data?.map((s) => (
           <Link
             key={s.slug}
             href={`/mcp/${s.slug}`}
@@ -102,7 +143,9 @@ export default function DashboardPage() {
                 </Pill>
               )}
             </div>
-            <div className="mono mt-1 truncate text-[12px] text-gray-600">/{s.slug}/mcp</div>
+            <div className="mono mt-1 truncate text-[12px] text-gray-600">
+              {new URL(s.url).pathname}
+            </div>
             <div className="mt-3.5 grid grid-cols-3 gap-2">
               {[
                 [s.toolsets, "toolsets"],
@@ -121,9 +164,9 @@ export default function DashboardPage() {
           href="/agents"
           className="rounded-[10px] border border-dashed border-gray-300 p-4 text-sm text-gray-600 hover:border-gray-400"
         >
-          <b className="block text-gray-900">{agents.length} agents attached</b>
+          <b className="block text-gray-900">{agents.data?.length ?? "—"} agents attached</b>
           <span className="text-[12.5px]">
-            across {live.length} enabled servers · manage in Agents
+            across {live?.length ?? "—"} enabled servers · manage in Agents
           </span>
         </Link>
       </div>

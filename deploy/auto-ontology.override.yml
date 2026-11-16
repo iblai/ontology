@@ -1,0 +1,81 @@
+# Override for NVIDIA auto-ontology's docker-compose.yml. `!reset` needs Docker Compose 2.24.4+.
+# From the auto-ontology checkout:
+#   docker compose -f docker-compose.yml -f <console>/deploy/auto-ontology.override.yml up -d --build
+#
+# Every service runs on the host's network (a Linux host), so the engine reaches what runs on this
+# machine at 127.0.0.1, as the console's runtime does: one URL connects a local database for both.
+# Each service listens on 127.0.0.1 only. NVIDIA's API trusts its caller's identity header, so
+# ports 3001 and 3002 must not be reachable from another machine.
+# The web app is on 3100 (the console uses 3000).
+# This stack is the host's own engine (AO_URL); another platform's stack needs other ports.
+
+# The service names, which the host's network does not resolve.
+x-names: &names
+  - "postgres:127.0.0.1"
+  - "auto-ontology:127.0.0.1"
+  - "ingestion-service:127.0.0.1"
+
+# NVIDIA's own module, started with uvicorn.run's host swapped: it hard-codes 0.0.0.0.
+x-loopback: &loopback
+  - /usr/bin/tini
+  - --
+  - python
+  - -c
+  - |
+    import runpy, sys, uvicorn
+    run = uvicorn.run
+    uvicorn.run = lambda app, **options: run(app, **{**options, "host": "127.0.0.1"})
+    runpy.run_module(sys.argv[1], run_name="__main__")
+
+# Where the services find the database on the host's network.
+x-database: &database
+  POSTGRES_HOST: 127.0.0.1
+  POSTGRES_PORT: "${POSTGRES_PORT}"
+
+services:
+  postgres:
+    network_mode: host
+    ports: !reset []
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=${POSTGRES_PORT}"]
+    environment:
+      PGPORT: "${POSTGRES_PORT}" # for the healthcheck's pg_isready
+  pgadmin:
+    network_mode: host
+    ports: !reset []
+    extra_hosts: *names
+    environment:
+      PGADMIN_LISTEN_ADDRESS: 127.0.0.1
+      PGADMIN_LISTEN_PORT: "5050"
+  auto-ontology:
+    network_mode: host
+    ports: !reset []
+    extra_hosts: *names
+    entrypoint: *loopback
+    command: ["auto_ontology.server"]
+    environment:
+      <<: *database
+      INGESTION_SERVICE_URL: http://127.0.0.1:3002
+  ingestion-service:
+    network_mode: host
+    ports: !reset []
+    extra_hosts: *names
+    entrypoint: *loopback
+    command: ["auto_ontology.ingestion_service"]
+    environment: *database
+  auto-ontology-migrate:
+    network_mode: host
+    extra_hosts: *names
+    environment: *database
+  frontend-migrate:
+    network_mode: host
+    extra_hosts: *names
+    environment: *database
+  auto-ontology-frontend:
+    network_mode: host
+    ports: !reset []
+    extra_hosts: *names
+    environment:
+      <<: *database
+      PYTHON_API_URL: http://127.0.0.1:3001
+      PORT: "3100"
+      HOSTNAME: 127.0.0.1

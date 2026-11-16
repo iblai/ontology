@@ -21,7 +21,7 @@ const shots = [
     name: "07b-server-playground",
     path: "/mcp/institution",
     click: 'role=tab[name="Playground"]',
-    then: 'role=button[name="Run"]',
+    andThen: 'role=button[name="Run"]',
     wait: 1500,
   },
   { name: "07c-server-activity", path: "/mcp/institution", click: 'role=tab[name="Activity"]' },
@@ -84,8 +84,8 @@ for (const s of shots) {
     await page.locator(s.click).first().click();
     await page.waitForTimeout(400);
   }
-  if (s.then) {
-    await page.locator(s.then).first().click();
+  if (s.andThen) {
+    await page.locator(s.andThen).first().click();
     await page.waitForTimeout(s.wait ?? 1200);
   }
   await page.evaluate(() => document.fonts.ready);

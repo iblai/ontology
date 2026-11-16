@@ -1,85 +1,37 @@
 /**
- * Tenant resolution for ibl.ai apps.
- *
- * Priority:
- *   1. app_tenant localStorage — highest priority (set on tenant switch)
- *   2. NEXT_PUBLIC_MAIN_TENANT_KEY env var — default when app_tenant is empty
- *   3. tenant localStorage — fallback (set by SDK TenantProvider)
- *
- * When app_tenant is empty, it is initialized from the env var so that
- * subsequent reads are fast. When the user switches tenant, app_tenant
- * is updated to the new tenant key.
+ * The platform the console works in: the one the sign-in is for, as the SDK keeps it in
+ * `current_tenant` (an object) and `tenant` (its key). The console pins no platform and keeps
+ * no copy of its own.
  */
 
-// Relative import (not @/): vitest resolves no alias for lib files.
-import config from "./config";
+export type TenantEntry = {
+  key: string;
+  is_admin?: boolean;
+  org?: string;
+  platform_name?: string;
+  [k: string]: unknown;
+};
 
-const PLACEHOLDER_PLATFORMS = new Set([
-  "your-main-platform",
-  "your-platform",
-  "your-tenant",
-  "your-tenant-key",
-  "test-tenant",
-  "main",
-  "",
-]);
+/** The SDK's record of the platform this session is in, or null when it holds none yet. */
+export function readCurrentTenant(): TenantEntry | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem("current_tenant") ?? "null");
+    const key = (parsed as { key?: unknown } | null)?.key;
+    return typeof key === "string" && key ? (parsed as TenantEntry) : null;
+  } catch {
+    return null; // an older app's bare key
+  }
+}
 
-/**
- * Resolve the current tenant key.
- *
- * Checks app_tenant first (persists across tenant switches), falls back
- * to the env var, then to the SDK's tenant value.
- */
-export function resolveAppTenant(): string {
+/** The key of the platform this session is signed in to; "" when signed out. */
+export function currentTenantKey(): string {
   if (typeof window === "undefined") return "";
-
-  // 1. app_tenant (highest priority — set by tenant switch or previous resolve)
-  const appTenant = localStorage.getItem("app_tenant");
-  if (appTenant) return appTenant;
-
-  // 2. NEXT_PUBLIC_MAIN_TENANT_KEY (default — initialize app_tenant from it)
-  const envTenant = config.mainTenantKey();
-  if (envTenant && !PLACEHOLDER_PLATFORMS.has(envTenant)) {
-    localStorage.setItem("app_tenant", envTenant);
-    return envTenant;
-  }
-
-  // 3. tenant (set by SDK TenantProvider)
-  const sdkTenant = localStorage.getItem("tenant");
-  if (sdkTenant) {
-    localStorage.setItem("app_tenant", sdkTenant);
-    return sdkTenant;
-  }
-
-  return "";
+  // A sign-in that just landed has written `tenant` and not yet the record.
+  return readCurrentTenant()?.key ?? localStorage.getItem("tenant") ?? "";
 }
 
-/**
- * Check if the SDK's current tenant matches the app's resolved tenant.
- *
- * If they differ, redirect to the auth SPA to re-login for the correct
- * tenant. Returns `true` if a redirect was triggered (caller should stop
- * rendering).
- */
-export function checkTenantMismatch(): boolean {
-  if (typeof window === "undefined") return false;
-
-  const appTenant = resolveAppTenant();
-  const sdkTenant = localStorage.getItem("tenant") ?? "";
-
-  if (appTenant && sdkTenant && sdkTenant !== appTenant) {
-    // Use dynamic import to avoid hard dependency on auth-utils from tenant module.
-    import("./auth-utils").then(({ redirectToAuthSpa }) => {
-      redirectToAuthSpa(undefined, appTenant, false, false);
-    });
-    return true;
-  }
-  return false;
-}
-
-export type TenantEntry = { key: string; is_admin?: boolean; [k: string]: unknown };
-
-/** The orgs the sign-in handed the browser (`tenants`), or [] when signed out. */
+/** The platforms the sign-in handed the browser (`tenants`), or [] when signed out. */
 export function readTenants(): TenantEntry[] {
   if (typeof window === "undefined") return [];
   try {
@@ -90,12 +42,8 @@ export function readTenants(): TenantEntry[] {
   }
 }
 
-/**
- * Whether the signed-in user is an admin of the app's org, read from the
- * `tenants` list SsoLogin / TenantProvider persist. Deliberately NOT the SDK's
- * `useIsAdmin()`: that answers for the SDK's *current* tenant, which can
- * differ from the org this app is pinned to.
- */
+/** Whether the signed-in user is an admin of the platform this session is in. */
 export function isTenantAdmin(): boolean {
-  return !!readTenants().find((t) => t.key === resolveAppTenant())?.is_admin;
+  const key = currentTenantKey();
+  return !!(readCurrentTenant() ?? readTenants().find((t) => t.key === key))?.is_admin;
 }

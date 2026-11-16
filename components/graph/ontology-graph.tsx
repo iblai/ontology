@@ -1,26 +1,22 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { SOURCE_COLORS, foreignKeys, tables, termLinks, terms, type SourceKey } from "@/lib/mock";
+import type { GraphView } from "@/lib/view/types";
 import { cn } from "@/lib/utils";
 
 export type GraphNode = {
   id: string;
+  name: string;
   kind: "t" | "s";
-  src: SourceKey;
+  src: string;
   x: number;
   y: number;
   vx: number;
   vy: number;
   r: number;
   show: boolean;
-  rows?: number;
-  cols?: string[];
-  maps?: string[];
-  desc?: string;
-  syn?: string[];
 };
-type Edge = { a: GraphNode; b: GraphNode; kind: "fk" | "map" | "tl"; show: boolean };
+type Edge = { key: string; a: GraphNode; b: GraphNode; kind: "fk" | "map" | "tl"; show: boolean };
 export type Layer = "both" | "data" | "sem";
 
 export type GraphHandle = {
@@ -29,70 +25,95 @@ export type GraphHandle = {
   counts: () => { t: number; s: number; e: number };
 };
 
-const centers: Record<SourceKey, [number, number]> = {
-  sis: [0.28, 0.5],
-  lms: [0.72, 0.3],
-  crm: [0.72, 0.72],
-  fin: [0.42, 0.84],
+type Graph = {
+  nodes: GraphNode[];
+  edges: Edge[];
+  sources: GraphView["sources"];
+  centers: Record<string, [number, number]>;
 };
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function buildGraph() {
-  const nodes: GraphNode[] = [];
-  const byId: Record<string, GraphNode> = {};
-  for (const t of tables) {
-    const c = centers[t.src];
-    const n: GraphNode = {
-      id: t.id,
-      kind: "t",
-      src: t.src,
-      rows: t.rows,
-      cols: t.cols,
-      x: c[0] * 800 + (Math.random() - 0.5) * 160,
-      y: c[1] * 600 + (Math.random() - 0.5) * 120,
-      vx: 0,
-      vy: 0,
-      r: 9,
-      show: false,
-    };
-    nodes.push(n);
-    byId[t.id] = n;
+// The first four clusters sit where the mocked map put sis, lms, crm and finance.
+const SLOTS: [number, number][] = [
+  [0.28, 0.5],
+  [0.72, 0.3],
+  [0.72, 0.72],
+  [0.42, 0.84],
+];
+const slot = (i: number): [number, number] =>
+  SLOTS[i] ?? [0.5 + 0.3 * Math.cos(i * 2.4), 0.5 + 0.3 * Math.sin(i * 2.4)];
+const MIDDLE: [number, number] = [0.5, 0.5];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// The cluster glow appends an alpha byte, which only a six-digit hex colour takes.
+const hex6 = (c: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#64748b");
+
+/** Brings the graph in line with `data`: new nodes are placed, placed nodes keep their place. */
+function merge(g: Graph, data: GraphView, W: number, H: number) {
+  g.sources = data.sources;
+  g.centers = Object.fromEntries(data.sources.map((s, i) => [s.key, slot(i)]));
+  const old = new Map(g.nodes.map((n) => [`${n.kind}:${n.id}`, n]));
+  const byId = new Map<string, GraphNode>();
+  const place = (
+    id: string,
+    name: string,
+    kind: GraphNode["kind"],
+    src: string,
+    near?: GraphNode,
+  ) => {
+    const key = `${kind}:${id}`;
+    let n = old.get(key);
+    if (n) {
+      n.name = name;
+      n.src = src;
+    } else {
+      const c = g.centers[src] ?? MIDDLE;
+      n = {
+        id,
+        name,
+        kind,
+        src,
+        x: near ? near.x + (Math.random() - 0.5) * 60 : c[0] * W + (Math.random() - 0.5) * 160,
+        y: near ? near.y + (Math.random() - 0.5) * 60 : c[1] * H + (Math.random() - 0.5) * 120,
+        vx: 0,
+        vy: 0,
+        r: kind === "t" ? 9 : 13,
+        show: false,
+      };
+    }
+    byId.set(key, n);
+  };
+  for (const t of data.tables) place(t.id, t.name, "t", t.src);
+  for (const t of data.terms) {
+    const first = t.maps.map((m) => byId.get(`t:${m}`)).find((n) => n !== undefined);
+    place(t.id, t.name, "s", first?.src ?? "", first);
   }
-  for (const t of terms) {
-    const first = byId[t.maps[0]];
-    const n: GraphNode = {
-      id: t.id,
-      kind: "s",
-      src: first.src,
-      maps: t.maps,
-      desc: t.desc,
-      syn: t.syn,
-      x: first.x + (Math.random() - 0.5) * 60,
-      y: first.y + (Math.random() - 0.5) * 60,
-      vx: 0,
-      vy: 0,
-      r: 13,
-      show: false,
-    };
-    nodes.push(n);
-    byId[t.id] = n;
-  }
+  g.nodes = [...byId.values()];
+
+  const oldEdges = new Map(g.edges.map((e) => [e.key, e]));
   const edges: Edge[] = [];
-  for (const [a, b] of foreignKeys) edges.push({ a: byId[a], b: byId[b], kind: "fk", show: false });
-  for (const t of terms)
-    for (const m of t.maps) edges.push({ a: byId[t.id], b: byId[m], kind: "map", show: false });
-  for (const [a, b] of termLinks) edges.push({ a: byId[a], b: byId[b], kind: "tl", show: false });
-  return { nodes, edges, byId };
+  const link = (kind: Edge["kind"], a?: GraphNode, b?: GraphNode) => {
+    if (!a || !b) return;
+    const key = `${kind}:${a.id}:${b.id}`;
+    const e = oldEdges.get(key);
+    edges.push(e ?? { key, a, b, kind, show: a.show && b.show });
+  };
+  for (const [a, b] of data.foreignKeys) link("fk", byId.get(`t:${a}`), byId.get(`t:${b}`));
+  for (const t of data.terms)
+    for (const m of t.maps) link("map", byId.get(`s:${t.id}`), byId.get(`t:${m}`));
+  for (const [a, b] of data.termLinks) link("tl", byId.get(`s:${a}`), byId.get(`s:${b}`));
+  g.edges = edges;
 }
 
 export const OntologyGraph = forwardRef<
   GraphHandle,
-  { layer: Layer; onSelect: (n: GraphNode | null) => void; className?: string }
->(function OntologyGraph({ layer, onSelect, className }, ref) {
+  {
+    data: GraphView;
+    layer: Layer;
+    onSelect: (n: GraphNode | null) => void;
+    className?: string;
+  }
+>(function OntologyGraph({ data, layer, onSelect, className }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const g = useRef(buildGraph());
-  const layerRef = useRef<Layer>(layer);
   const state = useRef({
     hover: null as GraphNode | null,
     sel: null as GraphNode | null,
@@ -101,19 +122,43 @@ export const OntologyGraph = forwardRef<
     H: 600,
     counts: { t: 0, s: 0, e: 0 },
   });
+  const g = useRef<Graph | null>(null);
+  if (!g.current) {
+    g.current = { nodes: [], edges: [], sources: [], centers: {} };
+    merge(g.current, data, 800, 600);
+  }
+  const resets = useRef(0); // a reveal still running stops when the graph is reset
+  const layerRef = useRef<Layer>(layer);
   const [, force] = useState(0);
   layerRef.current = layer;
 
+  useEffect(() => {
+    const gr = g.current!;
+    const st = state.current;
+    merge(gr, data, st.W, st.H);
+    if (st.hover && !gr.nodes.includes(st.hover)) st.hover = null;
+    if (st.sel && !gr.nodes.includes(st.sel)) st.sel = null;
+    // in place, so a reveal that is running keeps counting into the same object
+    Object.assign(st.counts, {
+      t: gr.nodes.filter((n) => n.show && n.kind === "t").length,
+      s: gr.nodes.filter((n) => n.show && n.kind === "s").length,
+      e: gr.edges.filter((e) => e.show).length,
+    });
+    force((x) => x + 1);
+  }, [data]);
+
   useImperativeHandle(ref, () => ({
     async reveal(pred, perMs) {
-      const { nodes, edges } = g.current;
-      const c = state.current.counts;
-      for (const n of nodes) {
+      const gr = g.current!;
+      const run = resets.current;
+      for (const n of gr.nodes) {
+        if (resets.current !== run) return;
         if (n.show || !pred(n)) continue;
+        const c = state.current.counts;
         n.show = true;
         if (n.kind === "t") c.t++;
         else c.s++;
-        for (const e of edges)
+        for (const e of gr.edges)
           if (!e.show && e.a.show && e.b.show) {
             e.show = true;
             c.e++;
@@ -123,8 +168,9 @@ export const OntologyGraph = forwardRef<
       }
     },
     reset() {
-      g.current.nodes.forEach((n) => (n.show = false));
-      g.current.edges.forEach((e) => (e.show = false));
+      resets.current++;
+      g.current!.nodes.forEach((n) => (n.show = false));
+      g.current!.edges.forEach((e) => (e.show = false));
       state.current.counts = { t: 0, s: 0, e: 0 };
       state.current.sel = null;
       force((x) => x + 1);
@@ -137,7 +183,7 @@ export const OntologyGraph = forwardRef<
     const box = boxRef.current!;
     const ctx = canvas.getContext("2d")!;
     const st = state.current;
-    const { nodes, edges } = g.current;
+    const gr = g.current!;
     let raf = 0;
     let DPR = 1;
 
@@ -169,10 +215,10 @@ export const OntologyGraph = forwardRef<
 
     const step = () => {
       const { W, H } = st;
-      const vn = nodes.filter(vis);
+      const vn = gr.nodes.filter(vis);
       for (const n of vn) {
         if (n === st.drag) continue;
-        const c = centers[n.src];
+        const c = gr.centers[n.src] ?? MIDDLE;
         n.vx += (c[0] * W - n.x) * 0.0035;
         n.vy += (c[1] * H - n.y) * 0.0035;
         n.vx += (W / 2 - n.x) * 0.0006;
@@ -197,7 +243,7 @@ export const OntologyGraph = forwardRef<
             b.vy += dy * f;
           }
         }
-      for (const e of edges) {
+      for (const e of gr.edges) {
         if (!evis(e)) continue;
         const a = e.a,
           b = e.b;
@@ -219,7 +265,7 @@ export const OntologyGraph = forwardRef<
         n.x += n.vx;
         n.y += n.vy;
         // keep room for the label drawn to the right of each node
-        const labelRoom = n.kind === "s" ? 18 + n.id.length * 7.2 : 20;
+        const labelRoom = n.kind === "s" ? 18 + n.name.length * 7.2 : 20;
         n.x = Math.max(20, Math.min(W - labelRoom, n.x));
         n.y = Math.max(44, Math.min(H - 34, n.y));
       }
@@ -251,25 +297,26 @@ export const OntologyGraph = forwardRef<
       const { W, H } = st;
       ctx.clearRect(0, 0, W, H);
       if (st.counts.t > 0) {
-        for (const s of Object.keys(centers) as SourceKey[]) {
-          const vn = nodes.filter((n) => vis(n) && n.src === s);
+        for (const s of gr.sources) {
+          const vn = gr.nodes.filter((n) => vis(n) && n.src === s.key);
           if (!vn.length) continue;
+          const color = hex6(s.color);
           const cx = vn.reduce((a, n) => a + n.x, 0) / vn.length,
             cy = vn.reduce((a, n) => a + n.y, 0) / vn.length;
           const rad = Math.max(...vn.map((n) => Math.hypot(n.x - cx, n.y - cy))) + 34;
           const grd = ctx.createRadialGradient(cx, cy, rad * 0.3, cx, cy, rad);
-          grd.addColorStop(0, SOURCE_COLORS[s] + "1f");
-          grd.addColorStop(1, SOURCE_COLORS[s] + "00");
+          grd.addColorStop(0, color + "1f");
+          grd.addColorStop(1, color + "00");
           ctx.fillStyle = grd;
           ctx.beginPath();
           ctx.arc(cx, cy, rad, 0, 7);
           ctx.fill();
-          ctx.fillStyle = SOURCE_COLORS[s];
+          ctx.fillStyle = color;
           ctx.font = "600 10px " + FONT;
-          ctx.fillText(s.toUpperCase(), cx - rad * 0.5, cy - rad + 14);
+          ctx.fillText(s.name.toUpperCase(), cx - rad * 0.5, cy - rad + 14);
         }
       }
-      for (const e of edges) {
+      for (const e of gr.edges) {
         if (!evis(e)) continue;
         const a = e.a,
           b = e.b;
@@ -299,7 +346,7 @@ export const OntologyGraph = forwardRef<
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
       }
-      for (const n of nodes) {
+      for (const n of gr.nodes) {
         if (!vis(n)) continue;
         const hi = n === st.hover || n === st.sel;
         if (n.kind === "t") {
@@ -317,7 +364,7 @@ export const OntologyGraph = forwardRef<
           if (hi || layerRef.current === "data" || W > 900) {
             ctx.fillStyle = hi ? C.text : C.muted;
             ctx.font = (hi ? "600 " : "400 ") + "10.5px " + MONO;
-            ctx.fillText(n.id, n.x + n.r + 5, n.y + 3.5);
+            ctx.fillText(n.name, n.x + n.r + 5, n.y + 3.5);
           }
         } else {
           ctx.shadowColor = C.glow;
@@ -330,11 +377,11 @@ export const OntologyGraph = forwardRef<
           ctx.fillStyle = "#fff";
           ctx.font = "700 11px " + FONT;
           ctx.textAlign = "center";
-          ctx.fillText(n.id[0], n.x, n.y + 4);
+          ctx.fillText(n.name.slice(0, 1), n.x, n.y + 4);
           ctx.textAlign = "left";
           ctx.fillStyle = C.text;
           ctx.font = "600 12px " + FONT;
-          ctx.fillText(n.id, n.x + n.r + 6, n.y + 4);
+          ctx.fillText(n.name, n.x + n.r + 6, n.y + 4);
         }
       }
     };
@@ -349,7 +396,7 @@ export const OntologyGraph = forwardRef<
     const pick = (x: number, y: number) => {
       let best: GraphNode | null = null,
         bd = 1e9;
-      for (const n of nodes) {
+      for (const n of gr.nodes) {
         if (!vis(n)) continue;
         const d = Math.hypot(n.x - x, n.y - y);
         if (d < n.r + 6 && d < bd) {

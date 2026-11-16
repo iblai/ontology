@@ -1,15 +1,24 @@
-import { StubPage } from "@/components/shell/stub-page";
+"use client";
+
+import { StubPage, type StubRow } from "@/components/shell/stub-page";
+import { useSystems } from "@/lib/data";
+
+const n = (v: number | null) => (v === null ? "—" : String(v));
+
 export default function Page() {
   return (
     <StubPage
       title="Catalog"
       description="Every database, schema, table and column the engine has read, with descriptions, tags and the terms mapped to each."
-      rows={[
-        ["sis · 42 tables", "2 columns tagged pii · 9 terms"],
-        ["lms · 5 tables (scoped)", "1 column tagged pii · 4 terms"],
-        ["crm · 3 tables (scoped)", "1 column tagged pii · 3 terms"],
-        ["finance · 3 tables", "compiling"],
-      ]}
+      query={useSystems()}
+      rows={({ systems }) =>
+        systems.map((s): StubRow => [
+          `${s.name} · ${n(s.tables)} tables${s.scoped ? " (scoped)" : ""}`,
+          s.status === "ingested"
+            ? `${n(s.pii)} ${s.pii === 1 ? "column" : "columns"} tagged pii · ${n(s.terms)} terms`
+            : s.status,
+        ])
+      }
     />
   );
 }

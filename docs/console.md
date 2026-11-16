@@ -1,18 +1,20 @@
 # Console walkthrough
 
-Every page of the console, in the order of the five-step flow. Screenshots are from the mocked
-build at 1440 px. The floating stepper at the bottom of each page is a prototype aid and is removed
-with `NEXT_PUBLIC_WALKTHROUGH=0`.
+Every page of the console, in the order of the five-step flow. The screenshots are from demo mode
+(`NEXT_PUBLIC_DEMO=1`) at 1440 px; signed in, the same pages show your platform's data. The
+floating stepper at the bottom of each page is a prototype aid and is removed with
+`NEXT_PUBLIC_WALKTHROUGH=0`.
 
 The shell is the ibl.ai one: the sidebar and header match os.ibl.ai, Open Sans, brand blue
 `#0058cc`. Sign-in is ibl.ai SSO ([auth.md](auth.md)).
 
 ## Shell
 
-**Header, left to right.** The organization menu lists every organization you belong to; picking
-another signs you in to it (one ontology per organization). Then the current page. On the right:
-the User/Admin switch (admins only), the systems map, Billing (admins, opens the SDK billing tab),
-the notifications bell (SDK dropdown) and your profile menu (SDK; profile, help, sign out).
+**Header, left to right.** The platform menu lists every platform you belong to. The console works
+on the one you are signed in to; picking another signs you in to it (one ontology per platform,
+each with its own servers and engine). Then the current page. On the right: the User/Admin
+switch (admins only), the systems map, Billing (admins, opens the SDK billing tab), the
+notifications bell (SDK dropdown) and your profile menu (SDK; profile, help, sign out).
 
 ![Organization menu](screenshots/16-organization-menu.png)
 
@@ -23,15 +25,21 @@ the notifications bell (SDK dropdown) and your profile menu (SDK; profile, help,
 | Notifications | the Notifications page (SDK notification center)                                       | everyone             |
 | Invites       | the SDK invite dialog                                                                  | admins in Admin mode |
 | Management    | dialog with the SDK `Admin` surface: users, groups, roles, policies, teams, alerts     | admins in Admin mode |
-| API           | dialog with the SDK `ApiTab`: platform API tokens                                      | admins in Admin mode |
+| API           | dialog with the SDK `ApiTab`: platform API keys                                        | admins in Admin mode |
 | Secrets       | dialog with the SDK `SecretsTab`: LLM keys, service credentials, environment variables | admins in Admin mode |
-| Advanced      | dialog with the SDK `AdvancedTab`: organization settings                               | admins in Admin mode |
+| Advanced      | dialog with the SDK `AdvancedTab`: platform settings                                   | admins in Admin mode |
 | Support       | docs.ibl.ai in a new tab                                                               | everyone             |
 
 ![Management dialog](screenshots/17-management-dialog.png)
 
-The screenshot is from demo mode, where SDK panels show a sign-in notice; signed in, the dialog
-holds the live SDK component.
+In demo mode SDK panels show a sign-in notice; signed in, the dialog holds the live SDK component.
+
+**The platform's server.** The hosted console serves pages only; the platform's data and servers
+are on its own ontology server ([install.md](install.md)). Opened from the installer's link, the
+console shows **Set up `<host>`**: it names the host and the platform you are signed in to, and
+asks you to go on only if your team installed that server. With no server connected for the
+platform, the pages show **Connect a server**: a host name field, and the install command to copy.
+The address is kept in this browser, per platform.
 
 **Collapse.** The button next to the logo collapses the sidebar to an icon rail (labels on hover)
 and remembers the choice per browser.
@@ -50,43 +58,49 @@ for content outside its card, text overflowing its box, overlapping siblings and
 
 ![Dashboard](screenshots/01-dashboard.png)
 
-The organization's ontology at a glance. Four counters: systems connected (from the engine's
-connections), object types certified out of total (engine terms), tools published (count across
-server configs) and agent tool calls in the last 24 hours (ibl.ai analytics). The activity feed
-merges three sources: config deploys on the host, certifications in the engine, and agent
-attachments on ibl.ai. Below, one card per MCP server with its revision, toolsets, tools and attached
-agents, and a shortcut to Agents.
+The platform's ontology at a glance. Four counters: systems connected (the engine's connections),
+object types certified out of total (engine terms), tools published (across server configs) and
+agent tool calls in the last 24 hours (the gateway's log). The activity feed merges three sources:
+deploys on the host, compiles and certifications in the engine, and agent attachments on ibl.ai.
+Below, one card per MCP server with its revision, toolsets, tools and attached agents, and a
+shortcut to Agents.
 
-**Connect a System** starts step 1; **Open the Map** jumps to the live graph.
+**Connect a System** starts step 1; **Open the Map** jumps to the graph.
 
 ## Step 1 · Systems
 
 ![Systems](screenshots/02-systems.png)
 
-Left: the systems already connected, each with its engine, read-only URL, table count, PII column
-count and ingest status, plus any HTTP APIs served as tools. Under it, the catalog of source kinds,
-filterable by Databases, Warehouses, APIs and Cloud. Each kind carries two badges: **DISSECT**
-(the engine can infer terms from it) and **SERVE** (the runtime can expose it).
+Left: the systems already connected, each with its engine, URL (never the password), table count,
+PII column count and status (“ingesting” until its tables appear), plus any HTTP APIs served as
+tools. Under it, the catalog of source kinds, filterable by Databases, Warehouses, APIs and Cloud.
+Each kind carries two badges: **DISSECT** (the engine can infer terms from it) and **SERVE** (the
+runtime can expose it).
 
-Right: the add panel. **Database** takes a name, a connection URL, a table scope and the two
-dissection options (PII detection, distinct-value probing). **Test Connection** validates the
-credentials through the engine. **Connect & Dissect** registers the connection, starts ingestion and
-compilation, and opens the Map.
+Right: the add panel. **Database** takes a connection URL, a schema scope and the two dissection
+options (PII detection, distinct-value probing). The system's name is its database's name, read
+from the URL. **Test Connection** tries the login through the engine. **Connect & Dissect** saves
+the password on the host, creates the engine connection, which starts its ingest, and opens the
+Map.
 
 ![Systems · HTTP API](screenshots/02b-systems-http-api.png)
 
-**HTTP API** takes a base URL, an optional OpenAPI spec, the upstream auth header (resolved from the
-host's env file) and the endpoints to wrap. APIs are served only, never dissected, so this tab ends
-in **Add & Expose** rather than in the Map. **Prebuilt** lists the runtime's ready-made toolsets per
-engine for analysts who need raw SQL.
+**HTTP API** takes a base URL, an optional OpenAPI document (**Fetch Spec** has the host fetch it
+and list its operations), the upstream auth header (its secret is kept in the host's env file) and
+the endpoints to wrap, ticked or named by hand. APIs are served only, never dissected, so this tab
+ends in **Add & Expose** rather than in the Map. **Prebuilt** lists a raw SQL toolset per connected
+database for analysts who need it; the ticked ones open the server builder already ticked.
 
 ## Step 2 · Map
 
 ![Map](screenshots/03-map.png)
 
-The dissection, live. Left: the pipeline (Ingest → Profile columns → Name entities → Resolve
-relationships → Compile → Publish tools) with the engine's log underneath; stage state comes from
-the engine's ingest and compile status, the lines from its service log.
+The dissection. Left: the pipeline (Ingest → Profile columns → Name entities → Resolve
+relationships → Compile → Publish tools). The engine reports no progress and no log over its API,
+so each stage is derived from what the engine has read (tables, columns, terms, links, a finished
+compile), and the log lists the changes the console saw while the page was open. The pipeline ends
+when the compile does: tools are read from certified terms, so the last line counts what is
+certified so far. **Re-run** starts a compile.
 
 Center: the graph. Square nodes are tables, clustered and tinted by system; round blue nodes are the
 business terms the engine named. Dashed blue lines map a term to the tables that back it; solid blue
@@ -96,10 +110,10 @@ Semantic**, drag nodes, hover for labels, click for detail.
 Below 1536px the graph and inspector sit side by side and the pipeline moves underneath them; on
 phones they stack.
 
-Right: the inspector. For a table: rows profiled, columns with inferred kinds and PII tags, joins,
-and the term it maps to. For a term: description, synonyms, the tables it maps to with their system,
-the SQL attributes inferred for it, and the tools it will become. **Certify** and **Edit in
-Ontology** act on the engine's term.
+Right: the inspector. For a table: its columns with their types and PII tags, joins, and the terms
+it maps to; rows show “—” because the engine does not count them. For a term: description,
+synonyms, the tables it maps to with their system, the SQL attributes inferred for it, and the tools
+it will become. **Certify** and **Edit in Ontology** act on the engine's term.
 
 When a term spans several systems (Student across SIS, LMS and CRM) a banner calls it out with
 **Open Term** and **Certify Student**.
@@ -114,8 +128,10 @@ attributes), actions (write tools) and tags, each with counts; suggested items a
 Right, for the selected object type: description and synonyms, **Backing Datasets** (the tables that
 back it, per system, with the join), **Properties** (name, type, backing column or expression, PII
 flag, certified/suggested), **Links** to other object types with the physical path, **Metrics** with
-their certified SQL expression and grain, and **Actions**, the write tools declared in the server
-config with the toolset that gates them.
+their SQL expression, and **Actions**, the write tools in the host's hand-written `actions.yaml`
+with the toolset that gates them. **Edit** saves the name and description in the engine; the
+certify toggles act on the term, each property and each metric. Synonyms are shown as the engine
+inferred them; the engine's API does not take new ones.
 
 **Expose as MCP** opens the server builder with the certified set.
 
@@ -125,58 +141,74 @@ config with the toolset that gates them.
 
 Left column, top to bottom:
 
-- **Server Name** and the resulting endpoint.
-- **Toolsets**, generated from certified object types and metrics. Each toolset lists its tools with
-  signatures and what they return; write toolsets show a **writes** badge, the prebuilt raw toolset
-  shows **unrestricted reads**. Untick what this server should not offer.
-- **Authentication**: ibl.ai Platform Tokens (verified with ibl.ai by the gateway; **Issue Token**
-  creates one on ibl.ai), Microsoft Entra ID, Google Sign-in and Custom OIDC Issuer (verified by the
+- **Server Name** and the resulting endpoint on the platform's server,
+  `https://<host>/iblai/<platform>/<slug>/mcp` (`<console address>/<platform>/<slug>/mcp` when
+  console and server are one host).
+- **Toolsets**, generated from certified object types and metrics, the connected systems and the
+  HTTP APIs. Each toolset lists its tools with signatures and what they return; toolsets that write
+  show a **writes** badge, the raw toolsets show **unrestricted reads**. Untick what this server
+  should not offer.
+- **Authentication**: ibl.ai credentials (checked by the gateway; **Issue Token** makes sure each
+  ticked toolset has its role and policy on ibl.ai, then creates an API key limited to them and
+  shows it once), Microsoft Entra ID, Google Sign-in and Custom OIDC Issuer (verified by the
   runtime itself).
 - **Allowed Origins** (chips, add or remove) and **Allowed Hosts**, both passed to the runtime as
-  flags.
+  flags and both checked by the gateway, before it checks the credential. A host is a name,
+  `*.name` for every name under it, or `*` for any; the runtime is given the exact names. Allowed
+  Hosts starts with the server's host name.
 
-Right column: the generated config file exactly as it will be written to the host.
+Right column: the generated config file exactly as it will be written to the platform's server,
+updated as you change the left column, with **Copy**.
 
-**Deploy** writes the files, starts the runtime process and registers the server on ibl.ai.
+**Save Draft** writes the files without starting anything. **Deploy** writes the files, starts the
+runtime, waits until it has loaded the new file, and opens the server. Deploy registers nothing on
+ibl.ai; attaching an agent does ([guides/connect-agents.md](guides/connect-agents.md)).
 
 ## Step 5 · MCP Gateway · Server
 
 ![Server · Connect](screenshots/07-server-connect.png)
 
-The endpoint with a copy button, then four counters: agent tool calls in 24 h, agents attached, tools
-across toolsets, most called tool.
+The endpoint with a copy button, then four counters from the gateway's log: agent tool calls in
+24 h, agents attached, tools across toolsets, most called tool. **Edit Server** reopens the builder;
+**Roll Back** puts the previous revision back.
 
-**Connect**: attach the server to an ibl.ai agent in one click, plus ready-to-paste snippets for
-cURL, Claude Desktop / Cursor and the Python MCP SDK.
+**Connect**: **Attach** gives an ibl.ai agent this server, limited to the toolsets you pick (a key
+for that agent, the server registered on ibl.ai for it, the agent's MCP tool turned on), plus
+ready-to-paste snippets for cURL, Claude Desktop / Cursor and the Python MCP SDK.
 
 ![Server · Playground](screenshots/07b-server-playground.png)
 
-**Playground**: pick a tool, edit its arguments as JSON, **Run**. The call goes through the gateway
-with your own ibl.ai session, so you see exactly what an agent with your policy would see.
-`ask_question` returns an answer, the certified SQL it ran and the provenance.
+**Playground**: the tools your own session may call. Pick one, edit its arguments as JSON, **Run**.
+The call goes through the gateway at the server's endpoint with your ibl.ai session, so you see
+exactly what a caller with your grants would see. From the hosted console the browser calls the
+platform's server directly, so the console's origin must stay on the server's Allowed Origins (a
+new server starts with it). `ask_question` returns an answer and the SQL it ran.
 
 ![Server · Activity](screenshots/07c-server-activity.png)
 
-**Activity**: agent tool calls from ibl.ai analytics (tool, agent, user, session, result), and a
-tail of the runtime log on the host, which is where origin rejections and direct client calls show.
+**Activity**: the tool calls the gateway saw (time, tool, agent, result), read from the gateway's
+log on the host. User and session show “—”. The **Runtime Log** comes from the same log: calls,
+origin rejections and config reloads.
 
 ![Server · Tokens & Origins](screenshots/07d-server-tokens.png)
 
-**Tokens & Origins**: the ibl.ai platform tokens that carry an `ontology:*` policy, with their
-policies, groups, created and expiry dates and a **Revoke** button, and the server's allowed origins.
+**Tokens & Origins**: the ibl.ai API keys that carry an `Ontology:` policy, with their policies,
+groups, created and expiry dates and a **Revoke** button, and the server's allowed origins.
 
 ## MCP Servers
 
 ![MCP Servers](screenshots/05-mcp-servers.png)
 
-All servers of the organization: endpoint, toolsets, tools, attached agents, tool calls and status.
+All of the platform's servers on its ontology server: endpoint, toolsets, tools, attached agents,
+tool calls and status.
 
 ## Agents
 
 ![Agents](screenshots/08-agents.png)
 
-ibl.ai agents that have an ontology server attached, how each signs in (token or OAuth, and the
-scope: platform, per-agent or per-user), the server, and call counts.
+ibl.ai agents that have a server from this console attached, how each signs in, the server, and
+call counts from the gateway's log. **Attach a Server to an Agent** opens the same dialog as the
+server page.
 
 ## Roles and Access
 
@@ -184,8 +216,9 @@ scope: platform, per-agent or per-user), the server, and call counts.
 
 ![Access](screenshots/10-access.png)
 
-**Roles** lists the ibl.ai RBAC policies and the toolsets each maps to. **Access** lists which
-groups and agents hold which policy. Both are views of ibl.ai; changes are made there.
+**Roles** lists the ibl.ai policies named `Ontology: <toolset>` and the toolset each grants.
+**Access** lists which groups, users and agents hold which policy. Both are views of ibl.ai;
+changes are made there ([guides/permissions.md](guides/permissions.md)).
 
 ## Catalog, Compilation, Config
 
@@ -198,5 +231,8 @@ groups and agents hold which policy. Both are views of ibl.ai; changes are made 
 ![Notifications](screenshots/14-notifications.png)
 
 **Catalog**: every database, schema, table and column the engine read, with tags and mapped terms.
-**Compilation**: the engine's run status and its switches. **Config**: the files the console writes
-to the host, per server, with revisions.
+**Compilation**: the engine's run status, its three switches (compilation, PII detection,
+probing) and **Run now**. **Config**: the files the console writes to the host, per server, with
+revisions, and **Export model**, which downloads the engine's model. On a hosted console the
+platform's server is named beside the title, with **Change** to connect another: it stays within
+reach when that server does not answer.

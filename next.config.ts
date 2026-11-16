@@ -27,6 +27,8 @@ if (
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The server image's build only (Dockerfile); dev and Vercel keep the default.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   devIndicators: false,
   images: { remotePatterns: [{ protocol: "https", hostname: "**" }] },
   turbopack: {

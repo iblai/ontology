@@ -21,7 +21,7 @@ import type { AccountTab } from "./shell-context";
 const TITLES: Record<AccountTab, [string, string]> = {
   management: [
     "Management",
-    "Users, groups, roles, policies and teams for your organization. Policies named ontology:* decide which toolsets each person or agent can call.",
+    "Users, groups, roles, policies and teams for your organization. Policies named “Ontology: <toolset>” decide which toolsets each person or agent can call.",
   ],
   api: [
     "API",

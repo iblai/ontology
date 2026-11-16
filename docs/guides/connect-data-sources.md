@@ -34,40 +34,54 @@ A data source is either a **database** (dissected into the ontology and served) 
 3. **Scope.** Decide which schemas and tables matter. Dissecting 61 LMS tables when five carry
    the meaning only slows compilation and adds noise.
 
+4. **The engine reads connections added here.** Leave `CONNECTION_STRINGS` empty in the engine's
+   own `.env`. While it is set, the engine's ingest ignores every connection the console adds.
+
 ## Adding a database
 
 ![Add a database](../screenshots/02-systems.png)
 
 1. Open **Systems** and pick the engine in the catalog, or press **New System** in the sidebar.
    The catalog shows two capabilities per kind:
-   - **DISSECT** the engine can read it and infer terms (PostgreSQL, MySQL, Snowflake, ClickHouse,
-     Trino, Databricks, AlloyDB, Cloud SQL, …).
-   - **SERVE** the server runtime can expose it as tools (almost everything).
-     A kind with SERVE only (SQL Server, Oracle, BigQuery, MongoDB, …) can still be exposed through
-     hand-written tools, but it will not appear in the map.
-2. Fill in **Name** (short, lower-case; it becomes the schema prefix you see everywhere, e.g.
-   `sis.students`) and the **Connection URL** with the read-only login.
-3. **Scope**: add the tables or schemas to include. Everything else is ignored.
+   - **DISSECT** the engine can read it and infer terms.
+   - **SERVE** the server runtime can expose it as tools.
+     The console serves PostgreSQL, MySQL, ClickHouse and Snowflake. A database the engine
+     dissects but the console does not serve (Trino, Databricks, …) appears in the map but gets no
+     tools.
+2. Enter the **Connection URL** with the read-only login. The system's name is its database's name,
+   read from the URL (`postgresql://ontology_ro:…@sis-db:5432/sis` is `sis`). It is the prefix you
+   see everywhere, e.g. `sis.students`.
+3. **Scope**: add the schemas (`public`) or tables (`public.students`) to include. Leave it empty
+   for everything.
 4. **Dissection Options**
    - _PII detection_ tags columns that look personal (email, names, identifiers) and masks their
      sample values before any sample reaches a model. Leave it on.
    - _Distinct-value probing_ samples categorical columns so terms get better names
      (`enrollments.status → REGISTERED, DROPPED, WAITLIST, WITHDRAWN`).
-5. **Test Connection**. The engine validates the credentials and lists what it can see.
+
+   Both are engine-wide switches: they apply to every system of the platform.
+
+5. **Test Connection**. The engine tries the login and reports what it sees, in its own words.
 6. **Connect & Dissect**. The console:
-   - registers the connection with the engine (`POST /api/connections`, stored in the engine's own
-     database, optionally through Vault),
-   - triggers ingestion (`POST /ingest`) and then compilation (`POST /semantic/compile`),
-   - writes the same connection as a `source` in the server config on the host, reading the password
-     from `/srv/ontology/servers/<slug>/env`, so the credential exists in exactly two places on the
-     host and nowhere else.
-     You land on **Map**, which follows the run.
+   - saves the password in `$ONTOLOGY_HOME/platforms/<platform>/env` on the platform's server
+     (mode 0600), for serving,
+   - sets the two engine switches,
+   - creates the connection in the engine, which stores it in its own database (or Vault) and
+     starts the ingest.
+
+   The password now exists in exactly two places on the platform's server and nowhere else. The
+   hosted console passes it through to the server and keeps none. You land on **Map**.
 
 ![Map while dissecting](../screenshots/03-map.png)
 
-7. When the pipeline reaches **Compile**, the tables appear in the map clustered by system, and the
-   terms the engine named float above them. Click any node to see what was inferred. Terms that span
+7. As the engine reads the database, its tables appear in the map clustered by system, and the
+   stages advance. The engine reports no progress of its own, so the stages and the log follow what
+   it has read so far.
+8. Start a compile with **Re-run** on the Map, or **Run now** on **Compilation**. The terms the
+   engine names float above the tables. Click any node to see what was inferred. Terms that span
    several systems (the same Student in SIS, LMS and CRM) are called out for certification.
+9. The pipeline ends when the compile does. Its last line counts the tools your certified terms
+   produce, which is none until you certify one on **Ontology**.
 
 ## Adding an HTTP API
 
@@ -76,13 +90,21 @@ A data source is either a **database** (dissected into the ontology and served) 
 HTTP APIs are not dissected. The runtime calls them live, as named tools, with an upstream credential
 that never leaves the host.
 
-1. **Systems → HTTP API** tab. Enter the **Base URL** and, if there is one, the **OpenAPI Spec** URL
-   (each operation becomes a candidate tool with typed parameters).
-2. **Upstream Auth Header**: the header the API expects, e.g. `Authorization: Bearer ${SLATE_TOKEN}`.
-   The `${…}` name is resolved from the server's `env` file on the host.
-3. Tick the **Endpoints to Wrap**. Each becomes an `http` tool with `method`, `path`, and
-   `queryParams` / `pathParams` / `requestBody` derived from the spec.
-4. **Add & Expose** takes you to the server builder, where you place the new tools in a toolset.
+1. **Systems → HTTP API** tab. Enter the **Base URL**. The host refuses an address it may not
+   call, in the rule's own words. An address on the host's own machine is taken outside production
+   only.
+2. If the API has an OpenAPI document, enter its URL and press **Fetch Spec**. The host fetches it
+   under the same address rule as the base URL, with the auth header when the document is on the
+   API's own address, and lists its operations as endpoints.
+3. **Upstream Auth Header**: the header the API expects, e.g. `Authorization: Bearer <secret>`. A
+   value alone, such as `Bearer <secret>`, is sent as `Authorization`, as written. The host moves
+   the secret into `$ONTOLOGY_HOME/platforms/<platform>/env` and keeps `${NAME}` in its place. You
+   may write `${NAME}` yourself for a secret already in `env`.
+4. Tick the **Endpoints to Wrap**, or name them by hand. Each becomes an `http` tool. `GET` and
+   `HEAD` endpoints go in the toolset `<api>-reads`; the rest go in `<api>-writes`, which is reached
+   only by a policy that names it.
+5. **Add & Expose** saves the API in `$ONTOLOGY_HOME/platforms/<platform>/apis.yaml` and takes you
+   to the server builder.
 
 Because APIs do not pass through the engine, their responses are not object types. If an endpoint
 returns something the ontology already models (an applicant, a course), say so in the tool's
@@ -90,34 +112,43 @@ description so agents connect the two.
 
 ## Prebuilt toolsets
 
-The runtime ships ready-made toolsets per engine (`execute_sql`, `list_tables`, …). Add one only for
-analyst roles that genuinely need ad-hoc SQL, keep it on the read-only login, and put it in its own
-toolset so it can be granted separately (it shows as **unrestricted reads** in the server builder).
+Each connected database the console serves has a raw toolset, `<system>-raw`, with
+`execute_sql` and `list_tables`. Tick the ones you need on the **Prebuilt** tab and the server
+builder opens with them ticked. Add one only for analysts who genuinely need ad-hoc SQL, and keep it
+on the read-only login. A raw toolset counts as writing, so it is reached only by a policy that
+names it.
 
 ## After connecting
 
 - **Catalog** lists every database, schema, table and column the engine read, with tags (PII) and
   the terms mapped to each.
-- **Compilation** shows whether a compile is running, when the last one succeeded, and the switches
-  (scheduled compilation, PII detection, probing, query timeout).
+- **Compilation** shows whether a compile is running, when the last one succeeded or failed, and
+  the switches (compilation, PII detection, probing).
 - **Ontology** is where you review and certify what the engine inferred before it becomes tools
   ([permissions.md](permissions.md) covers who may certify).
 
 ## Changing or removing a source
 
-- Rotating a password: update the `env` file on the host and the connection in the engine (Systems →
-  the system → Edit). The runtime reloads config on its own.
-- Re-scoping tables: edit the scope and re-dissect; terms already certified are kept.
-- Removing a system: it is deleted from the engine, its `source` and tools are removed from every
-  server config, and the next deploy drops the tools. Agents that relied on them get a clear "tool
-  not found" instead of silent nulls.
+- Rotating a password: change it in the engine's own UI (**Settings → Connections**) and in
+  `$ONTOLOGY_HOME/platforms/<platform>/env` under `<NAME>_DB_PASSWORD`, then deploy each server
+  that uses it again.
+- Re-scoping tables: change the connection's scope in the engine's UI and compile again; terms
+  already certified are kept.
+- Removing a system: delete the connection in the engine's UI. Then edit each server that used its
+  toolsets, untick them and deploy again; a save that names a toolset that no longer exists is
+  refused with its name.
 
 ## Troubleshooting
 
-| Symptom                                     | Likely cause                          | Where to look                                                                         |
-| ------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
-| Test Connection fails                       | firewall or wrong login               | host can reach `db:port`? `psql`/`mysql` from the host with the same URL              |
-| Ingest accepted, nothing appears in the map | compile not finished or failed        | **Compilation** page: `last_failure_at`; engine logs on the host                      |
-| Terms are poorly named                      | columns are opaque codes, probing off | turn on distinct-value probing; add column descriptions in **Catalog** and re-compile |
-| PII column not tagged                       | detector missed it                    | tag the column `pii` in **Catalog**; tags are honored on the next compile             |
-| Tool returns permission error               | login lacks SELECT on a joined table  | grant SELECT; the certified SQL shows the tables involved                             |
+| Symptom                              | Likely cause                                     | Where to look                                                                                |
+| ------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Test Connection fails                | firewall or wrong login                          | the engine's message; can the host reach `db:port` with `psql` or `mysql` and the same URL?  |
+| Connected, but no tables ever appear | the engine's `CONNECTION_STRINGS` is set         | empty it in the engine's `.env` and restart the engine                                       |
+| Tables appear, no terms              | no compile has run, or it failed                 | **Compilation** page: last failure; the engine's logs on the host                            |
+| No relationships (PostgreSQL)        | the login does not own the tables                | the engine reads declared keys only as their owner; a model key lets it infer joins instead  |
+| Terms are poorly named               | columns are opaque codes, probing off            | turn on distinct-value probing; add column descriptions in the engine's UI and compile again |
+| PII column not tagged                | detector missed it                               | tag the column `pii` in the engine's UI; tags are honoured on the next compile               |
+| Tool returns permission error        | login lacks SELECT on a joined table             | grant SELECT; the certified SQL shows the tables involved                                    |
+| `503`, “serves another platform”     | the host's own engine serves another platform    | the host's operator writes `$ONTOLOGY_HOME/platforms/<platform>/engine.json` (one host only; network.md) |
+| `403`, “serves another platform”     | the server was set up for another platform       | connect this platform's own server; a server installed from a link serves one platform       |
+| A system shows no tools              | the console does not serve that kind of database | it stays in the map without tools                                                            |
