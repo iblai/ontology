@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* ibl.ai SDK base styles; our :root tokens below override any shared names. */
+@import "@iblai/iblai-js/web-containers/styles";
+
+@plugin "tailwind-scrollbar";
+/* Tailwind skips node_modules; scan the SDK's compiled components explicitly. */
+@source "../node_modules/@iblai/iblai-js/dist/web-containers/source";
+@source "../node_modules/@iblai/iblai-js/dist/web-containers/source/next";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -118,6 +125,12 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Grid children may shrink below their content, so a wide table or URL scrolls
+     or wraps inside its own box instead of widening the whole column.
+     :where() keeps specificity at zero so any explicit min-w-* utility wins. */
+  :where(.grid) > * {
+    min-width: 0;
   }
   body {
     @apply bg-background text-foreground;

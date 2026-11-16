@@ -5,8 +5,46 @@ build at 1440 px. The floating stepper at the bottom of each page is a prototype
 with `NEXT_PUBLIC_WALKTHROUGH=0`.
 
 The shell is the ibl.ai one: the sidebar and header match os.ibl.ai, Open Sans, brand blue
-`#0058cc`. The header shows the organization and the current page; the User/Admin switch is the
-platform's admin mode.
+`#0058cc`. Sign-in is ibl.ai SSO ([auth.md](auth.md)).
+
+## Shell
+
+**Header, left to right.** The organization menu lists every organization you belong to; picking
+another signs you in to it (one ontology per organization). Then the current page. On the right:
+the User/Admin switch (admins only), the systems map, Billing (admins, opens the SDK billing tab),
+the notifications bell (SDK dropdown) and your profile menu (SDK; profile, help, sign out).
+
+![Organization menu](screenshots/16-organization-menu.png)
+
+**Sidebar footer.** The same items as os.ibl.ai, and they behave the same way:
+
+| Item | Opens | Who sees it |
+|---|---|---|
+| Notifications | the Notifications page (SDK notification center) | everyone |
+| Invites | the SDK invite dialog | admins in Admin mode |
+| Management | dialog with the SDK `Admin` surface: users, groups, roles, policies, teams, alerts | admins in Admin mode |
+| API | dialog with the SDK `ApiTab`: platform API tokens | admins in Admin mode |
+| Secrets | dialog with the SDK `SecretsTab`: LLM keys, service credentials, environment variables | admins in Admin mode |
+| Advanced | dialog with the SDK `AdvancedTab`: organization settings | admins in Admin mode |
+| Support | docs.ibl.ai in a new tab | everyone |
+
+![Management dialog](screenshots/17-management-dialog.png)
+
+The screenshot is from demo mode, where SDK panels show a sign-in notice; signed in, the dialog
+holds the live SDK component.
+
+**Collapse.** The button next to the logo collapses the sidebar to an icon rail (labels on hover)
+and remembers the choice per browser.
+
+![Collapsed sidebar](screenshots/15-collapsed-sidebar.png)
+
+**Phone and tablet.** Below 768px the sidebar becomes a drawer behind the menu button; every page
+reflows to one column, tables and code scroll inside their own box, and nothing scrolls sideways.
+
+![Phone](screenshots/18-mobile.png) ![Phone menu](screenshots/19-mobile-menu.png)
+
+Every page is checked at 375, 768, 1024, 1280, 1440 and 1920px by `frontend/scripts/audit-layout.mjs`
+for content outside its card, text overflowing its box, overlapping siblings and sideways scrolling.
 
 ## Dashboard
 
@@ -54,6 +92,9 @@ Center: the graph. Square nodes are tables, clustered and tinted by system; roun
 business terms the engine named. Dashed blue lines map a term to the tables that back it; solid blue
 lines are relationships between terms; grey lines are foreign keys. Toggle **Both Layers / Data /
 Semantic**, drag nodes, hover for labels, click for detail.
+
+Below 1536px the graph and inspector sit side by side and the pipeline moves underneath them; on
+phones they stack.
 
 Right: the inspector. For a table: rows profiled, columns with inferred kinds and PII tags, joins,
 and the term it maps to. For a term: description, synonyms, the tables it maps to with their system,
@@ -153,6 +194,8 @@ groups and agents hold which policy. Both are views of ibl.ai; changes are made 
 ![Compilation](screenshots/12-compilation.png)
 
 ![Config](screenshots/13-config.png)
+
+![Notifications](screenshots/14-notifications.png)
 
 **Catalog**: every database, schema, table and column the engine read, with tags and mapped terms.
 **Compilation**: the engine's run status and its switches. **Config**: the files the console writes

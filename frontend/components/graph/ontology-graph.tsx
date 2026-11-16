@@ -149,7 +149,9 @@ export const OntologyGraph = forwardRef<GraphHandle, { layer: Layer; onSelect: (
       for (const n of vn) {
         if (n === st.drag) continue;
         n.vx *= 0.82; n.vy *= 0.82; n.x += n.vx; n.y += n.vy;
-        n.x = Math.max(20, Math.min(W - 20, n.x));
+        // keep room for the label drawn to the right of each node
+        const labelRoom = n.kind === "s" ? 18 + n.id.length * 7.2 : 20;
+        n.x = Math.max(20, Math.min(W - labelRoom, n.x));
         n.y = Math.max(44, Math.min(H - 34, n.y));
       }
     };

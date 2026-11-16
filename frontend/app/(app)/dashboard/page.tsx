@@ -19,7 +19,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <div className="mb-5 grid gap-4 lg:grid-cols-[1.25fr_1fr]">
+      <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div>
           <div className="eyebrow">{tenant.name} · Ontology</div>
           <h1 className="mt-1.5 text-[26px] leading-[1.15] font-semibold tracking-tight text-gray-900 text-balance">
@@ -34,11 +34,11 @@ export default function DashboardPage() {
             <Button size="lg" className="ibl-button-primary" render={<Link href="/systems" />}>Connect a System</Button>
             <Button size="lg" variant="outline" render={<Link href="/map" />}>Open the Map</Button>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Pipeline">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5" aria-label="Pipeline">
             {flow.map(([b, s]) => (
               <div key={b} className="rounded-lg border border-[rgba(0,88,204,.35)] bg-[#eef6fc] px-2.5 py-2">
                 <b className="block text-[13px] font-semibold text-gray-900">{b}</b>
-                <small className="block text-[11.5px] text-gray-600">{s}</small>
+                <small className="block text-[11.5px] break-words text-gray-600">{s}</small>
               </div>
             ))}
           </div>
@@ -71,8 +71,8 @@ export default function DashboardPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {servers.map((s) => (
           <Link key={s.slug} href={`/mcp/${s.slug}`} className="rounded-[10px] border border-[var(--border-color)] bg-white p-4 transition hover:border-gray-300 hover:shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="mono text-sm font-semibold text-gray-900">{s.slug}</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="mono truncate text-sm font-semibold text-gray-900">{s.slug}</h3>
               {s.enabled ? <Pill tone="green" dot>enabled · rev {s.revision}</Pill> : <Pill tone="amber" dot>draft</Pill>}
             </div>
             <div className="mono mt-1 truncate text-[12px] text-gray-600">/{s.slug}/mcp</div>

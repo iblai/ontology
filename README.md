@@ -5,7 +5,9 @@ runs, dissect them into business terms and relationships, certify the result, an
 servers that ibl.ai agents, Claude, Codex and any other MCP client can call. Runs inside your
 network, signs in with ibl.ai, and keeps no data of its own.
 
-> **Status:** UX approval build. Every page runs on mocked data from
+> **Status:** UX approval build. Sign-in is real ibl.ai SSO; the ibl.ai panels (Management, API,
+> Secrets, Advanced, Billing, Invites, Notifications) are the live SDK components. Ontology pages
+> still run on mocked data from
 > [`frontend/lib/mock.ts`](frontend/lib/mock.ts). [docs/plan.md](docs/plan.md) has the order of the
 > remaining work.
 
@@ -16,9 +18,20 @@ network, signs in with ibl.ai, and keeps no data of its own.
 ```bash
 cd frontend
 pnpm install
-pnpm dev                          # http://localhost:3000
-node scripts/screenshots.mjs      # regenerate docs/screenshots from a running dev server
+cp .env.example .env.local        # set NEXT_PUBLIC_MAIN_TENANT_KEY to your ibl.ai organization
+pnpm dev                          # http://localhost:3000 → signs in with ibl.ai
 ```
+
+Without an ibl.ai account, run in demo mode (fixed session, SDK panels show a notice):
+
+```bash
+NEXT_PUBLIC_DEMO=1 pnpm dev
+node scripts/screenshots.mjs      # regenerate docs/screenshots (demo server running)
+node scripts/audit-layout.mjs     # check every page at 375–1920px for broken layout
+```
+
+Sign-in returns only to origins on your organization's allowed redirect origins on ibl.ai; add
+`http://localhost:3000` and the deployed hostname there.
 
 ## Documentation
 
@@ -33,7 +46,7 @@ node scripts/screenshots.mjs      # regenerate docs/screenshots from a running d
 ### Architecture and operations
 | Document | What it covers |
 |---|---|
-| [docs/auth.md](docs/auth.md) | The ibl.ai session as iblai/os implements it: storage keys, header schemes, refresh, verification on the host |
+| [docs/auth.md](docs/auth.md) | ibl.ai SSO: the session as iblai/os implements it, how this console wires it, configuration, demo mode |
 | [docs/network.md](docs/network.md) | Topology, VPN-only inbound, outbound to `ext.ibl.ai` and data sources, what runs where, hardening |
 | [docs/data-sources.md](docs/data-sources.md) | Where every value on screen comes from: ibl.ai, the dissection engine, or the server runtime |
 | [docs/plan.md](docs/plan.md) | What is built and the order of the remaining work |
@@ -56,7 +69,13 @@ All in [docs/screenshots/](docs/screenshots/), one per page and tab:
 [Access](docs/screenshots/10-access.png) ·
 [Catalog](docs/screenshots/11-catalog.png) ·
 [Compilation](docs/screenshots/12-compilation.png) ·
-[Config](docs/screenshots/13-config.png)
+[Config](docs/screenshots/13-config.png) ·
+[Notifications](docs/screenshots/14-notifications.png) ·
+[Collapsed Sidebar](docs/screenshots/15-collapsed-sidebar.png) ·
+[Organization Menu](docs/screenshots/16-organization-menu.png) ·
+[Management Dialog](docs/screenshots/17-management-dialog.png) ·
+[Phone](docs/screenshots/18-mobile.png) ·
+[Phone Menu](docs/screenshots/19-mobile-menu.png)
 
 ## Repository layout
 
@@ -66,6 +85,8 @@ All in [docs/screenshots/](docs/screenshots/), one per page and tab:
 | [`frontend/lib/mock.ts`](frontend/lib/mock.ts) | All data shown today, tagged by system of record |
 | [`frontend/.env.example`](frontend/.env.example) | Environment switches |
 | [`frontend/scripts/screenshots.mjs`](frontend/scripts/screenshots.mjs) | Regenerates every screenshot in `docs/screenshots/` |
+| [`frontend/scripts/audit-layout.mjs`](frontend/scripts/audit-layout.mjs) | Checks every page at six widths for overflow, overlap and sideways scrolling |
+| [`frontend/providers/iblai-providers.tsx`](frontend/providers/iblai-providers.tsx) | ibl.ai SSO provider chain (see docs/auth.md) |
 | [`frontend/AGENTS.md`](frontend/AGENTS.md) | Rules for coding agents, written by `next dev` |
 | [`docs/`](docs/) | The documents above |
 | [`.claude/launch.json`](.claude/launch.json) | Dev-server definition for the Claude desktop preview |

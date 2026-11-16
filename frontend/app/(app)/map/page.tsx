@@ -83,30 +83,30 @@ export default function MapPage() {
         }
       />
 
-      <div className="grid min-h-[560px] gap-3.5 lg:h-[calc(100dvh-56px-32px-50px-110px)] lg:grid-cols-[290px_1fr_320px]">
-        <Card className="flex flex-col overflow-hidden">
+      <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_300px] 2xl:h-[calc(100dvh-56px-32px-50px-110px)] 2xl:min-h-[560px] 2xl:grid-cols-[290px_minmax(0,1fr)_320px]">
+        <Card className="order-last flex flex-col overflow-hidden lg:col-span-2 2xl:order-none 2xl:col-span-1">
           <div className="eyebrow mb-1.5">Pipeline</div>
-          <div>
+          <div className="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-1">
             {stages.map(([b, s], i) => {
               const st = stage >= 6 || i < stage ? "done" : i === stage ? "run" : "idle";
               return (
-                <div key={b} className="grid grid-cols-[20px_1fr] items-center gap-2.5 border-b border-[var(--border-color)] py-2 last:border-b-0">
+                <div key={b} className="grid grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 border-b border-[var(--border-color)] py-2 2xl:last:border-b-0">
                   <span className={cn("grid size-[18px] place-items-center rounded-full border-2 border-gray-300 text-[10px] text-transparent", st === "run" && "animate-spin border-[#0058cc] border-t-transparent", st === "done" && "border-emerald-500 bg-emerald-500 text-white")}>✓</span>
                   <div><b className="text-[13.5px] font-semibold text-gray-900">{b}</b><div className="text-xs text-gray-600">{s}</div></div>
                 </div>
               );
             })}
           </div>
-          <div ref={logRef} className="mono mt-2.5 min-h-[120px] flex-1 overflow-auto rounded-lg border border-[var(--border-color)] bg-[#fafbfc] px-3 py-2.5 text-[11.5px] leading-relaxed text-gray-600" aria-live="polite">
+          <div ref={logRef} className="mono mt-2.5 h-44 overflow-auto rounded-lg 2xl:h-auto 2xl:min-h-[120px] 2xl:flex-1 border border-[var(--border-color)] bg-[#fafbfc] px-3 py-2.5 text-[11.5px] leading-relaxed text-gray-600" aria-live="polite">
             {log.map((l, i) => (
               <div key={i}><span className="text-gray-400">{l.t}</span> <span className={cn(l.ok && "text-emerald-600", "[&_b]:font-semibold [&_b]:text-gray-900")} dangerouslySetInnerHTML={{ __html: l.html }} /></div>
             ))}
           </div>
         </Card>
 
-        <div className="relative min-h-[460px]">
+        <div className="relative h-[460px] lg:h-[580px] 2xl:h-auto 2xl:min-h-[460px]">
           <OntologyGraph ref={graph} layer={layer} onSelect={setSel} className="absolute inset-0" />
-          <div className="pointer-events-none absolute top-3 right-3 left-3 flex items-center justify-between gap-2.5">
+          <div className="pointer-events-none absolute top-3 right-3 left-3 flex flex-wrap items-center justify-between gap-2">
             <div className="pointer-events-auto inline-flex overflow-hidden rounded-md border border-[var(--border-color)] bg-white">
               {(["both", "data", "sem"] as Layer[]).map((l) => (
                 <button key={l} type="button" onClick={() => setLayer(l)} className={cn("h-[30px] px-2.5 text-[13px] text-gray-600", layer === l && "bg-[#eef6fc] font-medium text-[#0058cc]")}>
@@ -114,18 +114,18 @@ export default function MapPage() {
                 </button>
               ))}
             </div>
-            <div className="pointer-events-auto flex gap-1.5">
+            <div className="pointer-events-auto flex flex-wrap gap-1.5">
               <Pill>{counts.t} tables</Pill><Pill tone="blue">{counts.s} terms</Pill><Pill>{counts.e} links</Pill>
             </div>
           </div>
-          <div className="absolute bottom-3 left-3 flex gap-3 rounded-md border border-[var(--border-color)] bg-white px-2.5 py-1 text-[11.5px] text-gray-600">
+          <div className="absolute right-3 bottom-3 left-3 flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap gap-x-3 gap-y-0.5 rounded-md border border-[var(--border-color)] bg-white px-2.5 py-1 text-[11.5px] text-gray-600">
             <span><i className="mr-1.5 inline-block size-2.5 rounded-sm border-[1.5px] border-slate-500 bg-white align-[-1px]" />table</span>
             <span><i className="mr-1.5 inline-block size-2.5 rounded-full bg-[#0058cc] align-[-1px]" />business term</span>
             <span className="text-gray-400">drag · hover · click</span>
           </div>
         </div>
 
-        <Card className="flex flex-col gap-3 overflow-auto">
+        <Card className="flex max-h-[580px] flex-col gap-3 overflow-auto 2xl:max-h-none">
           {!sel ? (
             <div className="py-10 text-center text-sm text-gray-600">Select a table or term<br /><span className="text-xs">to see what was inferred</span></div>
           ) : sel.kind === "t" ? (
@@ -153,7 +153,7 @@ export default function MapPage() {
 }
 
 function Row({ l, r }: { l: React.ReactNode; r: React.ReactNode }) {
-  return <div className="flex items-center justify-between gap-2 border-b border-[var(--border-color)] py-1.5 text-[12.5px] last:border-b-0">{l}{r}</div>;
+  return <div className="flex flex-wrap items-center justify-between gap-x-2 border-b border-[var(--border-color)] py-1.5 text-[12.5px] break-all last:border-b-0">{l}{r}</div>;
 }
 
 function TableDetail({ n }: { n: GraphNode }) {

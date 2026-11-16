@@ -97,10 +97,39 @@ the policy that allows reading api-tokens and RBAC for the organization, stored 
 environment (`IBLAI_API_KEY`, server-side only, never inlined into the client bundle, as the Vibe
 starter's `config.apiKey()` already arranges).
 
-## 7. What the Vibe starter gives us
+## 7. As implemented in this console
 
-`/iblai-vibe-auth` installs `providers/iblai-providers.tsx` (AuthProvider → TenantProvider),
-`lib/iblai/auth-utils.ts` (`redirectToAuthSpa`, `hasNonExpiredAuthToken`, `handleLogout`),
-`lib/iblai/config.ts` (service URLs; set `NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai`), the
-`sso-login-complete` route and `hooks/use-user.ts`. Our `app/(app)/layout.tsx` wraps the shell in
-those providers and nothing else changes.
+Sign-in is wired with the iblai/vibe starter's provider chain (`/iblai-vibe-auth`), single-organization:
+
+| File | Role |
+|---|---|
+| `frontend/providers/iblai-providers.tsx` | `initializeDataLayer` → Redux store → `AuthProvider` → `TenantProvider`. Redirects to the auth app when there is no valid session; persists re-minted tokens on organization switch. |
+| `frontend/app/(auth)/sso-login-complete/page.tsx` | The SDK `SsoLogin` callback. Lives outside the providers so it can store the tokens before `AuthProvider` checks them. |
+| `frontend/lib/iblai/config.ts` | Service URLs. Defaults to the hosted platform; `NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_AUTH_URL` point it elsewhere (e.g. `https://ext.ibl.ai`). |
+| `frontend/lib/iblai/auth-utils.ts`, `tenant.ts`, `storage-service.ts` | Redirect to the auth app, logout, tenant resolution (`app_tenant` → `NEXT_PUBLIC_MAIN_TENANT_KEY` → `tenant`), the storage adapter the SDK expects. |
+| `frontend/lib/iblai/session.tsx` | Reads the stored session (user, email, tenants, `is_admin`) for the shell. Holds the User/Admin switch state. Stores nothing. |
+| `frontend/store/iblai-store.ts` | The SDK's RTK Query slices. |
+
+Configuration (`frontend/.env.local`, not committed; template in `.env.example`):
+
+```bash
+NEXT_PUBLIC_MAIN_TENANT_KEY=highereducation   # your ibl.ai organization key
+# NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai  # closed deployment
+```
+
+Verified on 2026-11-16: an unauthenticated visit to `http://localhost:3000` redirects to
+`https://login.iblai.app/login?app=custom&redirect-to=http://localhost:3000&tenant=highereducation`.
+After sign-in the auth app returns to `/sso-login-complete`. **Every origin the console runs on
+(`http://localhost:3000`, the deployed hostname) must be on the organization's allowed redirect
+origins on ibl.ai**, or the auth app will not return to it.
+
+Access rules in the shell:
+
+- Signed in but not an admin of the organization → an "Administrators only" page. The console
+  manages data sources and servers; members have nothing to do here.
+- Admins get the OS User/Admin switch. In User mode the admin items in the sidebar footer
+  (Invites, Management, API, Secrets, Advanced) and the Billing icon are hidden, as in the OS.
+
+Demo mode: `NEXT_PUBLIC_DEMO=1` skips sign-in and serves a fixed "Demo Admin" session so the UI can
+be reviewed and screenshotted without an account. SDK panels (Management, API, Secrets, Advanced,
+Billing, Invites, Notifications) then show a sign-in notice instead of calling ibl.ai.

@@ -39,7 +39,7 @@ export default function OntologyPage() {
           </>
         }
       />
-      <div className="grid gap-4 lg:grid-cols-[250px_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)]">
         <Card className="h-fit">
           <TreeGroup title="Object Types" count={14}>
             {objectTypes.slice(0, 9).map((o) => <TreeItem key={o.name} color="#0058cc" label={o.name} right={o.status === "suggested" ? "new" : o.systems > 1 ? `${o.systems} systems` : undefined} active={o.name === "Student"} />)}

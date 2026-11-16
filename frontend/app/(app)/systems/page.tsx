@@ -45,7 +45,7 @@ export default function SystemsPage() {
         }
       />
 
-      <div className="grid items-start gap-4 lg:grid-cols-[1fr_380px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <div>
           <Card className="mb-3.5">
             <div className="mb-2 flex items-center justify-between">
@@ -53,7 +53,7 @@ export default function SystemsPage() {
               <span className="text-xs text-gray-600">{systems.length} databases · {apiSystems.length} API</span>
             </div>
             {systems.map((s) => (
-              <div key={s.name} className="grid grid-cols-[34px_1fr_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0">
+              <div key={s.name} className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0">
                 <div className="grid size-[34px] place-items-center rounded-lg text-[11px] font-bold text-white" style={{ background: ["#336791", "#E48E00", "#FF7A59", "#29B5E8"][["sis", "lms", "crm", "fin"].indexOf(s.key)] }}>
                   {s.abbr}
                 </div>
@@ -71,7 +71,7 @@ export default function SystemsPage() {
               </div>
             ))}
             {apiSystems.map((a) => (
-              <div key={a.name} className="grid grid-cols-[34px_1fr_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0">
+              <div key={a.name} className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0">
                 <div className="grid size-[34px] place-items-center rounded-lg bg-[#FF7A59] text-[11px] font-bold text-white">API</div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5 text-sm"><b className="text-gray-900">{a.name}</b> <span className="text-gray-600">· HTTP API</span> <Tag tone="green">serve</Tag></div>
@@ -107,7 +107,7 @@ export default function SystemsPage() {
 
         <Card>
           <Tabs defaultValue="db">
-            <TabsList variant="line" className="mb-3 w-full justify-start border-b border-[var(--border-color)]">
+            <TabsList variant="line" className="mb-3 w-full justify-start overflow-x-auto overflow-y-hidden border-b border-[var(--border-color)]">
               <TabsTrigger value="db" className="flex-none px-3 data-active:text-[#0058cc] data-active:after:bg-[#0058cc]">Database</TabsTrigger>
               <TabsTrigger value="api" className="flex-none px-3 data-active:text-[#0058cc] data-active:after:bg-[#0058cc]">HTTP API</TabsTrigger>
               <TabsTrigger value="pre" className="flex-none px-3 data-active:text-[#0058cc] data-active:after:bg-[#0058cc]">Prebuilt</TabsTrigger>

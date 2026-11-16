@@ -1,4 +1,5 @@
 // Captures every console page for docs/. Run with the dev server up:
+//   NEXT_PUBLIC_DEMO=1 pnpm dev   (demo mode: no sign-in needed)
 //   node scripts/screenshots.mjs [baseUrl]
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
@@ -25,17 +26,27 @@ const shots = [
   { name: "11-catalog", path: "/catalog" },
   { name: "12-compilation", path: "/sync" },
   { name: "13-config", path: "/config" },
+  { name: "14-notifications", path: "/notifications" },
+  { name: "15-collapsed-sidebar", path: "/dashboard", click: 'role=button[name="Collapse sidebar"]', reset: 'role=button[name="Expand sidebar"]' },
+  { name: "16-organization-menu", path: "/dashboard", click: 'role=button[name="Switch organization"]', viewportOnly: true },
+  { name: "17-management-dialog", path: "/dashboard", click: '[data-testid="sidebar-footer"] >> role=button[name="Management"]', viewportOnly: true },
+  { name: "18-mobile", path: "/dashboard", mobile: true },
+  { name: "19-mobile-menu", path: "/dashboard", mobile: true, click: 'role=button[name="Open menu"]', viewportOnly: true },
 ];
 
 const browser = await chromium.launch({ channel: "chrome" });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5, colorScheme: "light" });
+const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5, colorScheme: "light" });
+const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: "light" });
 for (const s of shots) {
+  const page = s.mobile ? phone : desktop;
   await page.goto(base + s.path, { waitUntil: "networkidle" });
   await page.waitForTimeout(s.wait ?? 800);
   if (s.click) { await page.locator(s.click).first().click(); await page.waitForTimeout(400); }
   if (s.then) { await page.locator(s.then).first().click(); await page.waitForTimeout(s.wait ?? 1200); }
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: `${out}${s.name}.png`, fullPage: true });
+  await page.screenshot({ path: `${out}${s.name}.png`, fullPage: !s.viewportOnly && !s.mobile });
+  if (s.reset) await page.locator(s.reset).first().click();
+  await page.keyboard.press("Escape");
   console.log("saved", s.name);
 }
 await browser.close();

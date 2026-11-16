@@ -57,6 +57,13 @@ never published.
 At install time only: container registries (`nvcr.io`, `docker.io`, `ghcr.io`) and the Toolbox
 release download. Mirror them internally if the host must stay closed after install.
 
+Sign-in: the auth app only returns to origins on the organization's **allowed redirect origins**
+on ibl.ai. Add the console's internal hostname there before go-live.
+
+Checked on 2026-11-16: `ext.ibl.ai` does not answer from outside its allow-list (connections from an
+unlisted address time out), while the hosted `api.iblai.app` does. Local development therefore uses
+the hosted platform; the deployment sets `NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai`.
+
 Resolved on 2026-11-15: `ext.ibl.ai` = `129.80.99.227`; the hosted cloud (`api.iblai.app`,
 `os.ibl.ai`, `login.iblai.app`) = `141.148.72.26`. Set `NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai`
 so every ibl.ai call from the browser and from the host uses the backend you allow-listed. Pin by

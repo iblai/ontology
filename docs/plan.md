@@ -40,7 +40,7 @@ forced, and the gateway design are in [data-sources.md](data-sources.md).
 
 ## Next steps, in order
 
-1. **Auth.** Run `/iblai-vibe-auth` with `iblai.env` (tenant key, API key). Shell is unchanged; `app/(app)/layout.tsx` gets the provider chain.
+1. ~~**Auth.**~~ Done: ibl.ai SSO, SDK footer panels, notifications, profile menu ([auth.md](auth.md)).
 2. **ibl.ai reads.** Replace the IBL-tagged mocks with SDK/REST calls (MCP servers, api-tokens, RBAC, analytics, org metadata).
 3. **Host route handlers.** `app/api/host/*`: verify the ibl.ai token, proxy auto-ontology, read/write `servers/{slug}/tools.yaml` + flags, supervise Toolbox, tail its log. No storage.
 4. **Dissect for real.** Point at the auto-ontology compose stack; stream its ingest/compile status into the Map log; draw `/api/exploration/*` instead of mock tables.

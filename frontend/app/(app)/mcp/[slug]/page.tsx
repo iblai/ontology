@@ -33,19 +33,19 @@ export default function ServerPage({ params }: { params: Promise<{ slug: string 
       />
       <div className="grid gap-3.5">
         <div className="mono flex flex-wrap items-center gap-2.5 rounded-lg border border-[var(--border-color)] bg-[#fafbfc] px-3 py-2.5 text-[13px] text-gray-900">
-          <span className="text-gray-500">POST</span><span className="flex-1">{url}</span><Tag tone="green">streamable-http</Tag><Tag>{srv.toolsets} toolsets</Tag>
+          <span className="text-gray-500">POST</span><span className="min-w-[14rem] flex-1 break-all">{url}</span><Tag tone="green">streamable-http</Tag><Tag>{srv.toolsets} toolsets</Tag>
           <Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(url).then(() => setCopied(true), () => setCopied(false)); }}>{copied ? "Copied" : "Copy"}</Button>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat value={srv.calls24h.toLocaleString()} label="agent tool calls · 24h" spark={sparklines.calls} />
           <Stat value={srv.agents} label="agents attached" />
           <Stat value={srv.tools} label={`tools in ${srv.toolsets} toolsets`} />
-          <Stat value={<span className="mono text-base">{srv.top}</span>} label="most called tool" spark={sparklines.top} />
+          <Stat value={<span className="mono block truncate text-base" title={srv.top}>{srv.top}</span>} label="most called tool" spark={sparklines.top} />
         </div>
 
         <Card>
           <Tabs defaultValue="connect">
-            <TabsList variant="line" className="mb-4 w-full justify-start border-b border-[var(--border-color)]">
+            <TabsList variant="line" className="mb-4 w-full justify-start overflow-x-auto overflow-y-hidden border-b border-[var(--border-color)]">
               <TabsTrigger value="connect" className={tab}>Connect</TabsTrigger>
               <TabsTrigger value="play" className={tab}>Playground</TabsTrigger>
               <TabsTrigger value="activity" className={tab}>Activity</TabsTrigger>
