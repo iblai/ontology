@@ -1,0 +1,344 @@
+# ibl.ai ontology on one server: the console, NVIDIA auto-ontology as its engine, and Caddy in front.
+#
+#   curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/compose.yaml
+#   docker compose up -d
+#
+# Needs a Linux host with Docker, Compose 2.23.1 or later, buildx and git: the engine is built
+# from NVIDIA's repository at a pinned commit on the first start.
+#
+# Change a setting here, or set the same name in a .env beside this file or in the shell.
+# ONTOLOGY_PLATFORM is required; ONTOLOGY_HOST is the name this server answers at.
+# Nothing secret goes in this file: the first start writes the secrets into the `secrets` volume.
+# The engine's admin password: docker compose exec ontology cat /secrets/admin-password
+name: iblai-ontology-console
+
+x-settings:
+  ONTOLOGY_PLATFORM: &platform "${ONTOLOGY_PLATFORM:?set it to the key of the ibl.ai platform this server serves, at the top of compose.yaml or in a .env beside it}"
+  ONTOLOGY_HOST: &host "${ONTOLOGY_HOST:-localhost}" # localhost gets a certificate from Caddy's own authority
+  ONTOLOGY_DM_URL: &dm-url "${ONTOLOGY_DM_URL:-https://api.iblai.app/dm}"
+  OPENAI_API_KEY: &openai-key "${OPENAI_API_KEY:-}" # empty: no inferred joins, no answers
+  OPENAI_API_BASE_URL: &openai-base "${OPENAI_API_BASE_URL:-https://api.openai.com/v1}"
+  OPENAI_MODEL: &openai-model "${OPENAI_MODEL:-gpt-4.1}"
+  OPENAI_EMBEDDING_MODEL: &openai-embedding "${OPENAI_EMBEDDING_MODEL:-text-embedding-3-large}"
+
+# Nothing below this line is read from the environment.
+
+x-logging: &logging
+  driver: local # rotates by itself
+
+# NVIDIA auto-ontology at the commit the console was proven on; a new pin rebuilds by itself.
+x-engine: &engine
+  build:
+    context: https://github.com/NVIDIA/auto-ontology.git#22e22c894df8cde7a78f854ea40476a8577e9a3d
+  image: auto-ontology:22e22c894df8cde7a78f854ea40476a8577e9a3d
+  network_mode: host
+  extra_hosts: &names # the service names, which the host's network does not resolve
+    - "postgres:127.0.0.1"
+    - "auto-ontology:127.0.0.1"
+    - "ingestion-service:127.0.0.1"
+  configs: &wrapper
+    - source: with-secrets
+      target: /etc/with-secrets.sh
+  logging: *logging
+
+x-web: &web
+  build:
+    context: https://github.com/NVIDIA/auto-ontology.git#22e22c894df8cde7a78f854ea40476a8577e9a3d:frontend
+    args:
+      PYTHON_API_URL: http://127.0.0.1:3001
+  image: auto-ontology-frontend:22e22c894df8cde7a78f854ea40476a8577e9a3d
+  network_mode: host
+  extra_hosts: *names
+  configs: *wrapper
+  logging: *logging
+
+# Where every client finds the database; the password comes from the secrets.
+x-database: &database
+  POSTGRES_HOST: 127.0.0.1
+  POSTGRES_PORT: "5434"
+  POSTGRES_USER: postgres
+  POSTGRES_DATABASE: auto_ontology
+
+# The engine's models go through the console's private route; the keys come from the secrets.
+x-models: &models
+  REASONING_MODEL: openai/chat
+  REASONING_ENDPOINT: http://127.0.0.1:3000/internal/models/v1
+  NON_REASONING_MODEL: openai/chat
+  NON_REASONING_ENDPOINT: http://127.0.0.1:3000/internal/models/v1
+  EMBED_MODEL: openai/embedding
+  EMBED_ENDPOINT: http://127.0.0.1:3000/internal/models/v1
+  RERANK_MODEL: openai/rerank
+  RERANK_ENDPOINT: http://127.0.0.1:3000/internal/models/v1/rerank # else the engine appends /v1/ranking
+
+x-api-secrets: &api-secrets >-
+  POSTGRES_PASSWORD=db-password REASONING_API_KEY=model-key NON_REASONING_API_KEY=model-key
+  EMBED_API_KEY=model-key RERANK_API_KEY=model-key
+
+x-secrets-written: &secrets-written
+  condition: service_completed_successfully
+
+services:
+  # Writes the four secrets on the first start and never again.
+  secrets:
+    image: pgvector/pgvector:pg17
+    network_mode: none
+    entrypoint: ["sh", "/etc/make-secrets.sh"]
+    configs:
+      - source: make-secrets
+        target: /etc/make-secrets.sh
+    volumes:
+      - secrets:/secrets
+    restart: "no"
+    logging: *logging
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    network_mode: host
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=5434"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: auto_ontology
+      POSTGRES_PASSWORD_FILE: /secrets/db-password
+      PGPORT: "5434" # for the healthcheck's pg_isready
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auto_ontology"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      secrets: *secrets-written
+    restart: unless-stopped
+    logging: *logging
+
+  auto-ontology-migrate:
+    <<: *engine
+    entrypoint:
+      ["/usr/bin/tini", "--", "sh", "/etc/with-secrets.sh", "/usr/local/bin/entrypoint.sh"]
+    command: ["migrate"]
+    environment:
+      <<: *database
+      SECRETS: POSTGRES_PASSWORD=db-password
+    volumes:
+      - secrets:/secrets:ro
+    depends_on:
+      secrets: *secrets-written
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  frontend-migrate:
+    <<: *web
+    working_dir: /app/migrate
+    entrypoint: ["/usr/bin/tini", "--", "sh", "/etc/with-secrets.sh"]
+    command: ["sh", "prisma/migrate.sh"]
+    environment:
+      <<: *database
+      SECRETS: POSTGRES_PASSWORD=db-password
+    volumes:
+      - secrets:/secrets:ro
+    depends_on:
+      secrets: *secrets-written
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # NVIDIA's own module, started with uvicorn.run's host swapped: it hard-codes 0.0.0.0.
+  auto-ontology:
+    <<: *engine
+    entrypoint: &loopback
+      - /usr/bin/tini
+      - --
+      - sh
+      - /etc/with-secrets.sh
+      - python
+      - -c
+      - |
+        import runpy, sys, uvicorn
+        run = uvicorn.run
+        uvicorn.run = lambda app, **options: run(app, **{**options, "host": "127.0.0.1"})
+        runpy.run_module(sys.argv[1], run_name="__main__")
+    command: ["auto_ontology.server"]
+    environment:
+      <<: [*database, *models]
+      INGESTION_SERVICE_URL: http://127.0.0.1:3002
+      SECRETS: *api-secrets
+    volumes:
+      - secrets:/secrets:ro
+    depends_on:
+      secrets: *secrets-written
+      postgres:
+        condition: service_started
+      auto-ontology-migrate:
+        condition: service_completed_successfully
+      ingestion-service:
+        condition: service_started
+    restart: unless-stopped
+
+  ingestion-service:
+    <<: *engine
+    entrypoint: *loopback
+    command: ["auto_ontology.ingestion_service"]
+    environment:
+      <<: [*database, *models]
+      INGESTION_PORT: "3002"
+      SECRETS: *api-secrets
+    volumes:
+      - secrets:/secrets:ro
+    # The image's own healthcheck is the API's; this one is the ingestion service's liveness.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3002/health/live', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      secrets: *secrets-written
+      postgres:
+        condition: service_started
+      auto-ontology-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # NVIDIA's pages are not served here: they open through `ssh -L 3100:127.0.0.1:3100 <server>`.
+  auto-ontology-frontend:
+    <<: *web
+    entrypoint: ["/usr/bin/tini", "--", "sh", "/etc/with-secrets.sh"]
+    command: ["node", "app/server.js"]
+    environment:
+      <<: *database
+      PYTHON_API_URL: http://127.0.0.1:3001
+      PORT: "3100"
+      HOSTNAME: 127.0.0.1
+      APP_URL: http://localhost:3100
+      AUTO_ONTOLOGY_ADMIN_EMAIL: &admin admin@ontology.local
+      SECRETS: POSTGRES_PASSWORD=db-password AUTH_SECRET=auth-secret AUTO_ONTOLOGY_ADMIN_PASSWORD=admin-password
+    volumes:
+      - secrets:/secrets:ro
+    depends_on:
+      secrets: *secrets-written
+      auto-ontology:
+        condition: service_healthy # its admin seed calls the API as it starts
+      frontend-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # The whole console; it makes its engine key on the first call that needs one.
+  ontology:
+    # The release workflow stamps the version here and in install.sh.
+    image: ghcr.io/iblai/ontology:dev
+    network_mode: host
+    init: true # reaps the Toolbox processes it starts
+    environment:
+      HOSTNAME: 127.0.0.1
+      PORT: "3000"
+      ONTOLOGY_PLATFORM: *platform
+      ONTOLOGY_DM_URL: *dm-url
+      AO_URL: http://127.0.0.1:3100
+      AO_ORIGIN: http://localhost:3100
+      AO_ADMIN_EMAIL: *admin
+      AO_ADMIN_PASSWORD_FILE: /secrets/admin-password
+      ONTOLOGY_MODEL_KEY_FILE: /secrets/model-key
+      OPENAI_API_KEY: *openai-key
+      OPENAI_API_BASE_URL: *openai-base
+      OPENAI_MODEL: *openai-model
+      OPENAI_EMBEDDING_MODEL: *openai-embedding
+    volumes:
+      - ontology_data:/data
+      - secrets:/secrets:ro
+    healthcheck:
+      # The image has no curl; health answers without a sign-in.
+      test:
+        - CMD
+        - node
+        - -e
+        - 'fetch("http://127.0.0.1:3000/api/host/health").then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      secrets: *secrets-written
+    restart: unless-stopped
+    logging: *logging
+
+  # Gets and renews the certificate for ONTOLOGY_HOST, and sends http on to https.
+  proxy:
+    image: caddy:2-alpine
+    network_mode: host
+    environment:
+      ONTOLOGY_HOST: *host
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - certificates:/data
+    depends_on:
+      ontology:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+configs:
+  # Compose interpolates these texts: a literal dollar sign is written twice.
+  make-secrets:
+    content: |
+      set -eu
+      umask 0222
+      for name in db-password auth-secret admin-password model-key; do
+        file=/secrets/$$name
+        if [ ! -s "$$file" ]; then
+          od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$$file.new"
+          mv -f "$$file.new" "$$file"
+          echo "wrote $$file"
+        fi
+      done
+
+  # Puts each NAME=file pair of SECRETS into the environment, then runs the service's command.
+  with-secrets:
+    content: |
+      set -eu
+      for pair in $${SECRETS:?names the secrets this service reads}; do
+        name=$${pair%%=*}
+        file=/secrets/$${pair#*=}
+        value=$$(cat "$$file")
+        if [ -z "$$value" ]; then
+          echo "$$file is empty: the secrets service writes it; run docker compose up -d again" >&2
+          exit 1
+        fi
+        export "$$name=$$value"
+      done
+      unset SECRETS
+      exec "$$@"
+
+  # Routes in written order (a route block is not reordered); NVIDIA's answers can never run script.
+  caddyfile:
+    content: |
+      {
+        admin off # no admin API on the host's loopback
+      }
+
+      {$$ONTOLOGY_HOST} {
+        @second path_regexp ^/iblai/(api/host/.*|[^/]+/[^/]+/mcp)$$
+        route {
+          reverse_proxy /api/host/* 127.0.0.1:3000
+          respond /api/auth/* 404
+          respond /internal/* 404
+          reverse_proxy /api/* 127.0.0.1:3100 {
+            header_down Content-Security-Policy sandbox
+            header_down X-Content-Type-Options nosniff
+          }
+          uri @second strip_prefix /iblai
+          reverse_proxy 127.0.0.1:3000
+        }
+      }
+
+volumes:
+  secrets:
+  postgres_data:
+  ontology_data:
+  certificates:

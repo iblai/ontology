@@ -95,7 +95,7 @@ describe("files under ONTOLOGY_HOME", () => {
 
   it("refuses a platform's path outside a platform, and keeps hostPath host-wide", () => {
     expect(() => homePath("env")).toThrow(/for no platform/);
-    expect(hostPath("engine-platform")).toBe(path.join(home, "engine-platform"));
+    expect(hostPath("engine-key")).toBe(path.join(home, "engine-key"));
     expect(() => hostPath("..", "x")).toThrow(/leaves the host’s folder/);
   });
 

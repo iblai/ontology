@@ -2,6 +2,7 @@
 
 import type { AoConnectionConfig, AoValidationIssue } from "@/lib/ao-types";
 import { engine } from "./engine";
+import { dropEngineKey } from "./engine-key";
 import { HostError } from "./errors";
 import type { HostSystemInput } from "./types";
 
@@ -14,9 +15,10 @@ export async function aoFetch(path: string, init?: RequestInit): Promise<Respons
   const headers = new Headers(init?.headers);
   headers.set("x-api-key", key);
   if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  let response: Response;
   try {
     // No redirect is followed: the key goes to the configured address, nowhere else.
-    return await fetch(`${url}/api${path}`, {
+    response = await fetch(`${url}/api${path}`, {
       ...init,
       headers,
       cache: "no-store",
@@ -28,6 +30,9 @@ export async function aoFetch(path: string, init?: RequestInit): Promise<Respons
     const reason = cause instanceof Error ? cause.message : String(cause);
     throw new HostError(502, `The engine did not answer: ${reason}`);
   }
+  // A key the engine no longer knows: if this server made it, the next call makes another.
+  if (response.status === 401) await dropEngineKey(key);
+  return response;
 }
 
 /** An engine's error answer as a HostError in its own words; a refused key is the host's fault. */
@@ -37,7 +42,8 @@ export async function aoError(response: Response): Promise<HostError> {
     return new HostError(
       502,
       `The engine refused this host’s key (${response.status}): ${words.replace(/\.$/, "")}. ` +
-        "Check engine.json or AO_API_KEY, and the role of the user who minted the key.",
+        "Check engine.json or AO_API_KEY, and the role of the user who minted the key. " +
+        "A key this server made itself is made again on the next call.",
     );
   }
   const { status } = response;

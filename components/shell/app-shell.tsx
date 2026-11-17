@@ -15,12 +15,10 @@ import { handleLogout } from "@/lib/iblai/auth-utils";
 import { useSession } from "@/lib/iblai/session";
 import { currentTenantKey } from "@/lib/iblai/tenant";
 import { relaying, storedServer } from "@/lib/server-address";
-import { readSetupLink } from "@/lib/setup-link";
 import { AccountDialog, DemoNotice } from "./account-dialog";
 import { ConnectServer } from "./connect-server";
 import { Header } from "./header";
 import { ShellContext, type AccountTab, type ShellActions } from "./shell-context";
-import { SetupServer } from "./setup-server";
 import { SidebarContent } from "./sidebar";
 import { Walkthrough } from "./walkthrough";
 
@@ -63,19 +61,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [accountTab, setAccountTab] = useState<AccountTab | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const walkthrough = process.env.NEXT_PUBLIC_WALKTHROUGH !== "0";
-  // Pages only: a kept setup link, or no server for this platform, stands in for the page.
+  // Pages only: no server for this platform stands in for the page.
   const relayed = relaying() && !s.demo;
-  const [setup] = useState(() => (relayed && s.tenantKey ? readSetupLink() : null));
   const [connected] = useState(() => !relayed || !!storedServer(currentTenantKey()));
-  const page = setup ? (
-    <SetupServer link={setup} />
-  ) : !s.isAdmin ? (
-    <NotAdmin />
-  ) : connected ? (
-    children
-  ) : (
-    <ConnectServer />
-  );
+  const page = !s.isAdmin ? <NotAdmin /> : connected ? children : <ConnectServer />;
 
   const toggle = useCallback(() => {
     setCollapsed((c) => {
@@ -125,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="min-h-full min-w-0 rounded-xl border border-[var(--border-color)] bg-white px-4 py-5 pb-20 sm:px-5 sm:py-6 md:px-7">
                 {page}
               </div>
-              {walkthrough && s.isAdmin && !setup && connected && <Walkthrough />}
+              {walkthrough && s.isAdmin && connected && <Walkthrough />}
             </main>
           </div>
         </div>

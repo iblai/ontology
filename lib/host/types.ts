@@ -221,13 +221,10 @@ export type HostEvent = {
   source: "TB" | "AO" | "IBL";
 };
 
-/* ---------- a server installed from a link ---------- */
+/* ---------- whether a server answers ---------- */
 
-/** GET /api/host/setup: whether a platform holds this server. */
-export type HostSetup = { set_up: boolean };
-
-/** POST /api/host/setup: the platform the server serves from now on. */
-export type HostSetupDone = { ok: true; platform: string };
+/** GET /api/host/health: a server answers here. */
+export type HostHealth = { ok: true };
 
 /* ---------- the gateway's tools, as an MCP client sees them ---------- */
 

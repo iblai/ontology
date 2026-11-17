@@ -27,25 +27,28 @@ gateway, Toolbox and their files) on one origin.
    docker compose -f docker-compose.yml -f <this repo>/deploy/auto-ontology.override.yml up -d --build
    ```
 
-2. Sign in at http://localhost:3100 as the engine's admin, open the user menu → **API Tokens** →
-   **New token**, and copy it. It is shown once. An admin's token is needed for the model export.
+2. Give the console the engine's key, one of two ways. Sign in at http://localhost:3100 as the
+   engine's admin, open the user menu → **API Tokens** → **New token**, and copy it into
+   `AO_API_KEY` (it is shown once; an admin's token is needed for the model export). Or leave
+   `AO_API_KEY` out and set `AO_ADMIN_EMAIL`, `AO_ADMIN_PASSWORD_FILE` (a file holding the admin's
+   password) and `AO_ORIGIN=http://localhost:3100`: the console then signs in as the admin and
+   makes its own key on the first call that needs the engine.
 3. Start the console:
 
    ```bash
    pnpm install
-   cp .env.example .env.local    # set AO_API_KEY
+   cp .env.example .env.local    # set ONTOLOGY_PLATFORM, and AO_API_KEY or the admin's sign-in
    pnpm dev                      # http://localhost:3000 → signs in with ibl.ai
    ```
 
-   No setting names the platform: the console works on the one you sign in to, and the header's
-   platform menu switches to another.
+   `ONTOLOGY_PLATFORM` is the key of the ibl.ai platform the engine belongs to. With `AO_URL` set
+   and no `ONTOLOGY_PLATFORM` the dev server refuses to start. Any other platform you sign in to
+   is answered `403` "This server serves another platform."
 
-One engine serves one platform. The engine from step 1 is the host's own and serves the first
-platform whose admin uses the console. To serve another platform from the same host, start one more
-engine stack for it and write its address and service key to
-`$ONTOLOGY_HOME/platforms/<platform>/engine.json` as `{"url": "...", "key": "..."}`; until then
-that platform is told the host's engine serves another platform
-([docs/network.md](docs/network.md)).
+One engine serves one platform. To serve several from one host, leave `AO_URL` and
+`ONTOLOGY_PLATFORM` unset and write each platform's engine, on another machine, to
+`$ONTOLOGY_HOME/platforms/<platform>/engine.json` as `{"url": "...", "key": "..."}`
+([docs/network.md](docs/network.md#one-platform-or-any)).
 
 Without an ibl.ai account, run in demo mode (fixed session, SDK panels show a notice):
 
@@ -58,17 +61,29 @@ node scripts/audit-layout.mjs     # check every page at 375–1920px for broken 
 Sign-in returns only to origins on your platform's allowed redirect origins on ibl.ai; add
 `http://localhost:3000` and the deployed hostname there.
 
-## Hosted: the pages on Vercel, the server on yours
+## Install on a server
 
-The same code runs split in two. The console's pages are served from ibl.ai's Vercel
-(ontology.iblai.me for staging), built with `NEXT_PUBLIC_ONTOLOGY_RELAY=1`; they forward every
-`/api/host/*` call to the platform's own server. That server runs on a client's machine, installed
-with one command: the engine, the server half and Caddy for TLS, with the server half under
-`https://<host>/iblai/` and NVIDIA's web app at the root. Opening the link the installer prints sets
-it up for one platform. Agents call `https://<host>/iblai/<platform>/<slug>/mcp`.
+A platform's server serves the whole console from one Docker Compose file: the pages, the host API
+and the MCP gateway, NVIDIA's engine with its database, and Caddy for TLS. On a server with Docker
+(Compose 2.23.1 or later, and buildx) and git:
 
-The install is in [docs/install.md](docs/install.md); what talks to what is in
-[docs/network.md](docs/network.md).
+```bash
+curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/compose.yaml
+docker compose up -d
+```
+
+`ONTOLOGY_PLATFORM`, the first setting at the top of `compose.yaml`, names the ibl.ai platform the
+server's engine belongs to; Compose stops without it. `ONTOLOGY_HOST` is the name the server
+answers at (default `localhost`). Set both in the file, or the same names in a `.env` or the shell.
+The console is then at `https://<host>/`, and agents call `https://<host>/<platform>/<slug>/mcp`.
+
+The install, with the optional `deploy/install.sh`, is in [docs/install.md](docs/install.md); what
+talks to what is in [docs/network.md](docs/network.md).
+
+The pages can also be hosted elsewhere. Built with `NEXT_PUBLIC_ONTOLOGY_RELAY=1`, the console
+serves pages only (ontology.iblai.me for staging) and forwards every `/api/host/*` call to the
+platform's server at `https://<host>/iblai`, which an administrator connects under **Connect a
+server**.
 
 ## Documentation
 
@@ -85,7 +100,7 @@ The install is in [docs/install.md](docs/install.md); what talks to what is in
 
 | Document                                     | What it covers                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [docs/install.md](docs/install.md)           | Installing a platform's server on a fresh Ubuntu with one command, and setting it up from its link     |
+| [docs/install.md](docs/install.md)           | Installing the console on a platform's server with Docker Compose, and the optional script             |
 | [docs/auth.md](docs/auth.md)                 | ibl.ai SSO: the session as iblai/os implements it, how this console wires it, configuration, demo mode |
 | [docs/network.md](docs/network.md)           | Topology, inbound, outbound to `ext.ibl.ai` and data sources, what runs where, hardening               |
 | [docs/data-sources.md](docs/data-sources.md) | Where every value on screen comes from, and where each thing is saved                                  |
@@ -123,28 +138,30 @@ All in [docs/screenshots/](docs/screenshots/), one per page and tab:
 The repository root is the Next.js 16 console in the ibl.ai shell (os.ibl.ai header and sidebar,
 Open Sans, `#0058cc`).
 
-| Path                                                                     | What it is                                                                                                                                            |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/(app)/*`                                                            | One folder per console route: dashboard, systems, map, ontology, mcp, mcp/new, mcp/[slug], agents, roles, access, catalog, sync (Compilation), config |
-| `components/shell/`                                                      | Sidebar, header, page primitives, shell state, the OS-style footer dialogs hosting SDK tabs and the prototype walkthrough stepper                     |
-| `components/graph/ontology-graph.tsx`                                    | Canvas force graph used on the Map                                                                                                                    |
-| `components/ui/`                                                         | shadcn components (base-nova on Base UI)                                                                                                              |
-| `lib/iblai/`, `store/`, `app/(auth)/`                                    | ibl.ai SSO: session, SDK store, sign-in callback                                                                                                      |
-| `lib/host/`, `app/api/host/`                                             | The host layer: checks the caller with ibl.ai, proxies the platform's engine, writes its server configs and runs one Toolbox process per server       |
-| [`lib/host/setup.ts`](lib/host/setup.ts)                                 | A server installed from a link: the setup code check and the one platform it serves                                                                   |
-| [`lib/host/relay.ts`](lib/host/relay.ts)                                 | On the pages-only console, forwards each `/api/host/*` call to the server the browser names                                                           |
-| [`lib/server-address.ts`](lib/server-address.ts)                         | The `x-ontology-server` header, a server's address `https://<host>/iblai`, and the browser's store of it per platform                                 |
-| `app/[platform]/[slug]/mcp/`                                             | The gateway agents call: origin, credential and toolset checks, then Toolbox                                                                          |
-| `lib/data.ts`, `lib/ibl-flows.ts`                                        | What each page reads and does; the ibl.ai writes (roles, policies, API keys, agents)                                                                  |
-| [`lib/mock.ts`](lib/mock.ts)                                             | The fixed data demo mode shows                                                                                                                        |
-| [`deploy/auto-ontology.override.yml`](deploy/auto-ontology.override.yml) | Compose override that runs the engine on the host's network, on loopback, its web app on `3100`                                                       |
-| [`deploy/server.yml`](deploy/server.yml)                                 | Compose file for a client's server, on top of the engine's: the server half on `127.0.0.1:3000` and Caddy with the `/iblai` routes                    |
-| [`deploy/install.sh`](deploy/install.sh)                                 | The one-command install of a platform's server on Ubuntu ([docs/install.md](docs/install.md))                                                         |
-| [`Dockerfile`](Dockerfile)                                               | The server half's image, `ghcr.io/iblai/ontology`: Next's standalone build with the Toolbox binary                                                    |
-| [`.env.example`](.env.example)                                           | Environment settings                                                                                                                                  |
-| [`scripts/screenshots.mjs`](scripts/screenshots.mjs)                     | Regenerates every screenshot in `docs/screenshots/`                                                                                                   |
-| [`scripts/audit-layout.mjs`](scripts/audit-layout.mjs)                   | Checks every page at six widths for overflow, overlap and sideways scrolling                                                                          |
-| [`providers/iblai-providers.tsx`](providers/iblai-providers.tsx)         | ibl.ai SSO provider chain (see docs/auth.md)                                                                                                          |
-| [`AGENTS.md`](AGENTS.md)                                                 | Rules for coding agents, written by `next dev`; keep it committed                                                                                     |
-| [`docs/`](docs/)                                                         | The documents above                                                                                                                                   |
-| [`.claude/launch.json`](.claude/launch.json)                             | Dev-server definition for the Claude desktop preview                                                                                                  |
+| Path                                                                     | What it is                                                                                                                                                    |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/(app)/*`                                                            | One folder per console route: dashboard, systems, map, ontology, mcp, mcp/new, mcp/[slug], agents, roles, access, catalog, sync (Compilation), config         |
+| `components/shell/`                                                      | Sidebar, header, page primitives, shell state, the OS-style footer dialogs hosting SDK tabs and the prototype walkthrough stepper                             |
+| `components/graph/ontology-graph.tsx`                                    | Canvas force graph used on the Map                                                                                                                            |
+| `components/ui/`                                                         | shadcn components (base-nova on Base UI)                                                                                                                      |
+| `lib/iblai/`, `store/`, `app/(auth)/`                                    | ibl.ai SSO: session, SDK store, sign-in callback                                                                                                              |
+| `lib/host/`, `app/api/host/`                                             | The host layer: checks the caller with ibl.ai, proxies the platform's engine, writes its server configs and runs one Toolbox process per server               |
+| [`lib/host/engine-key.ts`](lib/host/engine-key.ts)                       | The server's own engine key: signs in as the engine's admin, makes a key and keeps it in `$ONTOLOGY_HOME/engine-key`                                          |
+| [`lib/host/models.ts`](lib/host/models.ts), `app/internal/models/v1/`    | The loopback model route the engine calls: swaps in the OpenAI model, adds `OPENAI_API_KEY` and sends the call on                                             |
+| [`instrumentation.ts`](instrumentation.ts)                               | The start-up check: a server with `AO_URL` and no `ONTOLOGY_PLATFORM` refuses to start                                                                        |
+| [`lib/host/relay.ts`](lib/host/relay.ts)                                 | On the pages-only console, forwards each `/api/host/*` call to the server the browser names                                                                   |
+| [`lib/server-address.ts`](lib/server-address.ts)                         | The `x-ontology-server` header, a server's address `https://<host>/iblai`, and the browser's store of it per platform                                         |
+| `app/[platform]/[slug]/mcp/`                                             | The gateway agents call: origin, credential and toolset checks, then Toolbox                                                                                  |
+| `lib/data.ts`, `lib/ibl-flows.ts`                                        | What each page reads and does; the ibl.ai writes (roles, policies, API keys, agents)                                                                          |
+| [`lib/mock.ts`](lib/mock.ts)                                             | The fixed data demo mode shows                                                                                                                                |
+| [`deploy/compose.yaml`](deploy/compose.yaml)                             | The install: the console, NVIDIA's engine built from its pinned commit, Postgres, Caddy and the four generated secrets                                        |
+| [`deploy/install.sh`](deploy/install.sh)                                 | Optional: prepares an Ubuntu server and runs the Compose install ([docs/install.md](docs/install.md))                                                         |
+| [`deploy/auto-ontology.override.yml`](deploy/auto-ontology.override.yml) | For development: runs a local checkout of the engine on the host's network, on loopback, its web app on `3100`; not part of a release                         |
+| [`Dockerfile`](Dockerfile)                                               | The console's image, `ghcr.io/iblai/ontology`: Next's standalone build of the whole console with the Toolbox binary; the ibl.ai addresses are build arguments |
+| [`.env.example`](.env.example)                                           | Environment settings                                                                                                                                          |
+| [`scripts/screenshots.mjs`](scripts/screenshots.mjs)                     | Regenerates every screenshot in `docs/screenshots/`                                                                                                           |
+| [`scripts/audit-layout.mjs`](scripts/audit-layout.mjs)                   | Checks every page at six widths for overflow, overlap and sideways scrolling                                                                                  |
+| [`providers/iblai-providers.tsx`](providers/iblai-providers.tsx)         | ibl.ai SSO provider chain (see docs/auth.md)                                                                                                                  |
+| [`AGENTS.md`](AGENTS.md)                                                 | Rules for coding agents, written by `next dev`; keep it committed                                                                                             |
+| [`docs/`](docs/)                                                         | The documents above                                                                                                                                           |
+| [`.claude/launch.json`](.claude/launch.json)                             | Dev-server definition for the Claude desktop preview                                                                                                          |

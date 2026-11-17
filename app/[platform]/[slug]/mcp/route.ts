@@ -8,9 +8,8 @@ import { HostError } from "@/lib/host/errors";
 import { assertSlug } from "@/lib/host/files";
 import { recordRefusal } from "@/lib/host/log";
 import { checkRate, handleMessage, hostAllowed, type RpcContext } from "@/lib/host/mcp";
-import { inPlatform } from "@/lib/host/platform";
+import { assertServed, inPlatform } from "@/lib/host/platform";
 import { serving, type Serving } from "@/lib/host/servers";
-import { assertServes } from "@/lib/host/setup";
 import { isPlatformKey } from "@/lib/platform";
 import { relaying } from "@/lib/server-address";
 
@@ -128,11 +127,12 @@ async function within(
   run: () => Promise<Response>,
 ): Promise<Response> {
   if (relaying()) {
-    const error = "This address serves the console’s pages: call the ontology server’s own address.";
+    const error =
+      "This address serves the console’s pages: call the ontology server’s own address.";
     return answer({ error }, 404);
   }
   if (!isPlatformKey(platform)) return missing(assertSlug(slug));
-  await assertServes(platform);
+  assertServed(platform);
   return inPlatform(platform, run);
 }
 

@@ -10,7 +10,7 @@ export const SERVER_PREFIX = "/iblai";
 /** Whether this build serves pages only and forwards /api/host/*: NEXT_PUBLIC_ONTOLOGY_RELAY=1. */
 export const relaying = () => process.env.NEXT_PUBLIC_ONTOLOGY_RELAY === "1";
 
-// As deploy/install.sh's HOST_RE: the installer's link must name a host this takes.
+// As deploy/install.sh's HOST_RE: a host the installer takes is one an admin can connect here.
 const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])$/;
 const LOCAL = /^(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 

@@ -10,7 +10,7 @@
  * wrapping it would make AuthProvider redirect before the tokens are stored.
  */
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Provider as ReduxProvider } from "react-redux";
 import { usePathname } from "next/navigation";
 import { initializeDataLayer, type TokenResponse } from "@iblai/iblai-js/data-layer";
@@ -28,7 +28,6 @@ import config from "@/lib/iblai/config";
 import { currentTenantKey, type TenantEntry } from "@/lib/iblai/tenant";
 import { redirectToAuthSpa, switchPlatform } from "@/lib/iblai/auth-utils";
 import { isDemo } from "@/lib/iblai/session";
-import { keepSetupLink } from "@/lib/setup-link";
 import { RadixPointerEventsGuard } from "@/components/radix-pointer-events-guard";
 import { LoadingScreen } from "@/components/loading-screen";
 
@@ -60,9 +59,6 @@ export function IblaiProviders({ children }: { children: ReactNode }) {
     }
     return true;
   });
-
-  // After the first commit, whose history write puts the hash back, and before AuthProvider mounts.
-  useEffect(() => keepSetupLink(), []);
 
   // Gate on a mount flag so server and first client render agree.
   const mounted = useSyncExternalStore(

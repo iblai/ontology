@@ -23,7 +23,7 @@ import { keyNameFor } from "@/lib/ibl-flows-pure";
 import { isDemo } from "@/lib/iblai/session";
 import { currentTenantKey } from "@/lib/iblai/tenant";
 import { mcpPath } from "@/lib/platform";
-import { relaying, serverBase, storedServer, storeServer } from "@/lib/server-address";
+import { hostOf, relaying, serverBase, storedServer, storeServer } from "@/lib/server-address";
 import type {
   ActivityRow,
   AgentOption,
@@ -541,9 +541,7 @@ export type Actions = {
   /** Downloads the engine's model export. */
   exportModel(): Promise<void>;
 
-  /** Makes the server at this host the platform's, with the code its installer printed. */
-  setUpServer(host: string, code: string): Promise<void>;
-  /** Connects this browser to the platform's server at this host, once it is set up. */
+  /** Connects this browser to the platform's server at this host, once it answers. */
   connectServer(host: string): Promise<void>;
 };
 
@@ -667,17 +665,15 @@ function useLiveActions(): Actions {
         await unwrap(dispatch(e.setSwitch.initiate({ name, on })));
       },
       exportModel: downloadExport,
-      setUpServer: async (host, code) => {
-        const server = addressOf(host);
-        await unwrap(dispatch(e.setUpServer.initiate({ server, code })));
-        storeServer(currentTenantKey(), server);
-      },
       connectServer: async (host) => {
         const server = addressOf(host);
-        const asked = e.getSetup.initiate(server, { forceRefetch: true, subscribe: false });
-        const { set_up } = await unwrap(dispatch(asked));
-        if (!set_up) {
-          throw new Error("That server is not set up yet: open the link its installer printed.");
+        const asked = e.getHealth.initiate(server, { forceRefetch: true, subscribe: false });
+        // Typed as the health answer, but whatever answers at that address can say anything.
+        const answer: unknown = await unwrap(dispatch(asked));
+        if ((answer as { ok?: unknown } | null)?.ok !== true) {
+          throw new Error(
+            `${hostOf(server)} answered, but not as an ontology server: check the host name.`,
+          );
         }
         storeServer(currentTenantKey(), server);
       },
@@ -717,7 +713,6 @@ const demoActions: Actions = {
   },
   setSwitch: done,
   exportModel: done,
-  setUpServer: done,
   connectServer: done,
 };
 

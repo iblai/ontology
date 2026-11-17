@@ -134,7 +134,7 @@ read-only role. Writes happen only through **Actions**, tools you add deliberate
   are also passed to the runtime. Native clients (Claude Desktop, Codex CLI) send no `Origin` and
   are unaffected. The console's own origin is there from the start, for the Playground.
 - **Allowed Hosts**: the DNS names the server answers to: the platform's server's host name
-  (`ontology.university.edu`, not the hosted console's), or `*.university.edu` for every name under
+  (`ontology.university.edu`), or `*.university.edu` for every name under
   one, or `*` for any. Checked by the gateway; the exact
   names are also passed to the runtime. Blocks DNS rebinding. A refused host is written to the
   server's Runtime Log.
@@ -144,8 +144,8 @@ read-only role. Writes happen only through **Actions**, tools you add deliberate
 The console itself is an ibl.ai app. Its pages require the ibl.ai **admin** mode (the User/Admin
 switch in the header). The host route handlers take a session only, from a platform admin or a
 holder of the console grant (`/custom/ontology/console/`). Admins of another platform are refused.
-A server installed from a link serves only the platform it was set up for, and only an
-administrator of that platform can set it up ([auth.md](../auth.md)).
+A server with an engine of its own serves only the platform its `ONTOLOGY_PLATFORM` names, set by
+the server's operator, and refuses every other ([auth.md](../auth.md)).
 
 | Task                                       | Needs                                                                                           |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------- |

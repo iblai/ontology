@@ -34,8 +34,10 @@ A data source is either a **database** (dissected into the ontology and served) 
 3. **Scope.** Decide which schemas and tables matter. Dissecting 61 LMS tables when five carry
    the meaning only slows compilation and adds noise.
 
-4. **The engine reads connections added here.** Leave `CONNECTION_STRINGS` empty in the engine's
-   own `.env`. While it is set, the engine's ingest ignores every connection the console adds.
+4. **The engine reads connections added here.** A server installed with `deploy/compose.yaml`
+   never sets `CONNECTION_STRINGS` ([install.md](../install.md)). An engine run from its own
+   checkout reads its own `.env`: leave `CONNECTION_STRINGS` empty there. While it is set, the
+   engine's ingest ignores every connection the console adds.
 
 ## Adding a database
 
@@ -69,8 +71,9 @@ A data source is either a **database** (dissected into the ontology and served) 
    - creates the connection in the engine, which stores it in its own database (or Vault) and
      starts the ingest.
 
-   The password now exists in exactly two places on the platform's server and nowhere else. The
-   hosted console passes it through to the server and keeps none. You land on **Map**.
+   The password now exists in exactly two places on the platform's server and nowhere else. A
+   console hosted elsewhere (the pages-only build) passes it through to the server and keeps none.
+   You land on **Map**.
 
 ![Map while dissecting](../screenshots/03-map.png)
 
@@ -129,6 +132,9 @@ names it.
 
 ## Changing or removing a source
 
+The engine's own UI is not served on the server's host name: it opens through an SSH tunnel to the
+server ([install.md](../install.md)).
+
 - Rotating a password: change it in the engine's own UI (**Settings → Connections**) and in
   `$ONTOLOGY_HOME/platforms/<platform>/env` under `<NAME>_DB_PASSWORD`, then deploy each server
   that uses it again.
@@ -140,15 +146,16 @@ names it.
 
 ## Troubleshooting
 
-| Symptom                              | Likely cause                                     | Where to look                                                                                |
-| ------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Test Connection fails                | firewall or wrong login                          | the engine's message; can the host reach `db:port` with `psql` or `mysql` and the same URL?  |
-| Connected, but no tables ever appear | the engine's `CONNECTION_STRINGS` is set         | empty it in the engine's `.env` and restart the engine                                       |
-| Tables appear, no terms              | no compile has run, or it failed                 | **Compilation** page: last failure; the engine's logs on the host                            |
-| No relationships (PostgreSQL)        | the login does not own the tables                | the engine reads declared keys only as their owner; a model key lets it infer joins instead  |
-| Terms are poorly named               | columns are opaque codes, probing off            | turn on distinct-value probing; add column descriptions in the engine's UI and compile again |
-| PII column not tagged                | detector missed it                               | tag the column `pii` in the engine's UI; tags are honoured on the next compile               |
-| Tool returns permission error        | login lacks SELECT on a joined table             | grant SELECT; the certified SQL shows the tables involved                                    |
-| `503`, “serves another platform”     | the host's own engine serves another platform    | the host's operator writes `$ONTOLOGY_HOME/platforms/<platform>/engine.json` (one host only; network.md) |
-| `403`, “serves another platform”     | the server was set up for another platform       | connect this platform's own server; a server installed from a link serves one platform       |
-| A system shows no tools              | the console does not serve that kind of database | it stays in the map without tools                                                            |
+| Symptom                               | Likely cause                                     | Where to look                                                                                                                  |
+| ------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Test Connection fails                 | firewall or wrong login                          | the engine's message; can the host reach `db:port` with `psql` or `mysql` and the same URL?                                    |
+| Connected, but no tables ever appear  | the engine's `CONNECTION_STRINGS` is set         | an engine run from its own checkout: empty it in that engine's `.env` and restart the engine                                   |
+| Tables appear, no terms               | no compile has run, or it failed                 | **Compilation** page: last failure; the engine's logs on the host                                                              |
+| No relationships (PostgreSQL)         | the login does not own the tables                | the engine reads declared keys only as their owner; the server's `OPENAI_API_KEY` lets it infer joins instead                  |
+| Terms are poorly named                | columns are opaque codes, probing off            | turn on distinct-value probing; add column descriptions in the engine's UI and compile again                                   |
+| PII column not tagged                 | detector missed it                               | tag the column `pii` in the engine's UI; tags are honoured on the next compile                                                 |
+| Tool returns permission error         | login lacks SELECT on a joined table             | grant SELECT; the certified SQL shows the tables involved                                                                      |
+| `503`, “No engine is connected”       | the server has no engine for this platform       | the server's operator sets `AO_URL`, or writes `$ONTOLOGY_HOME/platforms/<platform>/engine.json` ([network.md](../network.md)) |
+| `503`, “ONTOLOGY_PLATFORM is not set” | the server has an engine but names no platform   | the server's operator sets `ONTOLOGY_PLATFORM` ([install.md](../install.md))                                                   |
+| `403`, “serves another platform”      | the server's `ONTOLOGY_PLATFORM` names another   | connect this platform's own server; a server with an engine of its own serves one platform                                     |
+| A system shows no tools               | the console does not serve that kind of database | it stays in the map without tools                                                                                              |

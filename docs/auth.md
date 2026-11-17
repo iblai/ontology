@@ -35,9 +35,10 @@ Default is plain `localStorage`. With `NEXT_PUBLIC_IBL_PER_TAB_AUTH=true` the SD
 `sessionStorage` as the per-tab source of truth and `localStorage` as the most-recent-login seed, so
 two tabs can sit in two platforms. We keep the default.
 
-Tokens never leave the browser except to ibl.ai and to the console's route handlers over TLS. On
-the hosted console those handlers forward the `dm_token` to the platform's own server, so it reaches
-two places besides ibl.ai: the hosted console, in passing, and that server. Neither stores it.
+Tokens never leave the browser except to ibl.ai and to the console's route handlers over TLS, which
+run on the platform's own server. On a console hosted elsewhere (the pages-only build) those
+handlers forward the `dm_token` to the platform's own server, so it reaches two places besides
+ibl.ai: that console, in passing, and the server. Neither stores it.
 
 ## 3. Which header goes to which service
 
@@ -81,9 +82,9 @@ platforms the person belongs to and is the SDK's switch; switching re-mints toke
 platform through the same `/login/complete` path. Every call to the host carries the same
 platform as `x-ontology-platform: <platform key>`, and every check below is made against the
 platform the call names. One ontology per platform follows from this: the host keeps each
-platform's files apart and gives each platform its own engine ([network.md](network.md)). On the
-hosted console each platform has its own server: the browser keeps its address per platform and
-names it in `x-ontology-server` beside the platform.
+platform's files apart and gives each platform its own engine ([network.md](network.md)). On a
+console hosted elsewhere (the pages-only build) each platform has its own server: the browser keeps
+its address per platform and names it in `x-ontology-server` beside the platform.
 
 ## 6. How this host checks a caller
 
@@ -91,16 +92,20 @@ The host holds no ibl.ai secret. On every call it asks ibl.ai, with the caller's
 and `iblai-org: <platform>`, what that credential is granted under `/custom/ontology/` on that
 platform, and who it belongs to. ibl.ai refuses unless the credential belongs to that platform.
 The platform is `x-ontology-platform` for the route handlers and the first part of the address for
-the gateway (the part after `/iblai` on a client's server). The answers are kept in memory, keyed
-by a hash of the credential and the platform, and never written to disk: what the credential is
-granted for 60 seconds, who it belongs to and whether they administer the platform for 300
-seconds. Revoking a key or removing a policy on ibl.ai takes effect within a minute; removing an
-administrator within five.
+the gateway (the part after `/iblai` on the server's second address). The answers are kept in
+memory, keyed by a hash of the credential and the platform, and never written to disk: what the
+credential is granted for 60 seconds, who it belongs to and whether they administer the platform
+for 300 seconds. Revoking a key or removing a policy on ibl.ai takes effect within a minute;
+removing an administrator within five.
 
-A server installed from a link (`ONTOLOGY_SETUP_CODE` set) serves one platform, the one its link
-was opened for, and checks that before it asks ibl.ai anything: until it is set up every call but
-the setup route answers `503`, and a call for another platform answers `403`. Setting it up takes the link's code
-and the session of an administrator of the platform (`POST /api/host/setup`); it mints no key.
+A server with an engine of its own (`AO_URL`) serves one platform, the one its `ONTOLOGY_PLATFORM`
+setting names, and checks that before it asks ibl.ai anything: a host call or a gateway call for
+another platform answers `403` “This server serves another platform.” A server installed with
+`deploy/compose.yaml` always has an engine of its own, and its operator names the platform in that
+file ([install.md](install.md)). With `AO_URL` and no `ONTOLOGY_PLATFORM` the server refuses to
+start, and every host call and gateway call answers `503` naming the setting. A server with
+neither serves any platform, each through the `engine.json` its operator writes in the platform's
+folder; a platform with none answers `503` “No engine is connected” ([network.md](network.md)).
 
 | Presented                            | Accepted by                               | Checked as                                                                                               |
 | ------------------------------------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -111,10 +116,11 @@ and the session of an administrator of the platform (`POST /api/host/setup`); it
 
 - **Route handlers** (`/api/host/*`) take a session `Token` only, with `x-ontology-platform`, and
   only from an admin of that platform or a holder of the console grant there
-  (`/custom/ontology/console/`). A session of another platform is refused.
-- **The gateway** (`/<platform>/<slug>/mcp`, under `/iblai` on a client's server) answers `401` without a usable credential and `403`
-  when the credential reaches no toolset. What a grant reaches is in
-  [guides/permissions.md](guides/permissions.md).
+  (`/custom/ontology/console/`). A session of another platform is refused. `GET /api/host/health`
+  takes no sign-in and answers `{ "ok": true }`.
+- **The gateway** (`/<platform>/<slug>/mcp`, and under `/iblai` on the server's second address)
+  answers `401` without a usable credential and `403` when the credential reaches no toolset. What
+  a grant reaches is in [guides/permissions.md](guides/permissions.md).
 - When ibl.ai does not answer (a 5xx or a 429), the host answers `503` and keeps nothing. Any other
   refusal from ibl.ai is passed on in ibl.ai's own words.
 
@@ -138,15 +144,17 @@ Configuration (`.env.local`, not committed; template in `.env.example`):
 # NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai  # closed deployment
 ```
 
-No setting names the platform: it is the one the person signs in to.
+No setting names the platform of the sign-in: it is the one the person signs in to. A server with an
+engine of its own still serves only the platform its `ONTOLOGY_PLATFORM` names (section 6).
 
 Verified on 2026-11-16, while the platform was still set in the environment: an unauthenticated
 visit to `http://localhost:3000` redirected to
 `https://login.iblai.app/login?app=custom&redirect-to=http://localhost:3000&tenant=<platform key>`.
 Sign-in without a platform has not been run yet. After sign-in the auth app returns to
 `/sso-login-complete`. **Every origin the console's pages are served from (`http://localhost:3000`,
-the hosted console's, a single host's) must be on the platform's allowed redirect origins on ibl.ai**,
-or the auth app will not return to it. A client's server serves no pages and is not one of them.
+`https://<host>` on the platform's own server, a console hosted elsewhere) must be on the platform's
+allowed redirect origins on ibl.ai**, or the auth app will not return to it. The platform's own
+server serves the pages, so its `https://<host>` is one of them.
 
 Access rules in the shell:
 

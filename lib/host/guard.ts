@@ -4,9 +4,8 @@ import { isPlatformKey, PLATFORM_HEADER } from "@/lib/platform";
 import { relaying } from "@/lib/server-address";
 import { parseAuthorization, resolveCaller, type Caller } from "./dm";
 import { HostError } from "./errors";
-import { inPlatform } from "./platform";
+import { assertServed, inPlatform } from "./platform";
 import { relay } from "./relay";
-import { assertServes } from "./setup";
 
 const CLOSED = "Admin access to the ontology console is required.";
 
@@ -21,7 +20,7 @@ export async function asConsole(
   if (relaying()) return relay(request);
   const platform = request.headers.get(PLATFORM_HEADER);
   if (!isPlatformKey(platform)) throw new HostError(400, "This call names no platform.");
-  await assertServes(platform);
+  assertServed(platform);
   const caller = await requireConsole(request, platform);
   return inPlatform(platform, () => run(caller));
 }

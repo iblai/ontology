@@ -70,6 +70,16 @@ function placeOf(ip: string): "loopback" | "own" | "private" | "public" {
   return (first & 0xfe00) === 0xfc00 ? "private" : "public";
 }
 
+/** Whether a host name or IP literal is this machine: loopback, unspecified or link-local. */
+export async function isThisMachine(host: string): Promise<boolean> {
+  const name = bare(host);
+  const found = isIP(name)
+    ? [{ address: name }]
+    : await lookup(name, { all: true }).catch(() => [] as { address: string }[]);
+  // ponytail: this machine's own LAN address passes; compare os.networkInterfaces() if it must not.
+  return found.some(({ address }) => ["loopback", "own"].includes(placeOf(address)));
+}
+
 /**
  * A custom API's base address by the old product's rule, with this machine allowed outside
  * production. Returns it normalised, and whether it sits on a private network or this machine

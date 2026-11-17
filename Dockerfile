@@ -1,7 +1,7 @@
 # ============================================================
-# Dockerfile — the console's server half, for a client's server
+# Dockerfile — the whole console, for a client's server
 #
-# Next's standalone build serving /api/host/* and the MCP gateway; deploy/server.yml
+# Next's standalone build: the pages, /api/host/* and the MCP gateway; deploy/compose.yaml
 # runs it beside NVIDIA's engine. amd64 only: Toolbox ships one glibc x64 binary.
 #
 #   docker build --platform linux/amd64 -t ghcr.io/iblai/ontology:dev .
@@ -16,6 +16,13 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 ENV NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1
+# The ibl.ai addresses the pages call, which Next fixes at build. Left out: the hosted platform's.
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_AUTH_URL
+ARG NEXT_PUBLIC_BASE_WS_URL
+ARG NEXT_PUBLIC_PLATFORM_BASE_DOMAIN
+ARG NEXT_PUBLIC_LEGACY_LMS_URL
+ARG NEXT_PUBLIC_MFE_URL
 RUN pnpm build
 
 # File tracing leaves the binary out; cp fails the build when the pattern matches nothing.

@@ -1,8 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiAddress, isPublicAddress } from "./address";
+import { apiAddress, isPublicAddress, isThisMachine } from "./address";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe("isThisMachine", () => {
+  it.each([
+    "127.0.0.1",
+    "127.9.9.9",
+    "localhost",
+    "[::1]",
+    "::ffff:127.0.0.1",
+    "0.0.0.0",
+    "169.254.169.254",
+  ])("takes %s for this machine", async (host) => {
+    expect(await isThisMachine(host)).toBe(true);
+  });
+
+  it.each(["10.1.2.3", "192.168.1.10", "203.0.113.7", "2001:4860:4860::8888"])(
+    "takes %s for another",
+    async (host) => {
+      expect(await isThisMachine(host)).toBe(false);
+    },
+  );
 });
 
 describe("isPublicAddress", () => {

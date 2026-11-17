@@ -1,6 +1,6 @@
 // The host's files under ONTOLOGY_HOME: safe paths, atomic writes, and the secrets env.
 //
-//   engine-platform               the platform the host's own engine serves (hostPath)
+//   engine-key                    the key the server made for its own engine, 0600 (hostPath)
 //   platforms/<folder>/           one platform's files (homePath); <folder>: platformFolder
 //     engine.json                 {"url","key"}: the platform's own engine, the operator's
 //     env                         KEY=value lines, mode 0600: what the runtime's ${KEY} reads

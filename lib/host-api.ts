@@ -27,13 +27,12 @@ import type {
   HostApiInput,
   HostEvent,
   HostGraph,
+  HostHealth,
   HostPreview,
   HostServer,
   HostServerActivity,
   HostServerDetail,
   HostServerDraft,
-  HostSetup,
-  HostSetupDone,
   HostSpec,
   HostSystem,
   HostSystemInput,
@@ -78,7 +77,7 @@ const raw = fetchBaseQuery({
   baseUrl: "/api/host",
   prepareHeaders: (headers) => {
     for (const [name, value] of Object.entries(hostHeaders())) {
-      // The setup calls name a server that is not stored yet.
+      // The health call names a server that is not stored yet.
       if (name === SERVER_HEADER && headers.has(name)) continue;
       headers.set(name, value);
     }
@@ -205,17 +204,9 @@ export const hostApi = createApi({
       query: () => "/activity",
       providesTags: ["Activity"],
     }),
-    // Both name the server by its address: a server not connected yet.
-    getSetup: b.query<HostSetup, string>({
-      query: (server) => ({ url: "/setup", headers: { [SERVER_HEADER]: server } }),
-    }),
-    setUpServer: b.mutation<HostSetupDone, { server: string; code: string }>({
-      query: ({ server, code }) => ({
-        url: "/setup",
-        method: "POST",
-        body: { code },
-        headers: { [SERVER_HEADER]: server },
-      }),
+    // Names the server by its address: a server not connected yet.
+    getHealth: b.query<HostHealth, string>({
+      query: (server) => ({ url: "/health", headers: { [SERVER_HEADER]: server } }),
     }),
 
     /* ---------- the engine, through /api/host/ao ---------- */

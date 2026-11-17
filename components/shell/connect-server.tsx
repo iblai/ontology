@@ -7,38 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActions } from "@/lib/data";
-import config from "@/lib/iblai/config";
-import { installCommand } from "@/lib/setup-link";
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const { error, run } = useRun();
-  const copy = () =>
-    run(async () => {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  return (
-    <span className="text-right">
-      <Button size="sm" variant="outline" onClick={() => void copy()}>
-        {copied ? "Copied" : "Copy"}
-      </Button>
-      <RunError error={error} />
-    </span>
-  );
-}
+const INSTALL_GUIDE = "https://github.com/iblai/ontology/blob/HEAD/docs/install.md";
 
 /** No server connected for this platform in this browser: name one, or install one. */
 export function ConnectServer() {
   const actions = useActions();
   const { busy, error, run } = useRun();
   const [host, setHost] = useState("");
-  const command = installCommand({
-    host,
-    frontend: window.location.origin,
-    platformUrl: config.dmUrl(),
-  });
 
   const connect = () =>
     run(async () => {
@@ -87,19 +63,20 @@ export function ConnectServer() {
         </Card>
 
         <Card>
-          <div className="mb-2.5 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Install one</h3>
-              <p className="mt-1 text-[12.5px] text-gray-600">
-                On a fresh Ubuntu server of yours (22.04, 24.04 or 26.04), with a host name that
-                points to it and ports 80 and 443 open. It ends with a link: open it to finish.
-              </p>
-            </div>
-            <CopyButton text={command} />
-          </div>
-          <pre className="mono overflow-auto rounded-lg border border-[var(--border-color)] bg-[#fafbfc] p-3.5 text-[12px] leading-[1.55] text-gray-700">
-            {command}
-          </pre>
+          <h3 className="text-sm font-semibold text-gray-900">Install one</h3>
+          <p className="mt-1 text-[12.5px] text-gray-600">
+            An ontology server is installed with Docker Compose on an Ubuntu server of the
+            platform’s own (22.04, 24.04 or 26.04). It serves its own console at its own address;
+            connecting it here is only for a console hosted elsewhere, like this one.{" "}
+            <a
+              href={INSTALL_GUIDE}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-gray-900 underline underline-offset-2"
+            >
+              Read the install guide
+            </a>
+          </p>
         </Card>
       </div>
     </>

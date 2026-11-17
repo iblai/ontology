@@ -34,12 +34,12 @@ notifications bell (SDK dropdown) and your profile menu (SDK; profile, help, sig
 
 In demo mode SDK panels show a sign-in notice; signed in, the dialog holds the live SDK component.
 
-**The platform's server.** The hosted console serves pages only; the platform's data and servers
-are on its own ontology server ([install.md](install.md)). Opened from the installer's link, the
-console shows **Set up `<host>`**: it names the host and the platform you are signed in to, and
-asks you to go on only if your team installed that server. With no server connected for the
-platform, the pages show **Connect a server**: a host name field, and the install command to copy.
-The address is kept in this browser, per platform.
+**The platform's server.** The console is served by the platform's own ontology server, which
+keeps the platform's data and servers ([install.md](install.md)); the browser calls its own origin.
+A console hosted elsewhere (the pages-only build) serves pages only. With no server connected for
+the platform, its pages show **Connect a server**: a host name field, checked against that
+server's `GET /api/host/health`, and a link to the install guide. The address is kept in this
+browser, per platform.
 
 **Collapse.** The button next to the logo collapses the sidebar to an icon rail (labels on hover)
 and remembers the choice per browser.
@@ -142,8 +142,8 @@ inferred them; the engine's API does not take new ones.
 Left column, top to bottom:
 
 - **Server Name** and the resulting endpoint on the platform's server,
-  `https://<host>/iblai/<platform>/<slug>/mcp` (`<console address>/<platform>/<slug>/mcp` when
-  console and server are one host).
+  `https://<host>/<platform>/<slug>/mcp` (its second address,
+  `https://<host>/iblai/<platform>/<slug>/mcp`, on a console hosted elsewhere).
 - **Toolsets**, generated from certified object types and metrics, the connected systems and the
   HTTP APIs. Each toolset lists its tools with signatures and what they return; toolsets that write
   show a **writes** badge, the raw toolsets show **unrestricted reads**. Untick what this server
@@ -180,9 +180,9 @@ ready-to-paste snippets for cURL, Claude Desktop / Cursor and the Python MCP SDK
 
 **Playground**: the tools your own session may call. Pick one, edit its arguments as JSON, **Run**.
 The call goes through the gateway at the server's endpoint with your ibl.ai session, so you see
-exactly what a caller with your grants would see. From the hosted console the browser calls the
-platform's server directly, so the console's origin must stay on the server's Allowed Origins (a
-new server starts with it). `ask_question` returns an answer and the SQL it ran.
+exactly what a caller with your grants would see. The browser makes the call, so the console's
+origin must stay on the server's Allowed Origins (a new server starts with it); on a console hosted
+elsewhere that origin is not the server's own. `ask_question` returns an answer and the SQL it ran.
 
 ![Server · Activity](screenshots/07c-server-activity.png)
 
@@ -233,6 +233,6 @@ changes are made there ([guides/permissions.md](guides/permissions.md)).
 **Catalog**: every database, schema, table and column the engine read, with tags and mapped terms.
 **Compilation**: the engine's run status, its three switches (compilation, PII detection,
 probing) and **Run now**. **Config**: the files the console writes to the host, per server, with
-revisions, and **Export model**, which downloads the engine's model. On a hosted console the
-platform's server is named beside the title, with **Change** to connect another: it stays within
-reach when that server does not answer.
+revisions, and **Export model**, which downloads the engine's model. On a console hosted elsewhere
+(the pages-only build) the platform's server is named beside the title, with **Change** to connect
+another: it stays within reach when that server does not answer.

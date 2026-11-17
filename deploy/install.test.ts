@@ -11,51 +11,20 @@ const between = (text: string, start: string, end: string) => {
   return text.slice(from + start.length, to);
 };
 
-const ENV_START = 'cat >"$DIR/.env" <<EOF\n';
-const MINT_START = "IFS= read -r -d '' MINT <<'JS' || true\n";
-const ENV_FILE = between(SCRIPT, ENV_START, "\nEOF\n");
-const MINT = between(SCRIPT, MINT_START, "\nJS\n");
-// The shell's own text: neither the .env it writes nor the program it runs in the container.
-const SHELL = SCRIPT.replace(ENV_START + ENV_FILE, "").replace(MINT_START + MINT, "");
-
 describe("deploy/install.sh", () => {
-  it("writes exactly the contract's keys into .env, and never CONNECTION_STRINGS", () => {
-    const written = [...ENV_FILE.matchAll(/^([A-Z_]+)=/gm)].map((m) => m[1]);
-    expect(written.sort()).toEqual(
-      [
-        "ONTOLOGY_HOST",
-        "ONTOLOGY_FRONTEND",
-        "ONTOLOGY_DM_URL",
-        "ONTOLOGY_SETUP_CODE",
-        "AO_API_KEY",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD",
-        "POSTGRES_DATABASE",
-        "POSTGRES_PORT",
-        "PGADMIN_EMAIL",
-        "PGADMIN_PASSWORD",
-        "AUTH_SECRET",
-        "APP_URL",
-        "AUTO_ONTOLOGY_ADMIN_EMAIL",
-        "AUTO_ONTOLOGY_ADMIN_PASSWORD",
-        "DEFAULT_MODELS_API_KEY",
-      ].sort(),
-    );
-    expect(ENV_FILE).not.toContain("CONNECTION_STRINGS");
-    expect(ENV_FILE).toContain("\nAO_API_KEY=\n");
-    expect(ENV_FILE).toContain("\nPOSTGRES_PORT=5434\n");
-    expect(ENV_FILE).toContain("\nAPP_URL=https://$HOST\n");
-    expect(ENV_FILE).toContain("\nDEFAULT_MODELS_API_KEY=nvapi-not-set\n");
-  });
-
-  it("carries one release stamp and one pinned engine commit", () => {
+  it("carries one release stamp, alone on its line", () => {
     expect(SCRIPT.split('VERSION="dev"').length - 1).toBe(1);
     expect(SCRIPT).toMatch(/^VERSION="dev"$/m);
-    expect(SCRIPT.match(/^ENGINE_SHA=/gm)).toHaveLength(1);
-    expect(SCRIPT).toMatch(/^ENGINE_SHA="[0-9a-f]{40}"$/m);
-    // The compose files come from the script's own release, so the three always match.
-    expect(SCRIPT).toContain('"$REPO/releases/download/v$VERSION/server.yml"');
-    expect(SCRIPT).toContain('"$REPO/releases/download/v$VERSION/auto-ontology.override.yml"');
+    expect(SCRIPT).toContain('if [ "$VERSION" = dev ]; then');
+  });
+
+  it("downloads its own release's compose.yaml and nothing of NVIDIA's", () => {
+    expect(SCRIPT).toContain('"$REPO/releases/download/v$VERSION/compose.yaml"');
+    expect(SCRIPT.split("/releases/download/v$VERSION/").length - 1).toBe(1);
+    // Docker builds NVIDIA's services from the git address pinned in compose.yaml.
+    expect(SCRIPT).not.toMatch(
+      /codeload|NVIDIA\/auto-ontology|ENGINE_SHA|server\.yml|override\.yml/,
+    );
   });
 
   it("ends with main, so a download cut short runs nothing", () => {
@@ -63,24 +32,64 @@ describe("deploy/install.sh", () => {
     expect(lines.at(-1)).toBe('main "$@"');
   });
 
-  it("never prints the engine key or a password", () => {
-    const printing = SHELL.split("\n").filter((line) =>
-      /^\s*(say|printf|echo|stop|refuse)\b/.test(line),
+  it("writes exactly three names into .env, and no secret", () => {
+    const written = [...SCRIPT.matchAll(/\bput\s+([A-Z_]+)\s/g)].map((m) => m[1]);
+    expect([...new Set(written)].sort()).toEqual(
+      ["ONTOLOGY_DM_URL", "ONTOLOGY_HOST", "ONTOLOGY_PLATFORM"].sort(),
     );
-    for (const line of printing) {
-      expect(line).not.toMatch(/\$\{?key\b/);
-      expect(line).not.toMatch(/\$\{?[A-Z_]*PASSWORD/);
+    // put is the one writer of .env: one redirect into it, and no heredoc.
+    expect(SCRIPT.match(/>\s*"\$DIR\/\.env/g)).toHaveLength(1);
+    expect(SCRIPT).toContain('} >"$DIR/.env.new"');
+    expect(SCRIPT).not.toMatch(/cat\s*>\s*"\$DIR\/\.env/);
+    expect(SCRIPT).not.toMatch(/\bput\s+\S*(PASSWORD|SECRET|KEY)/);
+    expect(SCRIPT).not.toMatch(/\/dev\/urandom|openssl\s+rand/);
+    for (const gone of ["AO_API_KEY", "ONTOLOGY_SETUP_CODE", "CONNECTION_STRINGS", "--frontend"]) {
+      expect(SCRIPT).not.toContain(gone);
     }
-    // No password ever sits in a shell variable: each is generated straight into .env.
-    expect(SHELL).not.toMatch(/\$\{?[A-Z_]*PASSWORD/);
-    // The program prints the token on stdout and nothing else; its failures name a step and a status.
-    expect(MINT).not.toContain("console.log");
-    expect(MINT.split("process.stdout.write(").length - 1).toBe(1);
-    for (const line of MINT.split("\n").filter((l) => l.includes("console.error"))) {
-      expect(line).not.toMatch(/token|password|cookie/i);
-    }
-    expect(MINT).toContain("process.env.AUTO_ONTOLOGY_ADMIN_PASSWORD");
-    expect(SHELL).toContain('exec -T auto-ontology-frontend node -e "$MINT"');
+  });
+
+  it("never reads or prints a secret", () => {
+    expect(SCRIPT).not.toMatch(/\$\{?[A-Za-z_]*(PASSWORD|SECRET|_KEY)\b/i);
+    // The older backend's password is only tested for being there, never held.
+    const kept = [...SCRIPT.matchAll(/\bkept\s+([A-Z_]+)/g)].map((m) => m[1]);
+    expect([...new Set(kept)].sort()).toEqual(
+      ["ONTOLOGY_DB_PASSWORD", "ONTOLOGY_HOST", "ONTOLOGY_PLATFORM"].sort(),
+    );
+    expect(SCRIPT).toContain('[ -n "$(kept ONTOLOGY_DB_PASSWORD)" ]');
+    // It names the command that reads the admin's password; it never runs it.
+    expect(SCRIPT.match(/cat \/secrets\/admin-password/g)).toHaveLength(1);
+    expect(SCRIPT).toMatch(
+      /^\s+cd \$DIR && sudo docker compose exec ontology cat \/secrets\/admin-password$/m,
+    );
+  });
+
+  it("refuses the older backend by what only it holds", () => {
+    const older = between(SCRIPT, "refuse_older() {\n", "\n}\n");
+    expect(older).toContain("kept ONTOLOGY_DB_PASSWORD");
+    expect(older).toContain('ontology-gateway "$DIR/compose.yaml"');
+    expect(older).not.toContain('-f "$DIR/compose.yaml"');
+    expect(older).toContain("/releases/download/v0.2.13/install.sh");
+  });
+
+  it("never hands an installed server's engine to another platform", () => {
+    const settings = between(SCRIPT, "settings() {\n", "\n}\n");
+    expect(settings).toContain('[ "$PLATFORM" != "$was" ]');
+    expect(settings).toMatch(/already serves the platform \$was.*--uninstall/);
+  });
+
+  it("installs git beside Docker, Compose and buildx, and git alone beside a Docker already here", () => {
+    expect(SCRIPT).toContain("docker.io docker-compose-v2 docker-buildx git");
+    expect(SCRIPT).toMatch(/apt-get install -y -q --no-install-recommends git$/m);
+    expect(SCRIPT).toContain('dpkg --compare-versions "$found" ge 2.23.1');
+  });
+
+  it("builds with retries and waits for the console's health", () => {
+    expect(SCRIPT).toContain("for attempt in 1 2 3; do");
+    expect(SCRIPT).toContain("docker pull nvcr.io/nvidia/base/ubuntu:jammy-20250619");
+    expect(SCRIPT).toContain('url="https://${HOST:-localhost}/api/host/health"');
+    expect(SCRIPT).toContain('how=(--resolve "$HOST:443:127.0.0.1")');
+    expect(SCRIPT).toContain('"${COMPOSE[@]}" up --detach --remove-orphans');
+    expect(SCRIPT).toContain('"${COMPOSE[@]}" down --volumes --rmi all --remove-orphans');
   });
 
   it("sets no trap, skips no hook and touches no firewall", () => {
@@ -91,18 +100,15 @@ describe("deploy/install.sh", () => {
 
   it("reads no environment variable for its configuration", () => {
     const assigned = new Set<string>();
-    for (const m of SHELL.matchAll(/(?:^|[\s;(])([A-Za-z_][A-Za-z0-9_]*)=/gm)) assigned.add(m[1]);
-    for (const m of SHELL.matchAll(/^\s*local\s+(.+)$/gm)) {
+    for (const m of SCRIPT.matchAll(/(?:^|[\s;(])([A-Za-z_][A-Za-z0-9_]*)=/gm)) assigned.add(m[1]);
+    for (const m of SCRIPT.matchAll(/^\s*local\s+(.+)$/gm)) {
       for (const word of m[1].split(/\s+/)) assigned.add(word.split("=")[0]);
     }
-    for (const m of SHELL.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) assigned.add(m[1]);
-    for (const m of SHELL.matchAll(/\bask\s+([A-Za-z_]\w*)/g)) assigned.add(m[1]);
-    assigned.add("MINT"); // read from the heredoc above
+    for (const m of SCRIPT.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) assigned.add(m[1]);
+    for (const m of SCRIPT.matchAll(/\bask\s+([A-Za-z_]\w*)/g)) assigned.add(m[1]);
     // Bash's own clock, and the two fields read from /etc/os-release.
     const allowed = new Set(["SECONDS", "ID", "VERSION_ID"]);
-    const read = new Set(
-      [...(SHELL + ENV_FILE).matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]),
-    );
+    const read = new Set([...SCRIPT.matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]));
     const fromOutside = [...read].filter((name) => !assigned.has(name) && !allowed.has(name));
     expect(fromOutside).toEqual([]);
   });

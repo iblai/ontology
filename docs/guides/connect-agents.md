@@ -1,8 +1,9 @@
 # Guide: connecting agents and clients
 
 Every server has one endpoint on the platform's ontology server,
-`https://<host>/iblai/<platform>/<slug>/mcp`, speaking MCP over streamable HTTP. When the console
-and the server run as one host the address has no `/iblai`: `<console origin>/<platform>/<slug>/mcp`.
+`https://<host>/<platform>/<slug>/mcp`, speaking MCP over streamable HTTP. A console hosted
+elsewhere (the pages-only build) shows the server's second address,
+`https://<host>/iblai/<platform>/<slug>/mcp`, which answers the same.
 The examples below use the host `ontology.university.edu`, the platform `acme` and the server
 `institution`. Anything that speaks MCP can use it, provided it can reach the host and presents a
 credential of that platform that the server accepts ([permissions.md](permissions.md)).
@@ -28,8 +29,8 @@ An agent gets the server when you attach it:
 3. Verify from the agent: ask "what tools do you have from institution?" and then a real question.
    The call appears under the server's **Activity** tab.
 
-The agent only ever talks to ibl.ai; ibl.ai calls `https://<host>/iblai/<platform>/<slug>/mcp` on
-your server, which must be reachable on 443 from ibl.ai's egress ([network.md](../network.md)).
+The agent only ever talks to ibl.ai; ibl.ai calls `https://<host>/<platform>/<slug>/mcp` on your
+server, which must be reachable on 443 from ibl.ai's egress ([network.md](../network.md)).
 
 ## Claude Desktop and Claude Code
 
@@ -44,7 +45,7 @@ Claude Desktop (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "institution": {
-      "url": "https://ontology.university.edu/iblai/acme/institution/mcp",
+      "url": "https://ontology.university.edu/acme/institution/mcp",
       "headers": { "Authorization": "Api-Token <token>" }
     }
   }
@@ -54,7 +55,7 @@ Claude Desktop (`claude_desktop_config.json`):
 Claude Code:
 
 ```bash
-claude mcp add --transport http institution https://ontology.university.edu/iblai/acme/institution/mcp \
+claude mcp add --transport http institution https://ontology.university.edu/acme/institution/mcp \
   --header "Authorization: Api-Token <token>"
 ```
 
@@ -67,7 +68,7 @@ the runtime expects (`entra_token` for a service named `entra`); the runtime ver
 
 ```toml
 [mcp_servers.institution]
-url = "https://ontology.university.edu/iblai/acme/institution/mcp"
+url = "https://ontology.university.edu/acme/institution/mcp"
 http_headers = { Authorization = "Api-Token <token>" }
 ```
 
@@ -87,7 +88,7 @@ stdio can bridge with `mcp-remote`:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://ontology.university.edu/iblai/acme/institution/mcp",
+        "https://ontology.university.edu/acme/institution/mcp",
         "--header",
         "Authorization: Api-Token <token>"
       ]
@@ -104,7 +105,7 @@ Python, official MCP SDK:
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-URL = "https://ontology.university.edu/iblai/acme/institution/mcp"
+URL = "https://ontology.university.edu/acme/institution/mcp"
 AUTH = {"Authorization": "Api-Token " + os.environ["ONTOLOGY_TOKEN"]}
 
 async with streamablehttp_client(URL, headers=AUTH) as (read, write, _):
@@ -117,7 +118,7 @@ async with streamablehttp_client(URL, headers=AUTH) as (read, write, _):
 Smoke test with cURL:
 
 ```bash
-curl -sS -X POST https://ontology.university.edu/iblai/acme/institution/mcp \
+curl -sS -X POST https://ontology.university.edu/acme/institution/mcp \
   -H "Authorization: Api-Token $ONTOLOGY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -151,8 +152,8 @@ at the token.
 | JSON-RPC error `-32003`                  | the tool is outside the toolsets the caller reaches | grant the policy of the toolset that holds it                |
 | `429`                                    | over 120 requests or 30 tool calls a minute         | slow down; the limit is per caller                           |
 | `503`                                    | ibl.ai did not answer the grant check               | retry; nothing was kept                                      |
-| `503`, not set up yet                    | the server's installer link has not been opened     | an administrator of the platform opens the link              |
-| `403`, serves another platform           | the address names a platform this server is not for | use the address of that platform's own server                |
-| `404`, the console's pages               | the address is the hosted console's, not the server | use `https://<host>/iblai/<platform>/<slug>/mcp`             |
+| `503`, `ONTOLOGY_PLATFORM` is not set    | the server has an engine but names no platform      | the server's operator sets it ([install.md](../install.md))  |
+| `403`, serves another platform           | its `ONTOLOGY_PLATFORM` names another platform      | use the address of that platform's own server                |
+| `404`, the console's pages               | the address is a pages-only console's, not a server | use `https://<host>/<platform>/<slug>/mcp`                   |
 | timeout from an ibl.ai agent             | ibl.ai egress not allowed inbound                   | firewall rule for ibl.ai egress on 443                       |
 | works with cURL, not from Claude Desktop | client not on the VPN                               | connect to the VPN first                                     |

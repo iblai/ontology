@@ -3,12 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import config from "@/lib/iblai/config";
+import { isPlatformKey } from "@/lib/platform";
 import { HostError } from "./errors";
-
-const required = (name: string, value: string | undefined): string => {
-  if (!value) throw new HostError(503, `${name} is not set.`);
-  return value;
-};
 
 // As @toolbox-sdk/server's bin/run.js names the package holding each platform's binary.
 const RUNTIMES: Record<string, string> = {
@@ -22,7 +18,8 @@ const RUNTIMES: Record<string, string> = {
 /** Where the host keeps what the runtime reads: ONTOLOGY_HOME, default ".ontology" under cwd. */
 export function ontologyHome(): string {
   // An empty value is the default too: the cwd itself would put secrets beside the source.
-  return path.resolve(process.env.ONTOLOGY_HOME || ".ontology");
+  // Chosen as the server runs: the build must not trace it, or it takes the whole repo.
+  return path.resolve(/*turbopackIgnore: true*/ process.env.ONTOLOGY_HOME || ".ontology");
 }
 
 /**
@@ -33,16 +30,55 @@ export function dmUrl(): string {
   return process.env.ONTOLOGY_DM_URL?.replace(/\/+$/, "") || config.dmUrl();
 }
 
-/** The code a server installed from a link is claimed with: ONTOLOGY_SETUP_CODE, else null. */
-export function setupCode(): string | null {
-  return process.env.ONTOLOGY_SETUP_CODE || null;
+/** The one platform this server serves: ONTOLOGY_PLATFORM, else null. Required beside AO_URL. */
+export function ownPlatform(): string | null {
+  const named = process.env.ONTOLOGY_PLATFORM || null;
+  if (named !== null && !isPlatformKey(named)) {
+    throw new HostError(503, "ONTOLOGY_PLATFORM is not a platform’s key.");
+  }
+  if (named === null && process.env.AO_URL) {
+    throw new HostError(
+      503,
+      "ONTOLOGY_PLATFORM is not set: it names the platform this server’s engine (AO_URL) belongs to.",
+    );
+  }
+  return named;
 }
 
-/** The host's own engine and its service key: AO_URL (no trailing slash) and AO_API_KEY. */
-export function hostEngine(): { url: string; key: string } {
+/** The server's own engine without a trailing slash: AO_URL, else null. */
+export function engineUrl(): string | null {
+  return process.env.AO_URL?.replace(/\/+$/, "") || null;
+}
+
+/** The engine admin the server makes its key as: AO_ADMIN_EMAIL, AO_ADMIN_PASSWORD_FILE. */
+export function engineAdmin(
+  url: string,
+): { email: string; passwordFile: string; origin: string } | null {
+  const email = process.env.AO_ADMIN_EMAIL;
+  const passwordFile = process.env.AO_ADMIN_PASSWORD_FILE;
+  if (!email || !passwordFile) return null;
+  // The engine's sign-in takes its own APP_URL as the origin, not the address it is called on.
+  const origin = process.env.AO_ORIGIN || (URL.canParse(url) ? new URL(url).origin : url);
+  return { email, passwordFile, origin: origin.replace(/\/+$/, "") };
+}
+
+/** The file with the key the engine presents on /internal/models/v1: ONTOLOGY_MODEL_KEY_FILE. */
+export function modelKeyFile(): string | null {
+  return process.env.ONTOLOGY_MODEL_KEY_FILE || null;
+}
+
+/** Where the engine's model calls are sent on: OPENAI_API_KEY (null: nowhere) and three more. */
+export function openai(): {
+  key: string | null;
+  base: string;
+  model: string;
+  embeddingModel: string;
+} {
   return {
-    url: required("AO_URL", process.env.AO_URL).replace(/\/+$/, ""),
-    key: required("AO_API_KEY", process.env.AO_API_KEY),
+    key: process.env.OPENAI_API_KEY || null,
+    base: (process.env.OPENAI_API_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, ""),
+    model: process.env.OPENAI_MODEL || "gpt-4.1",
+    embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-large",
   };
 }
 
