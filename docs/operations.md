@@ -10,7 +10,7 @@ engine.
 
 | Part                          | How it runs                                                                                                   | What it does                                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| ibl.ai/ontology, the console  | A systemd service, `iblai-ontology`, as the user `ontology`, from the source in `/home/ontology/repo`.        | The pages you manage it from, the API those pages call, and the MCP servers your agents call.      |
+| ibl.ai/ontology, the console  | A systemd service, `iblai-ontology`, as the user `ontology`, from the source in `/opt/iblai-ontology/repo`.   | The pages you manage it from, the API those pages call, and the MCP servers your agents call.      |
 | NVIDIA's auto-ontology engine | Docker: its web app, its API and its ingestion service, built on the server from NVIDIA's source at a commit. | It reads your systems and builds the terms.                                                        |
 | The engine's database         | Docker: Postgres, for the engine alone.                                                                       | Keeps the systems the engine reads, its terms and what was certified, its users and keys.          |
 | Caddy                         | Docker.                                                                                                       | Gets and renews the certificate for your host name, sends http on to https, and is the one way in. |
@@ -29,7 +29,7 @@ Where things are:
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `/opt/iblai-ontology/.env`                      | The settings, for Docker and for the console alike.                                                    |
 | `/opt/iblai-ontology/compose.yaml`              | What Docker runs: the repository's `deploy/compose.yaml`, downloaded by root.                          |
-| `/home/ontology/repo`                           | The console's source and its build. `/home/ontology/.local` holds mise, Node and pnpm.                 |
+| `/opt/iblai-ontology/repo`                      | The console's source and its build. `/home/ontology/.local` holds mise, Node and pnpm.                 |
 | `/etc/systemd/system/iblai-ontology.service`    | How the console is started: `deploy/iblai-ontology.service`, downloaded by root.                       |
 | `/var/lib/ontology`                             | The console's files: the MCP servers deployed on it, their revisions, the logs, its key to the engine. |
 | Docker volumes named `iblai-ontology-console_…` | `secrets`, `postgres_data` (the engine's database) and `certificates` (Caddy's).                       |
@@ -54,9 +54,9 @@ Where things are:
   **Once it runs**, to your ibl.ai platform, to the data sources you connect, to Let's Encrypt
   to renew the certificate, and to your model's address if you give it one.
 
-The files root runs, `compose.yaml` and the console's unit, are downloaded from GitHub and never
-copied out of `/home/ontology/repo`: the user the console runs as can write there, and what
-that user can write must not become what root starts.
+`/opt/iblai-ontology` belongs to the `ontology` user, which builds in it. The console's unit is
+downloaded from GitHub by root into `/etc/systemd/system` and is root's alone. `.env` and
+`compose.yaml` sit in that user's directory, so the service can change them as well as root can.
 
 ## The settings
 
@@ -190,8 +190,8 @@ sudo docker compose restart                                 # restart all three
 ```bash
 cd /opt/iblai-ontology
 sudo systemctl stop iblai-ontology
-sudo -u ontology -H git -C /home/ontology/repo fetch origin main
-sudo -u ontology -H git -C /home/ontology/repo reset --hard origin/main
+sudo -u ontology -H git -C /opt/iblai-ontology/repo fetch origin main
+sudo -u ontology -H git -C /opt/iblai-ontology/repo reset --hard origin/main
 ```
 
 Block 3 builds the new source; block 4 takes the newest `compose.yaml` and unit and starts
@@ -239,7 +239,7 @@ console is built: write that deployment's addresses into `.env.local` in the che
 build again as an upgrade does.
 
 ```bash
-sudo -u ontology tee /home/ontology/repo/.env.local <<'EOF'
+sudo -u ontology tee /opt/iblai-ontology/repo/.env.local <<'EOF'
 NEXT_PUBLIC_API_BASE_URL=<...>
 NEXT_PUBLIC_AUTH_URL=<...>
 NEXT_PUBLIC_BASE_WS_URL=<...>

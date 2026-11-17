@@ -17,8 +17,8 @@ What ends up on the server:
 - **A host name** that points to the server, such as `ontology.example.edu`, with ports 80 and
   443 open to the internet. Create the DNS record first: the certificate cannot be issued until
   the name resolves to the server.
-- **Your ibl.ai platform's key**, such as `example-university`, and an administrator of that
-  platform.
+- **Your ibl.ai platform key**, such as `example-university`, and an administrator of that
+  platform. Check [login.iblai.app/me](https://login.iblai.app/me) for this info.
 
 Paste each block into a terminal on the server and press Enter. Only the first one needs your
 values.
@@ -39,13 +39,14 @@ sudo chmod 600 /opt/iblai-ontology/.env
 
 ## 2. Install Docker
 
-NVIDIA's engine, its database and Caddy run in it. The last line makes `ontology`, the user that
-builds and runs ibl.ai/ontology and has no other rights.
+NVIDIA's engine, its database and Caddy run in it. The last two lines make `ontology`, the user
+that builds and runs ibl.ai/ontology, and give it `/opt/iblai-ontology` to build in.
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
 sudo useradd --system --create-home ontology
+sudo chown -R ontology: /opt/iblai-ontology
 ```
 
 ## 3. Build ibl.ai/ontology
@@ -56,7 +57,6 @@ names, and pnpm builds it from the source.
 ```bash
 cd /opt/iblai-ontology
 sudo -u ontology -H bash -eo pipefail -c '
-  cd ~
   export NEXT_TELEMETRY_DISABLED=1 PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
   command -v mise >/dev/null || curl -fsSL https://mise.run | MISE_INSTALL_HELP=0 sh
   test -d repo || git clone --branch main https://github.com/iblai/ontology.git repo
@@ -83,6 +83,7 @@ curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/a
 last line prints `{"ok":true}` once ibl.ai/ontology is up.
 
 ## 5. Let people sign in
+
 Open `https://<your host>/` and sign in with your ibl.ai account on that platform.
 
 ## If a step fails

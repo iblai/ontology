@@ -559,11 +559,21 @@ describe("iblai-ontology.service", () => {
     const guide = read("docs/install.md");
     const raw = "https://raw.githubusercontent.com/iblai/ontology/main/deploy";
     expect(guide).toContain("sudo useradd --system --create-home ontology\n");
-    // Where the tutorial clones to, under the user's home, is where the unit starts.
-    const checkout = guide.match(/ https:\/\/github\.com\/iblai\/ontology\.git (\S+)\n/)?.[1];
+    // The build runs where the block's cd leaves it, in a directory given to the user.
+    const open = "sudo -u ontology -H bash -eo pipefail -c '\n";
+    const from = guide.indexOf(open) + open.length;
+    expect(from).toBeGreaterThan(open.length);
+    const build = guide.slice(from, guide.indexOf("\n'\n", from));
+    const base = guide.slice(0, from).match(/^cd (\S+)\nsudo -u ontology [^\n]+\n$/m)?.[1];
+    expect(base).toBe("/opt/iblai-ontology");
+    expect(guide).toContain(`sudo chown -R ontology: ${base}\n`);
+    expect(build).not.toMatch(/^\s*cd [~/]/m);
+    // Where the tutorial clones to is where the unit starts; mise stays in the user's home.
+    const checkout = build.match(/ https:\/\/github\.com\/iblai\/ontology\.git (\S+)$/m)?.[1];
     expect(checkout).toBeTruthy();
-    expect(guide).toContain(`test -d ${checkout} || git clone `);
-    expect(UNIT).toContain(`\nWorkingDirectory=/home/ontology/${checkout}\n`);
+    expect(build).toContain(`test -d ${checkout} || git clone `);
+    expect(build).toContain(`\n  cd ${checkout}\n`);
+    expect(UNIT).toContain(`\nWorkingDirectory=${base}/${checkout}\n`);
     expect(UNIT).toContain("\nExecStart=/home/ontology/.local/bin/mise exec -- node ");
     expect(guide).toContain("sudo tee /opt/iblai-ontology/.env <<'EOF'\n");
     // Root downloads what it runs: the service's user can write its own checkout.
@@ -572,9 +582,6 @@ describe("iblai-ontology.service", () => {
     expect(guide).not.toMatch(/sudo cp \/home\/ontology/);
     expect(guide).toContain("http://127.0.0.1:3000/api/host/health");
     // The build runs inside one pair of single quotes: an apostrophe in it would end them.
-    const open = "bash -eo pipefail -c '\n";
-    const from = guide.indexOf(open) + open.length;
-    expect(from).toBeGreaterThan(open.length);
-    expect(guide.slice(from, guide.indexOf("\n'\n", from))).not.toContain("'");
+    expect(build).not.toContain("'");
   });
 });

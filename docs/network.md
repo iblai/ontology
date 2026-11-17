@@ -271,7 +271,8 @@ platforms can each have a server named `advising`.
   elsewhere holds none.
 - The four generated secrets are in the `secrets` volume, never in `compose.yaml` or a `.env`, and
   the server's engine key is in `$ONTOLOGY_HOME/engine-key`. `OPENAI_API_KEY`, when set, is the
-  one secret the operator supplies: keep the file that holds it readable by root only.
+  one secret the operator supplies: keep the file that holds it closed to other users (mode 600,
+  as the install leaves `.env`).
 - NVIDIA's own pages are reachable only through the SSH tunnel, behind their admin password. Its
   API under `/api` takes its own keys; `/api/auth/*` and `/internal/*` answer `404`.
 - Database logins are read-only roles (see [guides/connect-data-sources.md](guides/connect-data-sources.md)).

@@ -1,4 +1,4 @@
-# ibl.ai/ontology built from source in /home/ontology/repo (docs/install.md).
+# ibl.ai/ontology built from source in /opt/iblai-ontology/repo (docs/install.md).
 # NVIDIA's engine, its database and Caddy run beside it from compose.yaml.
 [Unit]
 Description=ibl.ai/ontology
@@ -7,7 +7,7 @@ Description=ibl.ai/ontology
 # exec: a start that cannot run, or lacks its secrets, is reported by systemctl.
 Type=exec
 User=ontology
-WorkingDirectory=/home/ontology/repo
+WorkingDirectory=/opt/iblai-ontology/repo
 # The settings Compose reads too: ONTOLOGY_PLATFORM, ONTOLOGY_DM_URL and the OPENAI_* names.
 EnvironmentFile=/opt/iblai-ontology/.env
 Environment=NEXT_TELEMETRY_DISABLED=1
