@@ -46,7 +46,8 @@ interface Service {
   configs?: { source: string; target: string }[];
   extra_hosts?: string[];
   healthcheck?: { test: string[] };
-  depends_on?: Record<string, { condition: string }>;
+  depends_on?: Record<string, { condition: string; required?: boolean }>;
+  profiles?: string[];
 }
 
 // Compose takes YAML merge keys (`<<`), which `yaml` resolves only when asked.
@@ -371,6 +372,14 @@ describe("compose.yaml", () => {
     expect(after("proxy")).toEqual({ ontology: "service_healthy" });
   });
 
+  it("starts the console's image under the console profile alone, and Caddy without it", () => {
+    for (const name of SERVICES) {
+      expect(services[name].profiles, name).toEqual(name === "ontology" ? ["console"] : undefined);
+    }
+    // A console built from source is not in Docker: Caddy must not wait for one that is.
+    expect(services.proxy.depends_on?.ontology.required).toBe(false);
+  });
+
   it("gives the console exactly the contract's settings", () => {
     const app = services.ontology;
     expect(Object.keys(env("ontology")).sort()).toEqual(
@@ -490,5 +499,59 @@ describe("the release stamps", () => {
 
   it("hold one VERSION line in install.sh", () => {
     expect(read("deploy/install.sh").match(/^VERSION="dev"$/gm)).toHaveLength(1);
+  });
+});
+
+// The console built from source takes the image's place: same addresses, same secrets.
+describe("ontology-console.service", () => {
+  const NAME = "ontology-console.service";
+  const UNIT = read(`deploy/${NAME}`);
+  // Every NAME=value of the unit's Environment= lines.
+  const set: Record<string, string> = Object.fromEntries(
+    [...UNIT.matchAll(/^Environment=(.+)$/gm)]
+      .flatMap((m) => m[1].split(" "))
+      .map((pair): [string, string] => {
+        const at = pair.indexOf("=");
+        return [pair.slice(0, at), pair.slice(at + 1)];
+      }),
+  );
+
+  it("reaches the engine as the image does", () => {
+    for (const name of ["AO_URL", "AO_ORIGIN", "AO_ADMIN_EMAIL"]) {
+      expect(set[name], name).toBe(env("ontology")[name]);
+    }
+  });
+
+  it("is handed the image's two secrets from Compose's own volume", () => {
+    const volume = `/var/lib/docker/volumes/${compose.name}_secrets/_data`;
+    for (const [setting, secret] of [
+      ["AO_ADMIN_PASSWORD_FILE", "admin-password"],
+      ["ONTOLOGY_MODEL_KEY_FILE", "model-key"],
+    ] as const) {
+      expect(env("ontology")[setting]).toBe(`/secrets/${secret}`);
+      expect(UNIT).toContain(`\nLoadCredential=${secret}:${volume}/${secret}\n`);
+      expect(set[setting]).toBe(`/run/credentials/${NAME}/${secret}`);
+    }
+    expect(Object.keys(compose.volumes)).toContain("secrets");
+  });
+
+  it("listens where the image listens, on loopback alone", () => {
+    expect(env("ontology")).toMatchObject({ HOSTNAME: "127.0.0.1", PORT: "3000" });
+    expect(UNIT).toMatch(/^ExecStart=.+\/next start --hostname 127\.0\.0\.1 --port 3000$/m);
+  });
+
+  it("gives Node what pnpm start gives it", () => {
+    const options = parse(read("pnpm-workspace.yaml")).nodeOptions;
+    expect(options).toMatch(/^--/);
+    expect(set.NODE_OPTIONS).toBe(options);
+  });
+
+  it("runs as its own user on the settings Compose reads, its files outside the checkout", () => {
+    expect(UNIT).toContain("\nUser=ontology\n");
+    expect(UNIT).toContain("\nEnvironmentFile=/opt/iblai-ontology/.env\n");
+    expect(UNIT).toContain("\nStateDirectory=ontology\n");
+    expect(set.ONTOLOGY_HOME).toBe("/var/lib/ontology");
+    // The settings come from .env alone: the unit fixes none of the operator's.
+    for (const name of SETTINGS) expect(set[name], name).toBeUndefined();
   });
 });

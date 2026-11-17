@@ -1,4 +1,10 @@
-# ibl.ai ontology on one server: the console, NVIDIA auto-ontology as its engine, and Caddy in front.
+# ibl.ai ontology on one server: NVIDIA auto-ontology as the engine, its database, and Caddy in
+# front of the console.
+#
+#   docker compose up -d
+#
+# The console itself is built from source beside this file and run by systemd (docs/install.md).
+# To run it as ibl.ai's image instead, set COMPOSE_PROFILES=console in a .env beside this file:
 #
 #   curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/compose.yaml
 #   docker compose up -d
@@ -9,7 +15,7 @@
 # Change a setting here, or set the same name in a .env beside this file or in the shell.
 # ONTOLOGY_PLATFORM is required; ONTOLOGY_HOST is the name this server answers at.
 # Nothing secret goes in this file: the first start writes the secrets into the `secrets` volume.
-# The engine's admin password: docker compose exec ontology cat /secrets/admin-password
+# The engine's admin password: docker compose exec postgres cat /secrets/admin-password
 name: iblai-ontology-console
 
 x-settings:
@@ -227,8 +233,10 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # The whole console; it makes its engine key on the first call that needs one.
+  # The whole console as ibl.ai's image, under the `console` profile only: without it the console
+  # runs from source outside Docker. It makes its engine key on the first call that needs one.
   ontology:
+    profiles: ["console"]
     # The release workflow stamps the version here and in install.sh.
     image: public.ecr.aws/ibleducation/iblai-ontology:dev
     network_mode: host
@@ -280,6 +288,7 @@ services:
     depends_on:
       ontology:
         condition: service_healthy
+        required: false # not in Docker when the console runs from source
     restart: unless-stopped
     logging: *logging
 

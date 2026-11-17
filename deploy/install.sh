@@ -5,10 +5,11 @@
 #   curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
 #     | sudo bash -s -- --host <host name> --platform <platform key>
 #
-# Optional: a convenience on top of the release's compose.yaml. It checks the server, installs
-# Docker, Compose, buildx and git if Docker is missing, puts compose.yaml and a .env with the
-# names it was given in /opt/iblai-ontology, starts it, and waits for the console. Run it again
-# to upgrade. --uninstall removes it, --dry-run says what would happen and changes nothing.
+# Optional: a convenience on top of the release's compose.yaml, with the console as ibl.ai's
+# image (docs/install.md builds it from source instead). It checks the server, installs Docker,
+# Compose, buildx and git if Docker is missing, puts compose.yaml and a .env with the names it
+# was given in /opt/iblai-ontology, starts it, and waits for the console. Run it again to
+# upgrade. --uninstall removes it, --dry-run says what would happen and changes nothing.
 #
 # What it leaves on the server: Docker (only if it had to install it), the directory
 # /opt/iblai-ontology with compose.yaml and .env, and Docker's volumes and images. No secret
@@ -113,6 +114,13 @@ refuse_older() {
   fi
 }
 
+# A console built from source keeps its files in the same directory and holds port 3000.
+refuse_source() {
+  if [ -e /etc/systemd/system/ontology-console.service ]; then
+    refuse "this server runs the console from source (ontology-console.service), which this script does not manage: upgrade or remove it as docs/operations.md says. Nothing was changed."
+  fi
+}
+
 check_server() {
   local id="" release="" tool port where free mem
   if [ "$(id -u)" != 0 ]; then
@@ -136,6 +144,7 @@ check_server() {
     fi
   done
   refuse_older
+  refuse_source
   # An upgrade finds its own services on these ports and its own images on the disk.
   if [ -f "$DIR/compose.yaml" ] || [ -f "$DIR/.env" ]; then
     return 0
@@ -223,6 +232,8 @@ settings() {
   say "Writing the settings into $DIR/.env (readable by root alone)."
   run mkdir -p "$DIR"
   put ONTOLOGY_PLATFORM "$PLATFORM"
+  # The console as ibl.ai's image: without the profile Compose starts the engine and Caddy alone.
+  put COMPOSE_PROFILES console
   [ -z "$HOST" ] || put ONTOLOGY_HOST "$HOST"
   [ -z "$PLATFORM_URL" ] || put ONTOLOGY_DM_URL "$PLATFORM_URL"
   if [ -z "$HOST" ]; then
@@ -323,6 +334,7 @@ EOF
 uninstall() {
   local host confirm typed=""
   refuse_older
+  refuse_source
   if [ ! -f "$DIR/compose.yaml" ] && [ ! -f "$DIR/.env" ]; then
     refuse "no ontology console is installed in $DIR."
   fi

@@ -32,11 +32,13 @@ describe("deploy/install.sh", () => {
     expect(lines.at(-1)).toBe('main "$@"');
   });
 
-  it("writes exactly three names into .env, and no secret", () => {
+  it("writes exactly four names into .env, and no secret", () => {
     const written = [...SCRIPT.matchAll(/\bput\s+([A-Z_]+)\s/g)].map((m) => m[1]);
     expect([...new Set(written)].sort()).toEqual(
-      ["ONTOLOGY_DM_URL", "ONTOLOGY_HOST", "ONTOLOGY_PLATFORM"].sort(),
+      ["COMPOSE_PROFILES", "ONTOLOGY_DM_URL", "ONTOLOGY_HOST", "ONTOLOGY_PLATFORM"].sort(),
     );
+    // Without the profile compose.yaml starts no console: this script installs the image.
+    expect(SCRIPT).toMatch(/^\s+put COMPOSE_PROFILES console$/m);
     // put is the one writer of .env: one redirect into it, and no heredoc.
     expect(SCRIPT.match(/>\s*"\$DIR\/\.env/g)).toHaveLength(1);
     expect(SCRIPT).toContain('} >"$DIR/.env.new"');
@@ -69,6 +71,13 @@ describe("deploy/install.sh", () => {
     expect(older).toContain('ontology-gateway "$DIR/compose.yaml"');
     expect(older).not.toContain('-f "$DIR/compose.yaml"');
     expect(older).toContain("/releases/download/v0.2.13/install.sh");
+  });
+
+  it("refuses a server whose console runs from source, to install and to remove", () => {
+    const source = between(SCRIPT, "refuse_source() {\n", "\n}\n");
+    expect(source).toContain("[ -e /etc/systemd/system/ontology-console.service ]");
+    expect(between(SCRIPT, "check_server() {\n", "\n}\n")).toMatch(/^\s+refuse_source$/m);
+    expect(between(SCRIPT, "uninstall() {\n", "\n}\n")).toMatch(/^\s+refuse_source$/m);
   });
 
   it("never hands an installed server's engine to another platform", () => {

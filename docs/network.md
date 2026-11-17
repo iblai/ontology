@@ -6,12 +6,13 @@ codebase runs them three ways:
 
 | Shape                      | Setting                                          | Behaviour                                                                                                                                   |
 | -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| The client's server        | `ONTOLOGY_PLATFORM`, with the engine in `AO_URL` | the whole console, NVIDIA's engine and Caddy on one server, from `deploy/compose.yaml` ([install.md](install.md)); serves that one platform |
+| The client's server        | `ONTOLOGY_PLATFORM`, with the engine in `AO_URL` | the whole console, built from source on the server, beside NVIDIA's engine and Caddy in Docker ([install.md](install.md)); serves that one platform |
 | A console hosted elsewhere | `NEXT_PUBLIC_ONTOLOGY_RELAY=1` at build          | serves pages only; every `/api/host/*` call is forwarded to the platform's server the browser names in the `x-ontology-server` header       |
 | One host run by hand       | none, or `AO_URL` with `ONTOLOGY_PLATFORM`       | pages and server half as one process: a developer's machine (`pnpm dev`), or one host inside the institution's network behind a TLS proxy   |
 
-By default a platform's server serves the whole console at `https://<host>/`. It is installed with
-Docker Compose ([install.md](install.md)). It needs outbound access to the ibl.ai backend, the data
+By default a platform's server serves the whole console at `https://<host>/`. The console is built
+there from source and run by systemd, and NVIDIA's engine and Caddy run in Docker
+([install.md](install.md)). It needs outbound access to the ibl.ai backend, the data
 sources it dissects and serves, and `OPENAI_API_BASE_URL` when a model key is set. Nothing else
 but the certificate authority and the host's own hygiene ([below](#outbound-from-the-host)).
 
@@ -37,8 +38,8 @@ but the certificate authority and the host's own hygiene ([below](#outbound-from
                            │  engine  → console /internal/models/v1, with its model key          │
                            │  loopback only: console 3000, engine web 3100, engine API 3001,     │
                            │                 ingestion 3002, Postgres 5434, every Toolbox port   │
-                           │  volumes: secrets, postgres_data, certificates, ontology_data       │
-                           │           (ONTOLOGY_HOME=/data in the console's container)          │
+                           │  volumes: secrets, postgres_data, certificates                      │
+                           │  the console's files: ONTOLOGY_HOME=/var/lib/ontology,              │
                            │           platforms/<platform>/{env, apis.yaml, servers/<slug>/…}   │
                            └──────────┬────────────────────┬────────────────────┬────────────────┘
                                       │ 443                │ db ports           │ 443, only with
@@ -97,7 +98,7 @@ They open through an SSH tunnel, at `http://localhost:3100`, as `admin@ontology.
 
 ```bash
 ssh -L 3100:127.0.0.1:3100 <server>
-docker compose exec ontology cat /secrets/admin-password    # on the server, beside compose.yaml
+sudo docker compose exec postgres cat /secrets/admin-password    # on the server, in /opt/iblai-ontology
 ```
 
 ### Models
@@ -176,12 +177,14 @@ published.
 | the certificate authority                        | 443                                                                                           | obtaining and renewing the server's certificate                            | Caddy, on a client's server                                                                                                                       |
 | DNS, NTP, internal CA / OS updates               | 53, 123, 443                                                                                  | hygiene                                                                    | host                                                                                                                                              |
 
-When a client's server is installed or rebuilt: GitHub (the release's `compose.yaml` and NVIDIA's
-source, which Docker builds), the container registries (`public.ecr.aws` for the console's image,
-`docker.io` for Caddy and Postgres, `nvcr.io` for NVIDIA's build) and, when `install.sh` installs
-Docker, Ubuntu's archive ([install.md](install.md)). On one host run by hand: the npm registry
-(`pnpm install` brings Toolbox as `@toolbox-sdk/server`). Mirror them internally if the host must
-stay closed after install, or set `TOOLBOX_BIN` to a Toolbox binary you supply.
+When a client's server is installed or upgraded: GitHub (this repository and NVIDIA's source,
+which Docker builds), `mise.run`, `jdx.dev` and `nodejs.org` (mise, and the Node it installs),
+the npm registry (`pnpm install` brings Toolbox as `@toolbox-sdk/server`), the container
+registries (`docker.io` for Caddy and Postgres, `nvcr.io` for NVIDIA's build, `public.ecr.aws`
+only for the console as an image) and Ubuntu's archive
+([operations.md](operations.md#what-the-server-needs)). On one host run by hand: the npm
+registry. Mirror them internally if the host must stay closed after install, or set
+`TOOLBOX_BIN` to a Toolbox binary you supply.
 
 Roles, policies, API keys and agent connections are written on ibl.ai from the admin's browser,
 not from the host.
@@ -209,7 +212,7 @@ by IP at the firewall; re-check the IP when ibl.ai announces changes.
 | ------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Pages               | the client's server (the console's process), a console hosted elsewhere, or one host | the console's origin                                                            | none                                                                                                                                |
 | Forwarding          | a console hosted elsewhere only                                                      | `/api/host/*`, sent on to the server in `x-ontology-server`                     | none                                                                                                                                |
-| Server half         | the client's server (container, host network), or one host                           | 127.0.0.1:3000 behind the proxy; `/api/host/*`                                  | the files below; who a caller is kept in memory for 300 seconds, what they are granted for 60 seconds                               |
+| Server half         | the client's server (a systemd service, or a container on the host's network), or one host                           | 127.0.0.1:3000 behind the proxy; `/api/host/*`                                  | the files below; who a caller is kept in memory for 300 seconds, what they are granted for 60 seconds                               |
 | Gateway             | same process                                                                         | `/<platform>/<slug>/mcp`, also under `/iblai` on a client's server              | `servers/<slug>/gateway.log`                                                                                                        |
 | Model route         | same process                                                                         | `/internal/models/v1/*`, loopback only                                          | none                                                                                                                                |
 | auto-ontology       | the client's server, built from NVIDIA's pinned commit; or beside one host           | web app on 127.0.0.1:3100, its API on 3001, ingestion on 3002, Postgres on 5434 | its Postgres + pgvector volume (`postgres_data`)                                                                                    |

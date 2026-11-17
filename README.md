@@ -63,22 +63,21 @@ Sign-in returns only to origins on your platform's allowed redirect origins on i
 
 ## Install on a server
 
-A platform's server serves the whole console from one Docker Compose file: the pages, the host API
-and the MCP gateway, NVIDIA's engine with its database, and Caddy for TLS. On a server with Docker
-(Compose 2.23.1 or later, and buildx) and git:
+A platform's server serves the whole console at `https://<host>/`: the pages, the host API and the
+MCP gateway, which agents call at `https://<host>/<platform>/<slug>/mcp`. The console is built on
+the server from this repository and run by systemd
+([`deploy/ontology-console.service`](deploy/ontology-console.service)); NVIDIA's engine with its
+database, and Caddy for TLS, run beside it in Docker
+([`deploy/compose.yaml`](deploy/compose.yaml)). Nothing of ibl.ai's arrives as a prebuilt image.
 
-```bash
-curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/compose.yaml
-docker compose up -d
-```
+[docs/install.md](docs/install.md) is the whole install: four blocks to paste on a fresh Ubuntu
+server. `ONTOLOGY_PLATFORM`, in the `.env` beside `compose.yaml`, names the ibl.ai platform the
+server's engine belongs to, and nothing starts without it; `ONTOLOGY_HOST` is the name the server
+answers at.
 
-`ONTOLOGY_PLATFORM`, the first setting at the top of `compose.yaml`, names the ibl.ai platform the
-server's engine belongs to; Compose stops without it. `ONTOLOGY_HOST` is the name the server
-answers at (default `localhost`). Set both in the file, or the same names in a `.env` or the shell.
-The console is then at `https://<host>/`, and agents call `https://<host>/<platform>/<slug>/mcp`.
-
-The install, with the optional `deploy/install.sh`, is in [docs/install.md](docs/install.md); what
-talks to what is in [docs/network.md](docs/network.md).
+Looking after the server is in [docs/operations.md](docs/operations.md), which also covers
+running the console as ibl.ai's prebuilt image instead (`COMPOSE_PROFILES=console`, with the
+optional `deploy/install.sh`). What talks to what is in [docs/network.md](docs/network.md).
 
 The pages can also be hosted elsewhere. Built with `NEXT_PUBLIC_ONTOLOGY_RELAY=1`, the console
 serves pages only (ontology.iblai.me for staging) and forwards every `/api/host/*` call to the
@@ -111,6 +110,9 @@ The ECR repository is created once (`aws ecr-public create-repository --reposito
 iblai-ontology --region us-east-1`). A draft whose image is never pushed is deleted, not published.
 No tag is made by hand but the baseline: `v1.0.0` is pushed together with the commit it names.
 
+A server that builds the console from source ([docs/install.md](docs/install.md)) needs none of
+this: it follows `main`, and takes `compose.yaml` from its own checkout.
+
 ## Documentation
 
 ### Using the console
@@ -126,7 +128,8 @@ No tag is made by hand but the baseline: `v1.0.0` is pushed together with the co
 
 | Document                                     | What it covers                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [docs/install.md](docs/install.md)           | Installing the console on a platform's server with Docker Compose, and the optional script             |
+| [docs/install.md](docs/install.md)           | Installing the console on a platform's server: four blocks to paste on a fresh Ubuntu                  |
+| [docs/operations.md](docs/operations.md)     | Looking after that server: settings, a model, upgrades, backups, the console as an image, failures     |
 | [docs/auth.md](docs/auth.md)                 | ibl.ai SSO: the session as iblai/os implements it, how this console wires it, configuration, demo mode |
 | [docs/network.md](docs/network.md)           | Topology, inbound, outbound to `ext.ibl.ai` and data sources, what runs where, hardening               |
 | [docs/data-sources.md](docs/data-sources.md) | Where every value on screen comes from, and where each thing is saved                                  |
@@ -180,8 +183,9 @@ Open Sans, `#0058cc`).
 | `app/[platform]/[slug]/mcp/`                                             | The gateway agents call: origin, credential and toolset checks, then Toolbox                                                                                                      |
 | `lib/data.ts`, `lib/ibl-flows.ts`                                        | What each page reads and does; the ibl.ai writes (roles, policies, API keys, agents)                                                                                              |
 | [`lib/mock.ts`](lib/mock.ts)                                             | The fixed data demo mode shows                                                                                                                                                    |
-| [`deploy/compose.yaml`](deploy/compose.yaml)                             | The install: the console, NVIDIA's engine built from its pinned commit, Postgres, Caddy and the four generated secrets                                                            |
-| [`deploy/install.sh`](deploy/install.sh)                                 | Optional: prepares an Ubuntu server and runs the Compose install ([docs/install.md](docs/install.md))                                                                             |
+| [`deploy/compose.yaml`](deploy/compose.yaml)                             | What Docker runs on a server: NVIDIA's engine built from its pinned commit, Postgres, Caddy and the four generated secrets; the console's image under the `console` profile       |
+| [`deploy/ontology-console.service`](deploy/ontology-console.service)     | The systemd unit of a console built from source on the server ([docs/install.md](docs/install.md))                                                                                |
+| [`deploy/install.sh`](deploy/install.sh)                                 | Optional: prepares an Ubuntu server and installs the console as an image ([docs/operations.md](docs/operations.md#the-console-as-an-image))                                       |
 | [`deploy/auto-ontology.override.yml`](deploy/auto-ontology.override.yml) | For development: runs a local checkout of the engine on the host's network, on loopback, its web app on `3100`; not part of a release                                             |
 | [`Dockerfile`](Dockerfile)                                               | The console's image, `public.ecr.aws/ibleducation/iblai-ontology`: Next's standalone build of the whole console with the Toolbox binary; the ibl.ai addresses are build arguments |
 | [`.github/workflows/release.yml`](.github/workflows/release.yml)         | On every push to `main`: release-it for the version and the changelog, then a draft release with the install files                                                                |
