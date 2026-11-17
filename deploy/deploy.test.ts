@@ -8,7 +8,7 @@ const read = (file: string) =>
   readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), "utf8");
 
 const COMPOSE = read("deploy/compose.yaml");
-const IMAGE = "ghcr.io/iblai/ontology";
+const IMAGE = "public.ecr.aws/ibleducation/iblai-ontology";
 
 // The operator's settings, in the order the file gives them.
 const SETTINGS = [
@@ -479,6 +479,13 @@ describe("the release stamps", () => {
     expect(workflow).toContain(
       'gh release upload "$TAG" deploy/compose.yaml deploy/install.sh --clobber',
     );
+  });
+
+  it("are attached to a draft: the workflow builds no image and publishes nothing", () => {
+    const workflow = read(".github/workflows/release.yml");
+    expect(workflow).not.toMatch(/docker (build|push|login)/);
+    expect(workflow).not.toContain("--draft=false");
+    expect(read(".release-it.json")).toMatch(/"draft": true/);
   });
 
   it("hold one VERSION line in install.sh", () => {

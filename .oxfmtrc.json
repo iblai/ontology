@@ -3,5 +3,5 @@
   "printWidth": 100,
   "trailingComma": "all",
   "sortTailwindcss": true,
-  "ignorePatterns": ["components/ui/**", "pnpm-lock.yaml", ".next*/**"]
+  "ignorePatterns": ["components/ui/**", "pnpm-lock.yaml", ".next*/**", "CHANGELOG.md"]
 }

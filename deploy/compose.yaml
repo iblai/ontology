@@ -230,7 +230,7 @@ services:
   # The whole console; it makes its engine key on the first call that needs one.
   ontology:
     # The release workflow stamps the version here and in install.sh.
-    image: ghcr.io/iblai/ontology:dev
+    image: public.ecr.aws/ibleducation/iblai-ontology:dev
     network_mode: host
     init: true # reaps the Toolbox processes it starts
     environment:

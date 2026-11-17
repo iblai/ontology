@@ -10,7 +10,8 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release": "release-it"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -40,6 +41,7 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "^12.0.2",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^26",
     "@types/react": "^19",
@@ -47,6 +49,7 @@
     "oxfmt": "^0.77.0",
     "oxlint": "^1.92.0",
     "playwright": "^1.65.1",
+    "release-it": "^21.1.0",
     "tailwind-scrollbar": "^4.0.2",
     "tailwindcss": "4.3.3",
     "typescript": "^7.0.2",

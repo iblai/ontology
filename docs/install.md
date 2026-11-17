@@ -40,7 +40,7 @@ connect. The server serves that one platform and no other.
 - **A host name** that points to the server, such as `ontology.example.edu`, and **ports 80 and 443
   open to the internet**. Create the DNS record first: the certificate cannot be issued until the
   name resolves to the server. 80 is used for the certificate and to send http on to https.
-- **Outbound access during the first start** to GitHub, `nvcr.io`, Docker Hub, `ghcr.io`, PyPI,
+- **Outbound access during the first start** to GitHub, `nvcr.io`, Docker Hub, `public.ecr.aws`, PyPI,
   the npm registry, `astral.sh`, `deb.nodesource.com` and Ubuntu's archive: the images are pulled
   and the engine is built from them. **Once it runs**, to your ibl.ai platform, to the data
   sources you connect, to Let's Encrypt to renew the certificate, and to your model's address if

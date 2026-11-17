@@ -1,54 +1,107 @@
 name: Release
 
-# Publishing a release builds its image and attaches the two files a server installs from,
-# so https://github.com/iblai/ontology/releases/latest/download/compose.yaml never changes.
+# Every push to main prepares a release with release-it: the version and the CHANGELOG.md entry
+# come from the conventional commit subjects since the last v* tag. The release commit, the
+# v<version> tag and a draft GitHub release are pushed by github-actions[bot] with the built-in
+# token, which triggers no other workflow, so the two files a server installs from are stamped
+# and attached here too. No image is built on GitHub: it is built and pushed to ECR by hand,
+# and the draft is published after it (README, Releases).
+# The baseline tag (v1.0.0) is pushed by hand, together with the commit it names.
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  image:
+  release:
+    # Skip our own release commits (loop guard).
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
-      contents: write # attach compose.yaml and install.sh to the release
-      packages: write # push the image to ghcr.io
-    env:
-      IMAGE: ghcr.io/iblai/ontology
-      TAG: ${{ github.event.release.tag_name }}
+      contents: write # push the release commit and its tag, create the draft release
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-
-      - name: Refuse a tag that is not the version in package.json
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Git identity and push credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          version=$(jq -r '.version // empty' package.json)
-          if [ -z "$version" ] || [ "v$version" != "$TAG" ]; then
-            echo "::error::The tag $TAG is not v$version, the version in package.json."
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The baseline is pushed by hand; the older product's v0.2.x tags are not in this history.
+          if ! git describe --tags --match 'v*' --abbrev=0 >/dev/null 2>&1; then
+            echo "::error::No v* tag is reachable from main yet: push the baseline tag with it (git push origin main v1.0.0)."
             exit 1
           fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-
-      - name: Build and push the image (amd64)
-        env:
-          REGISTRY_TOKEN: ${{ github.token }}
-          REGISTRY_USER: ${{ github.actor }}
+          pnpm release --ci
+      - name: Read the version main now holds
+        id: version
         run: |
-          echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          # One plain manifest: ghcr.io refused the image beside its attestation on v0.2.12's first push.
-          docker build --platform linux/amd64 --provenance=false --tag "$IMAGE:$VERSION" .
-          docker push "$IMAGE:$VERSION"
+          set -euo pipefail
+          version=$(jq -r '.version // empty' package.json)
+          # release-it tagged its own commit; with nothing to release, the head is the last release.
+          if [ -z "$version" ] || [ "$(git tag --points-at HEAD --list "v$version")" != "v$version" ]; then
+            echo "::error::The head of main is not tagged v$version, the version in package.json."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Stamp the version into the install files and attach them
+  # Its own job, so a failed upload is re-run alone, against the tag the first job left.
+  files:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the draft for a baseline tag, attach compose.yaml and install.sh
+    env:
+      IMAGE: public.ecr.aws/ibleducation/iblai-ontology
+      VERSION: ${{ needs.release.outputs.version }}
+      TAG: v${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.release.outputs.version }}
+          persist-credentials: false
+
+      - name: Stamp the version into the install files and attach them to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           sed -i "s/^VERSION=\"dev\"$/VERSION=\"$VERSION\"/" deploy/install.sh
           sed -i "s|$IMAGE:dev|$IMAGE:$VERSION|" deploy/compose.yaml
           # A stamp that matched nothing would ship files that install nothing.
           grep -qx "VERSION=\"$VERSION\"" deploy/install.sh
           grep -q "image: $IMAGE:$VERSION\$" deploy/compose.yaml
+          # release-it leaves a draft; a baseline tag pushed by hand has no release yet.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" \
+              --notes "See [CHANGELOG.md](https://github.com/$GH_REPO/blob/$TAG/CHANGELOG.md)."
+          fi
           gh release upload "$TAG" deploy/compose.yaml deploy/install.sh --clobber
+          # Left a draft: "latest" must never name a compose.yaml whose image is not in ECR yet.
+          echo "::notice::$TAG is a draft. Push $IMAGE:$VERSION to ECR, then publish it (README, Releases)."

@@ -177,7 +177,7 @@ published.
 | DNS, NTP, internal CA / OS updates               | 53, 123, 443                                                                                  | hygiene                                                                    | host                                                                                                                                              |
 
 When a client's server is installed or rebuilt: GitHub (the release's `compose.yaml` and NVIDIA's
-source, which Docker builds), the container registries (`ghcr.io` for the console's image,
+source, which Docker builds), the container registries (`public.ecr.aws` for the console's image,
 `docker.io` for Caddy and Postgres, `nvcr.io` for NVIDIA's build) and, when `install.sh` installs
 Docker, Ubuntu's archive ([install.md](install.md)). On one host run by hand: the npm registry
 (`pnpm install` brings Toolbox as `@toolbox-sdk/server`). Mirror them internally if the host must
