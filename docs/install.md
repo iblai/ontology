@@ -25,7 +25,7 @@ values.
 
 ## 1. Name the platform and the host
 
-Replace `example-university` and `ontology.example.edu` with yours. Run this block once: a second
+Replace `example-university` and `ontology.example.edu` with yours, and allow 80 and 443 ports via `ufw`. Run this block once: a second
 run writes the file anew.
 
 ```bash
@@ -35,6 +35,10 @@ ONTOLOGY_PLATFORM=example-university
 ONTOLOGY_HOST=ontology.example.edu
 EOF
 sudo chmod 600 /opt/iblai-ontology/.env
+command -v ufw >/dev/null 2>&1 && {
+    sudo ufw allow 80
+    sudo ufw allow 443
+}
 ```
 
 ## 2. Install Docker
