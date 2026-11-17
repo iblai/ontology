@@ -174,29 +174,22 @@ describe("compose.yaml", () => {
     expect(text).not.toContain("AO_API_KEY");
   });
 
-  it("builds the engine from one pinned commit, the web app from its frontend directory", () => {
-    const pins = new Set<string>();
+  it("pulls NVIDIA's own images at one release, the web app's for its two services", () => {
+    const releases = new Set<string>();
     for (const name of ENGINE) {
       const web = ["frontend-migrate", "auto-ontology-frontend"].includes(name);
-      const context = services[name].build?.context ?? "";
-      const image = services[name].image ?? "";
-      const fromContext = context.match(
-        /^https:\/\/github\.com\/NVIDIA\/auto-ontology\.git#([0-9a-f]{40})(:frontend)?$/,
+      const image = (services[name].image ?? "").match(
+        /^nvcr\.io\/nvidia\/auto-ontology(-frontend)?:(\d+\.\d+\.\d+)$/,
       );
-      const fromImage = image.match(/^auto-ontology(-frontend)?:([0-9a-f]{40})$/);
-      expect(fromContext, name).not.toBeNull();
-      expect(fromImage, name).not.toBeNull();
-      expect(Boolean(fromContext?.[2]), name).toBe(web);
-      expect(Boolean(fromImage?.[1]), name).toBe(web);
-      pins.add(fromContext?.[1] ?? "");
-      pins.add(fromImage?.[2] ?? "");
+      expect(image, name).not.toBeNull();
+      expect(Boolean(image?.[1]), name).toBe(web);
+      releases.add(image?.[2] ?? "");
+      // Nothing is built on the server: no buildx, no git, no minutes of waiting.
+      expect("build" in services[name], name).toBe(false);
       expect("pull_policy" in services[name], name).toBe(false);
     }
-    expect(pins.size).toBe(1);
-    expect(new Set(COMPOSE.match(/\b[0-9a-f]{40}\b/g))).toEqual(pins);
-    expect(services["auto-ontology-frontend"].build?.args).toEqual({
-      PYTHON_API_URL: "http://127.0.0.1:3001",
-    });
+    expect(releases.size).toBe(1);
+    expect(COMPOSE).not.toMatch(/github\.com\/NVIDIA|\b[0-9a-f]{40}\b/);
   });
 
   it("writes the four secrets once, as hex, readable and not writable", () => {
@@ -558,7 +551,9 @@ describe("iblai-ontology.service", () => {
   it("is what the tutorial installs: the same user, paths, files and port", () => {
     const guide = read("docs/install.md");
     const raw = "https://raw.githubusercontent.com/iblai/ontology/main/deploy";
-    expect(guide).toContain("sudo useradd --system --create-home ontology\n");
+    expect(guide).toMatch(/^sudo useradd --system --create-home (\S+ )*ontology$/m);
+    // Node's own binary needs it, and a bare Ubuntu server does not have it.
+    expect(guide).toMatch(/^sudo apt-get install -y .*\blibatomic1\b/m);
     // The build runs where the block's cd leaves it, in a directory given to the user.
     const open = "sudo -u ontology -H bash -eo pipefail -c '\n";
     const from = guide.indexOf(open) + open.length;
@@ -581,7 +576,7 @@ describe("iblai-ontology.service", () => {
     expect(guide).toContain(`sudo curl -fsSLo /etc/systemd/system/${NAME} ${raw}/${NAME}\n`);
     expect(guide).not.toMatch(/sudo cp \/home\/ontology/);
     expect(guide).toContain("http://127.0.0.1:3000/api/host/health");
-    // The build runs inside one pair of single quotes: an apostrophe in it would end them.
-    expect(build).not.toContain("'");
+    // The build runs inside one pair of single quotes: a bare apostrophe would end them.
+    expect(build.replaceAll("'\\''", "")).not.toContain("'");
   });
 });

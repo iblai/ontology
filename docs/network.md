@@ -87,8 +87,8 @@ a key.
 Compose runs every service on the host's network (a Linux host), each listening on `127.0.0.1`
 only, with the engine's web app on 3100 (3000 is the console's). The engine then reaches a database
 on this machine at `127.0.0.1`, the address the runtime uses for it too. The engine's API trusts
-its caller's identity header, which is why 3001 and 3002 stay on loopback. Docker builds NVIDIA's
-services from its repository at a pinned commit.
+its caller's identity header, which is why 3001 and 3002 stay on loopback. The services are
+NVIDIA's own images, pulled from `nvcr.io` at the release `compose.yaml` names.
 
 NVIDIA's API is at `https://<host>/api/…`: everything under `/api` but `/api/host` (the console's)
 and `/api/auth`, which answers `404` so NVIDIA's sign-in stays off the internet. It takes its own
@@ -177,12 +177,11 @@ published.
 | the certificate authority                        | 443                                                                                           | obtaining and renewing the server's certificate                            | Caddy, on a client's server                                                                                                                       |
 | DNS, NTP, internal CA / OS updates               | 53, 123, 443                                                                                  | hygiene                                                                    | host                                                                                                                                              |
 
-When a client's server is installed or upgraded: GitHub (this repository and NVIDIA's source,
-which Docker builds), `mise.run`, `jdx.dev` and `nodejs.org` (mise, and the Node it installs),
-the npm registry (`pnpm install` brings Toolbox as `@toolbox-sdk/server`), Google Fonts (the
-console's typeface, fetched as it builds), the container
-registries (`docker.io` for Caddy and Postgres, `nvcr.io` for NVIDIA's build, `public.ecr.aws`
-only for the console as an image) and Ubuntu's archive
+When a client's server is installed or upgraded: GitHub (this repository), `mise.run`, `jdx.dev`
+and `nodejs.org` (mise, and the Node it installs), the npm registry (`pnpm install` brings
+Toolbox as `@toolbox-sdk/server`), Google Fonts (the console's typeface, fetched as it builds),
+the container registries (`nvcr.io` for NVIDIA's engine, `docker.io` for Caddy and Postgres,
+`public.ecr.aws` only for the console as an image) and Ubuntu's archive
 ([operations.md](operations.md#what-the-server-needs)). On one host run by hand: the npm
 registry. Mirror them internally if the host must stay closed after install, or set
 `TOOLBOX_BIN` to a Toolbox binary you supply.
@@ -217,7 +216,7 @@ by IP at the firewall; re-check the IP when ibl.ai announces changes.
 | Server half         | the client's server (a systemd service, or a container on the host's network), or one host | 127.0.0.1:3000 behind the proxy; `/api/host/*`                                  | the files below; who a caller is kept in memory for 300 seconds, what they are granted for 60 seconds                               |
 | Gateway             | same process                                                                               | `/<platform>/<slug>/mcp`, also under `/iblai` on a client's server              | `servers/<slug>/gateway.log`                                                                                                        |
 | Model route         | same process                                                                               | `/internal/models/v1/*`, loopback only                                          | none                                                                                                                                |
-| auto-ontology       | the client's server, built from NVIDIA's pinned commit; or beside one host                 | web app on 127.0.0.1:3100, its API on 3001, ingestion on 3002, Postgres on 5434 | its Postgres + pgvector volume (`postgres_data`)                                                                                    |
+| auto-ontology       | the client's server, as NVIDIA's own images; or beside one host                            | web app on 127.0.0.1:3100, its API on 3001, ingestion on 3002, Postgres on 5434 | its Postgres + pgvector volume (`postgres_data`)                                                                                    |
 | Toolbox             | host, one process per server                                                               | 127.0.0.1, a free port recorded in `servers/<slug>/flags.json`                  | `servers/<slug>/{tools.yaml, flags.json, revisions/, pid, toolbox.log}`, per platform                                               |
 | Generated secrets   | the client's server                                                                        | —                                                                               | the `secrets` volume, written once: `db-password`, `auth-secret`, `admin-password`, `model-key`                                     |
 | Secrets for serving | host                                                                                       | —                                                                               | the platform's `env`, mode 0600: database passwords and API keys                                                                    |
@@ -279,8 +278,8 @@ platforms can each have a server named `advising`.
   Write tools use a separate login and a separate toolset.
 - Allowed origins and hosts are set per server. Toolbox receives both as flags but does not refuse
   a foreign `Origin`, so the gateway checks both before it checks the credential.
-- NVIDIA's services are built from a pinned commit; pin the images Compose pulls by digest if your
-  policy asks for it. Toolbox is pinned by the lockfile, on one host and on a client's server
+- NVIDIA's services are its own published images at one release; pin the images Compose pulls by
+  digest if your policy asks for it. Toolbox is pinned by the lockfile, on one host and on a client's server
   alike.
 - Logs: the proxy's access log, `gateway.log` and `toolbox.log` per server, the engine's service
   logs. Ship them to your SIEM from the host.

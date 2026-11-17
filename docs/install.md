@@ -1,14 +1,14 @@
 # Install ibl.ai/ontology
 
-Four blocks to paste on a fresh Ubuntu server, and one step on ibl.ai. It takes about fifteen
-minutes, most of it two builds.
+Four blocks to paste on a fresh Ubuntu server, and one step on ibl.ai. Most of the time goes to
+one build and one download.
 
 What ends up on the server:
 
 - **ibl.ai/ontology**, built there from this repository's source and run by systemd. Nothing of
   ibl.ai's arrives as a prebuilt image.
-- **NVIDIA's auto-ontology engine, its database and Caddy**, in Docker. Docker builds the engine
-  from NVIDIA's source, and Caddy gets the HTTPS certificate.
+- **NVIDIA's auto-ontology engine, its database and Caddy**, in Docker. The engine is NVIDIA's
+  own images, pulled from its registry, and Caddy gets the HTTPS certificate.
 
 ## Before you start
 
@@ -44,8 +44,8 @@ that builds and runs ibl.ai/ontology, and give it `/opt/iblai-ontology` to build
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
-sudo useradd --system --create-home ontology
+sudo apt-get install -y docker.io docker-compose-v2 git curl libatomic1
+sudo useradd --system --create-home -s /bin/bash ontology
 sudo chown -R ontology: /opt/iblai-ontology
 ```
 
@@ -58,6 +58,8 @@ names, and pnpm builds it from the source.
 cd /opt/iblai-ontology
 sudo -u ontology -H bash -eo pipefail -c '
   export NEXT_TELEMETRY_DISABLED=1 PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+  echo '\''export PATH="$HOME/.local/bin:$PATH"'\'' >> $HOME/.bashrc
+  echo '\''export PATH="$HOME/.local/share/mise/shims:$PATH"'\'' >> $HOME/.bashrc
   command -v mise >/dev/null || curl -fsSL https://mise.run | MISE_INSTALL_HELP=0 sh
   test -d repo || git clone --branch main https://github.com/iblai/ontology.git repo
   cd repo
@@ -79,7 +81,7 @@ sudo systemctl enable --now iblai-ontology
 curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/api/host/health; echo
 ```
 
-`docker compose up -d` builds NVIDIA's engine the first time, which takes several minutes. The
+`docker compose up -d` downloads NVIDIA's engine the first time, about half a gigabyte. The
 last line prints `{"ok":true}` once ibl.ai/ontology is up.
 
 ## 5. Let people sign in

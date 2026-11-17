@@ -21,7 +21,7 @@ describe("deploy/install.sh", () => {
   it("downloads its own release's compose.yaml and nothing of NVIDIA's", () => {
     expect(SCRIPT).toContain('"$REPO/releases/download/v$VERSION/compose.yaml"');
     expect(SCRIPT.split("/releases/download/v$VERSION/").length - 1).toBe(1);
-    // Docker builds NVIDIA's services from the git address pinned in compose.yaml.
+    // compose.yaml names NVIDIA's images; the script itself fetches nothing of NVIDIA's.
     expect(SCRIPT).not.toMatch(
       /codeload|NVIDIA\/auto-ontology|ENGINE_SHA|server\.yml|override\.yml/,
     );
@@ -86,15 +86,17 @@ describe("deploy/install.sh", () => {
     expect(settings).toMatch(/already serves the platform \$was.*--uninstall/);
   });
 
-  it("installs git beside Docker, Compose and buildx, and git alone beside a Docker already here", () => {
-    expect(SCRIPT).toContain("docker.io docker-compose-v2 docker-buildx git");
-    expect(SCRIPT).toMatch(/apt-get install -y -q --no-install-recommends git$/m);
+  it("installs Docker and Compose alone, and nothing beside a Docker already here", () => {
+    expect(SCRIPT).toMatch(/--no-install-recommends \\\n\s+docker\.io docker-compose-v2\n/);
+    // The images are pulled: nothing is built on the server, so no buildx and no git.
+    expect(SCRIPT).not.toMatch(/buildx|\bgit\b/);
     expect(SCRIPT).toContain('dpkg --compare-versions "$found" ge 2.23.1');
   });
 
-  it("builds with retries and waits for the console's health", () => {
+  it("pulls the images with retries and waits for the console's health", () => {
     expect(SCRIPT).toContain("for attempt in 1 2 3; do");
-    expect(SCRIPT).toContain("docker pull nvcr.io/nvidia/base/ubuntu:jammy-20250619");
+    expect(SCRIPT).toContain('if run "${COMPOSE[@]}" pull; then');
+    expect(SCRIPT).not.toContain('"${COMPOSE[@]}" build');
     expect(SCRIPT).toContain('url="https://${HOST:-localhost}/api/host/health"');
     expect(SCRIPT).toContain('how=(--resolve "$HOST:443:127.0.0.1")');
     expect(SCRIPT).toContain('"${COMPOSE[@]}" up --detach --remove-orphans');

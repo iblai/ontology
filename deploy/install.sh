@@ -6,10 +6,10 @@
 #     | sudo bash -s -- --host <host name> --platform <platform key>
 #
 # Optional: a convenience on top of the release's compose.yaml, with the console as ibl.ai's
-# image (docs/install.md builds it from source instead). It checks the server, installs Docker,
-# Compose, buildx and git if Docker is missing, puts compose.yaml and a .env with the names it
-# was given in /opt/iblai-ontology, starts it, and waits for the console. Run it again to
-# upgrade. --uninstall removes it, --dry-run says what would happen and changes nothing.
+# image (docs/install.md builds it from source instead). It checks the server, installs Docker
+# and Compose if Docker is missing, puts compose.yaml and a .env with the names it was given in
+# /opt/iblai-ontology, pulls the images, starts them, and waits for the console. Run it again
+# to upgrade. --uninstall removes it, --dry-run says what would happen and changes nothing.
 #
 # What it leaves on the server: Docker (only if it had to install it), the directory
 # /opt/iblai-ontology with compose.yaml and .env, and Docker's volumes and images. No secret
@@ -156,16 +156,16 @@ check_server() {
       refuse "port $port is already in use on this server. The console's services listen on 80, 443, 3000, 3001, 3002, 3100 and 5434: stop what holds $port, then run this again. Nothing was installed."
     fi
   done
-  # NVIDIA's engine is built on this server, which takes room and memory.
+  # The images, the engine and its data take room and memory.
   where=/var/lib
   [ ! -d /var/lib/docker ] || where=/var/lib/docker
   free=$(df -Pk "$where" | awk 'NR == 2 { print $4 }')
   if [ "$free" -lt 15728640 ]; then
-    refuse "there is $(gb "$free") GB free in $where; building and running the engine needs at least 15 GB. Nothing was installed."
+    refuse "there is $(gb "$free") GB free in $where; the images, the engine and its data need at least 15 GB. Nothing was installed."
   fi
   mem=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
   if [ "$mem" -lt 3670016 ]; then
-    refuse "this server has $(gb "$mem") GB of memory; building the engine needs 4 GB. Nothing was installed."
+    refuse "this server has $(gb "$mem") GB of memory; the engine needs 4 GB. Nothing was installed."
   fi
 }
 
@@ -173,24 +173,15 @@ ensure_docker() {
   local found
   if docker compose version >/dev/null 2>&1; then
     say "Docker with Compose is already here."
-    if ! docker buildx version >/dev/null 2>&1; then
-      # Mixing Ubuntu's packages with Docker's own breaks both, so it is not guessed.
-      refuse "Docker is installed without buildx, which building NVIDIA's engine needs. Add the package that matches your Docker (docker-buildx beside Ubuntu's docker.io, docker-buildx-plugin beside Docker's own packages), then run this again."
-    fi
-    # Docker builds NVIDIA's services from its git address, which takes git on the server.
-    if ! command -v git >/dev/null 2>&1; then
-      say "Installing git from Ubuntu's own archive."
-      run env DEBIAN_FRONTEND=noninteractive apt-get update -q
-      run env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends git
-    fi
   elif command -v docker >/dev/null 2>&1; then
+    # Mixing Ubuntu's packages with Docker's own breaks both, so it is not guessed.
     refuse "Docker is installed without Compose. Add the Compose package that matches your Docker (docker-compose-v2 beside Ubuntu's docker.io, docker-compose-plugin beside Docker's own packages), then run this again."
     return
   else
-    say "Installing Docker, Compose, buildx and git from Ubuntu's own archive (docker.io, docker-compose-v2, docker-buildx, git)."
+    say "Installing Docker and Compose from Ubuntu's own archive (docker.io, docker-compose-v2)."
     run env DEBIAN_FRONTEND=noninteractive apt-get update -q
     run env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
-      docker.io docker-compose-v2 docker-buildx git
+      docker.io docker-compose-v2
     run systemctl enable --now docker
   fi
   if [ "$DRY" = 1 ] && ! docker compose version >/dev/null 2>&1; then
@@ -248,16 +239,16 @@ fetch() {
   run mv "$DIR/compose.yaml.new" "$DIR/compose.yaml"
 }
 
-build() {
+pull() {
   local attempt
-  # NVIDIA's base image comes from nvcr.io, whose pulls have timed out before.
+  # NVIDIA's images come from nvcr.io, whose pulls have timed out before.
   for attempt in 1 2 3; do
-    say "Building NVIDIA's services (attempt $attempt of 3; the first build takes several minutes)."
-    if run "${COMPOSE[@]}" build; then
+    say "Getting the images (attempt $attempt of 3)."
+    if run "${COMPOSE[@]}" pull; then
       return
     fi
     [ "$attempt" -lt 3 ] ||
-      stop "NVIDIA's services did not build in three attempts: Docker's output is above. If it ends in a timeout at nvcr.io, run docker pull nvcr.io/nvidia/base/ubuntu:jammy-20250619, then run this again. $DIR is left as it is."
+      stop "the images did not arrive in three attempts: Docker's output is above. If it ends in a timeout at nvcr.io, run this again. $DIR is left as it is."
     sleep 20
   done
 }
@@ -361,8 +352,8 @@ uninstall() {
   cat <<EOF
 
 Removed. Still in place:
-  - Docker and git. If this script installed them:
-    apt-get remove --purge docker.io docker-compose-v2 docker-buildx git
+  - Docker. If this script installed it:
+    apt-get remove --purge docker.io docker-compose-v2
   - What the ibl.ai platform keeps: the key and the MCP server of each agent that was still
     connected, and https://${host:-localhost} among its allowed redirect origins. Remove them there.
 EOF
@@ -417,7 +408,7 @@ main() {
   ensure_docker
   settings
   fetch
-  build
+  pull
   start
   finish
 }

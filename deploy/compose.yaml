@@ -9,8 +9,8 @@
 #   curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/compose.yaml
 #   docker compose up -d
 #
-# Needs a Linux host with Docker, Compose 2.23.1 or later, buildx and git: the engine is built
-# from NVIDIA's repository at a pinned commit on the first start.
+# Needs a Linux host with Docker and Compose 2.23.1 or later. The engine is NVIDIA's own images,
+# pulled from its registry on the first start.
 #
 # Change a setting here, or set the same name in a .env beside this file or in the shell.
 # ONTOLOGY_PLATFORM is required; ONTOLOGY_HOST is the name this server answers at.
@@ -32,11 +32,9 @@ x-settings:
 x-logging: &logging
   driver: local # rotates by itself
 
-# NVIDIA auto-ontology at the commit the console was proven on; a new pin rebuilds by itself.
+# NVIDIA auto-ontology as NVIDIA publishes it: one release, the same for both images.
 x-engine: &engine
-  build:
-    context: https://github.com/NVIDIA/auto-ontology.git#22e22c894df8cde7a78f854ea40476a8577e9a3d
-  image: auto-ontology:22e22c894df8cde7a78f854ea40476a8577e9a3d
+  image: nvcr.io/nvidia/auto-ontology:1.2.0
   network_mode: host
   extra_hosts: &names # the service names, which the host's network does not resolve
     - "postgres:127.0.0.1"
@@ -48,11 +46,7 @@ x-engine: &engine
   logging: *logging
 
 x-web: &web
-  build:
-    context: https://github.com/NVIDIA/auto-ontology.git#22e22c894df8cde7a78f854ea40476a8577e9a3d:frontend
-    args:
-      PYTHON_API_URL: http://127.0.0.1:3001
-  image: auto-ontology-frontend:22e22c894df8cde7a78f854ea40476a8577e9a3d
+  image: nvcr.io/nvidia/auto-ontology-frontend:1.2.0
   network_mode: host
   extra_hosts: *names
   configs: *wrapper

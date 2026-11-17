@@ -76,8 +76,8 @@ write, the engine's API shapes (read from its source, never called), Toolbox sta
 loaded-config check, the gateway with a real agent, and the compose override. Serving several
 platforms from one host (sign-in without a platform, the platform header, the per-platform files
 and engines) has not been run either, nor has the server install: the console built with mise and
-run by systemd, which hands it two of the generated secrets, Docker building NVIDIA's services
-from its repository, the generated secrets, Caddy's routes, the console's sign-in on the
+run by systemd, which hands it two of the generated secrets, NVIDIA's published images behind
+this file's wrapper, the generated secrets, Caddy's routes, the console's sign-in on the
 client's own origin, the server making its own engine key, the model route with a real key, and
 the forwarding from a console hosted elsewhere. No end-to-end test exists yet.
 
