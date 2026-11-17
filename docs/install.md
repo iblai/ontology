@@ -83,10 +83,7 @@ curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/a
 last line prints `{"ok":true}` once ibl.ai/ontology is up.
 
 ## 5. Let people sign in
-
-1. On ibl.ai, add `https://<your host>` to the platform's allowed redirect origins. Sign-in
-   returns to no other address.
-2. Open `https://<your host>/` and sign in with your ibl.ai account on that platform.
+Open `https://<your host>/` and sign in with your ibl.ai account on that platform.
 
 ## If a step fails
 
@@ -98,9 +95,3 @@ Blocks 2, 3 and 4 can be pasted again as they are: each takes up where it stoppe
   again.
 - **The last line prints no `{"ok":true}`**: `sudo journalctl -u iblai-ontology -n 30` says why
   it did not start.
-
-## Afterwards
-
-Everything else is in [operations.md](operations.md): giving the engine a model, the settings,
-logs, upgrades, backups, removing it, and
-[what each failure means](operations.md#when-something-stops).
