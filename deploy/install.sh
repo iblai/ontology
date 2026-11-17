@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# install.sh — the ibl.ai ontology console on a fresh Ubuntu server
+# install.sh — ibl.ai/ontology on a fresh Ubuntu server
 #
 #   curl -fsSL https://github.com/iblai/ontology/releases/latest/download/install.sh \
 #     | sudo bash -s -- --host <host name> --platform <platform key>
@@ -36,7 +36,7 @@ UNINSTALL=0
 
 usage() {
   cat <<EOF
-Installs the ibl.ai ontology console on this server (Ubuntu 22.04 or later, x86_64).
+Installs ibl.ai/ontology on this server (Ubuntu 22.04 or later, x86_64).
 
   --platform <key>          the ibl.ai platform this server serves, such as acme-university
   --host <host name>        the name this server answers at, such as ontology.example.edu
@@ -114,10 +114,10 @@ refuse_older() {
   fi
 }
 
-# A console built from source keeps its files in the same directory and holds port 3000.
+# ibl.ai/ontology built from source keeps its files in the same directory and holds port 3000.
 refuse_source() {
-  if [ -e /etc/systemd/system/ontology-console.service ]; then
-    refuse "this server runs the console from source (ontology-console.service), which this script does not manage: upgrade or remove it as docs/operations.md says. Nothing was changed."
+  if [ -e /etc/systemd/system/iblai-ontology.service ]; then
+    refuse "this server runs ibl.ai/ontology from source (iblai-ontology.service), which this script does not manage: upgrade or remove it as docs/operations.md says. Nothing was changed."
   fi
 }
 
@@ -294,7 +294,7 @@ start() {
 finish() {
   local host=${HOST:-localhost}
   say ""
-  say "The ontology console is running (version $VERSION), serving the platform $PLATFORM."
+  say "ibl.ai/ontology is running (version $VERSION), serving the platform $PLATFORM."
   cat <<EOF
 
   The console:              https://$host/
@@ -336,11 +336,11 @@ uninstall() {
   refuse_older
   refuse_source
   if [ ! -f "$DIR/compose.yaml" ] && [ ! -f "$DIR/.env" ]; then
-    refuse "no ontology console is installed in $DIR."
+    refuse "ibl.ai/ontology is not installed in $DIR."
   fi
   host=$(kept ONTOLOGY_HOST)
   confirm=${host:-remove}
-  say "This removes the ontology console${host:+ at $host}: its containers and images, NVIDIA's engine"
+  say "This removes ibl.ai/ontology${host:+ at $host}: its containers and images, NVIDIA's engine"
   say "with its database (the systems it reads, its terms and what was certified, its users and"
   say "keys), the console's files (the MCP servers deployed on it, their revisions and logs), the"
   say "generated secrets, the certificate, and $DIR with compose.yaml and .env."

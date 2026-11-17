@@ -75,7 +75,7 @@ describe("deploy/install.sh", () => {
 
   it("refuses a server whose console runs from source, to install and to remove", () => {
     const source = between(SCRIPT, "refuse_source() {\n", "\n}\n");
-    expect(source).toContain("[ -e /etc/systemd/system/ontology-console.service ]");
+    expect(source).toContain("[ -e /etc/systemd/system/iblai-ontology.service ]");
     expect(between(SCRIPT, "check_server() {\n", "\n}\n")).toMatch(/^\s+refuse_source$/m);
     expect(between(SCRIPT, "uninstall() {\n", "\n}\n")).toMatch(/^\s+refuse_source$/m);
   });

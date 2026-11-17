@@ -4,11 +4,11 @@ The console has two halves: its pages, and its server half (the route handlers u
 `/api/host/*`, the MCP gateway, the Toolbox processes and the files under `$ONTOLOGY_HOME`). One
 codebase runs them three ways:
 
-| Shape                      | Setting                                          | Behaviour                                                                                                                                   |
-| -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shape                      | Setting                                          | Behaviour                                                                                                                                           |
+| -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The client's server        | `ONTOLOGY_PLATFORM`, with the engine in `AO_URL` | the whole console, built from source on the server, beside NVIDIA's engine and Caddy in Docker ([install.md](install.md)); serves that one platform |
-| A console hosted elsewhere | `NEXT_PUBLIC_ONTOLOGY_RELAY=1` at build          | serves pages only; every `/api/host/*` call is forwarded to the platform's server the browser names in the `x-ontology-server` header       |
-| One host run by hand       | none, or `AO_URL` with `ONTOLOGY_PLATFORM`       | pages and server half as one process: a developer's machine (`pnpm dev`), or one host inside the institution's network behind a TLS proxy   |
+| A console hosted elsewhere | `NEXT_PUBLIC_ONTOLOGY_RELAY=1` at build          | serves pages only; every `/api/host/*` call is forwarded to the platform's server the browser names in the `x-ontology-server` header               |
+| One host run by hand       | none, or `AO_URL` with `ONTOLOGY_PLATFORM`       | pages and server half as one process: a developer's machine (`pnpm dev`), or one host inside the institution's network behind a TLS proxy           |
 
 By default a platform's server serves the whole console at `https://<host>/`. The console is built
 there from source and run by systemd, and NVIDIA's engine and Caddy run in Docker
@@ -179,7 +179,8 @@ published.
 
 When a client's server is installed or upgraded: GitHub (this repository and NVIDIA's source,
 which Docker builds), `mise.run`, `jdx.dev` and `nodejs.org` (mise, and the Node it installs),
-the npm registry (`pnpm install` brings Toolbox as `@toolbox-sdk/server`), the container
+the npm registry (`pnpm install` brings Toolbox as `@toolbox-sdk/server`), Google Fonts (the
+console's typeface, fetched as it builds), the container
 registries (`docker.io` for Caddy and Postgres, `nvcr.io` for NVIDIA's build, `public.ecr.aws`
 only for the console as an image) and Ubuntu's archive
 ([operations.md](operations.md#what-the-server-needs)). On one host run by hand: the npm
@@ -201,28 +202,30 @@ the hosted platform; the deployment sets `NEXT_PUBLIC_API_BASE_URL=https://ext.i
 Resolved on 2026-11-15: `ext.ibl.ai` = `129.80.99.227`; the hosted cloud (`api.iblai.app`,
 `os.ibl.ai`, `login.iblai.app`) = `141.148.72.26`. Set `NEXT_PUBLIC_API_BASE_URL=https://ext.ibl.ai`
 so every ibl.ai call from the browser and from the host uses the backend you allow-listed. A
-`NEXT_PUBLIC_*` value is fixed when the image is built: the `Dockerfile` takes the ibl.ai addresses
-as build arguments, so pages that call `ext.ibl.ai` come from an image built with them. The server
+`NEXT_PUBLIC_*` value is fixed when the console is built, so pages that call `ext.ibl.ai` come
+from a build that had those addresses ([operations.md](operations.md#another-iblai-deployment)).
+The server
 half takes its ibl.ai address at run time from `ONTOLOGY_DM_URL`. Pin by hostname at the proxy and
 by IP at the firewall; re-check the IP when ibl.ai announces changes.
 
 ## What runs where
 
-| Component           | Where                                                                                | Listens                                                                         | State it keeps                                                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Pages               | the client's server (the console's process), a console hosted elsewhere, or one host | the console's origin                                                            | none                                                                                                                                |
-| Forwarding          | a console hosted elsewhere only                                                      | `/api/host/*`, sent on to the server in `x-ontology-server`                     | none                                                                                                                                |
-| Server half         | the client's server (a systemd service, or a container on the host's network), or one host                           | 127.0.0.1:3000 behind the proxy; `/api/host/*`                                  | the files below; who a caller is kept in memory for 300 seconds, what they are granted for 60 seconds                               |
-| Gateway             | same process                                                                         | `/<platform>/<slug>/mcp`, also under `/iblai` on a client's server              | `servers/<slug>/gateway.log`                                                                                                        |
-| Model route         | same process                                                                         | `/internal/models/v1/*`, loopback only                                          | none                                                                                                                                |
-| auto-ontology       | the client's server, built from NVIDIA's pinned commit; or beside one host           | web app on 127.0.0.1:3100, its API on 3001, ingestion on 3002, Postgres on 5434 | its Postgres + pgvector volume (`postgres_data`)                                                                                    |
-| Toolbox             | host, one process per server                                                         | 127.0.0.1, a free port recorded in `servers/<slug>/flags.json`                  | `servers/<slug>/{tools.yaml, flags.json, revisions/, pid, toolbox.log}`, per platform                                               |
-| Generated secrets   | the client's server                                                                  | —                                                                               | the `secrets` volume, written once: `db-password`, `auth-secret`, `admin-password`, `model-key`                                     |
-| Secrets for serving | host                                                                                 | —                                                                               | the platform's `env`, mode 0600: database passwords and API keys                                                                    |
-| TLS proxy           | host                                                                                 | 0.0.0.0:443 (and :80 for Caddy)                                                 | Caddy's certificate, obtained automatically, in the `certificates` volume; on one host on a VPN, a certificate from the internal CA |
+| Component           | Where                                                                                      | Listens                                                                         | State it keeps                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Pages               | the client's server (the console's process), a console hosted elsewhere, or one host       | the console's origin                                                            | none                                                                                                                                |
+| Forwarding          | a console hosted elsewhere only                                                            | `/api/host/*`, sent on to the server in `x-ontology-server`                     | none                                                                                                                                |
+| Server half         | the client's server (a systemd service, or a container on the host's network), or one host | 127.0.0.1:3000 behind the proxy; `/api/host/*`                                  | the files below; who a caller is kept in memory for 300 seconds, what they are granted for 60 seconds                               |
+| Gateway             | same process                                                                               | `/<platform>/<slug>/mcp`, also under `/iblai` on a client's server              | `servers/<slug>/gateway.log`                                                                                                        |
+| Model route         | same process                                                                               | `/internal/models/v1/*`, loopback only                                          | none                                                                                                                                |
+| auto-ontology       | the client's server, built from NVIDIA's pinned commit; or beside one host                 | web app on 127.0.0.1:3100, its API on 3001, ingestion on 3002, Postgres on 5434 | its Postgres + pgvector volume (`postgres_data`)                                                                                    |
+| Toolbox             | host, one process per server                                                               | 127.0.0.1, a free port recorded in `servers/<slug>/flags.json`                  | `servers/<slug>/{tools.yaml, flags.json, revisions/, pid, toolbox.log}`, per platform                                               |
+| Generated secrets   | the client's server                                                                        | —                                                                               | the `secrets` volume, written once: `db-password`, `auth-secret`, `admin-password`, `model-key`                                     |
+| Secrets for serving | host                                                                                       | —                                                                               | the platform's `env`, mode 0600: database passwords and API keys                                                                    |
+| TLS proxy           | host                                                                                       | 0.0.0.0:443 (and :80 for Caddy)                                                 | Caddy's certificate, obtained automatically, in the `certificates` volume; on one host on a VPN, a certificate from the internal CA |
 
 `ONTOLOGY_HOME` defaults to `.ontology` in the console's directory. On a client's server it is
-`/data` in the container, the `ontology_data` volume. Everything in it is kept per platform:
+`/var/lib/ontology`, or `/data` in the container (the `ontology_data` volume) when the console
+runs as an image. Everything in it is kept per platform:
 
 ```
 $ONTOLOGY_HOME/
@@ -276,7 +279,7 @@ platforms can each have a server named `advising`.
 - Allowed origins and hosts are set per server. Toolbox receives both as flags but does not refuse
   a foreign `Origin`, so the gateway checks both before it checks the credential.
 - NVIDIA's services are built from a pinned commit; pin the images Compose pulls by digest if your
-  policy asks for it. Toolbox is pinned by the lockfile on one host and by the image on a client's
-  server.
+  policy asks for it. Toolbox is pinned by the lockfile, on one host and on a client's server
+  alike.
 - Logs: the proxy's access log, `gateway.log` and `toolbox.log` per server, the engine's service
   logs. Ship them to your SIEM from the host.

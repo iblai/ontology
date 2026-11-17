@@ -1,5 +1,5 @@
 /**
- * Mock data for the Ontology console.
+ * Mock data for ibl.ai/ontology.
  *
  * Every export below is tagged with the system of record it will come from.
  * There is no fourth source: if a value is not available from one of these,

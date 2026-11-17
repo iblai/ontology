@@ -1,4 +1,4 @@
-# Ontology console — build plan
+# ibl.ai/ontology — build plan
 
 Status: **built, not yet run against live systems.** The console at the repository root reads and
 writes ibl.ai, the dissection engine and the server runtime. Nothing has been run against a live
@@ -61,11 +61,12 @@ saved are in [data-sources.md](data-sources.md).
 5. **Serve for real.** Built: certified terms become `tools.yaml`; one Toolbox process per server;
    the gateway at `/<platform>/<slug>/mcp` (also under `/iblai` on a client's server) checks the
    connection, origin, credential and scope, then forwards.
-6. **A server per platform.** Built: `deploy/compose.yaml` runs the whole console, NVIDIA's
-   engine and Caddy on a client's server, for the platform `ONTOLOGY_PLATFORM` names; the server
-   makes its own engine key, and an optional `OPENAI_API_KEY` reaches the engine through the
-   console's model route. `deploy/install.sh` is an optional convenience on top. A console hosted
-   elsewhere forwards `/api/host/*` to the server the browser names ([install.md](install.md)).
+6. **A server per platform.** Built: on a client's server the console is built from source and
+   run by systemd, and `deploy/compose.yaml` runs NVIDIA's engine and Caddy beside it, for the
+   platform `ONTOLOGY_PLATFORM` names; the server makes its own engine key, and an optional
+   `OPENAI_API_KEY` reaches the engine through the console's model route. The console as ibl.ai's
+   image, with `deploy/install.sh`, is the optional route. A console hosted elsewhere forwards
+   `/api/host/*` to the server the browser names ([install.md](install.md)).
 7. **Remove the walkthrough** (`NEXT_PUBLIC_WALKTHROUGH=0`) once the flow is approved.
 
 ### Not verified yet
@@ -74,8 +75,9 @@ Nothing has been run against a live platform, engine or runtime. That covers eve
 write, the engine's API shapes (read from its source, never called), Toolbox start, reload and the
 loaded-config check, the gateway with a real agent, and the compose override. Serving several
 platforms from one host (sign-in without a platform, the platform header, the per-platform files
-and engines) has not been run either, nor has the Compose install: Docker building NVIDIA's
-services from its repository, the generated secrets, Caddy's routes, the console's sign-in on the
+and engines) has not been run either, nor has the server install: the console built with mise and
+run by systemd, which hands it two of the generated secrets, Docker building NVIDIA's services
+from its repository, the generated secrets, Caddy's routes, the console's sign-in on the
 client's own origin, the server making its own engine key, the model route with a real key, and
 the forwarding from a console hosted elsewhere. No end-to-end test exists yet.
 
@@ -86,6 +88,6 @@ Follow the quick start in the [README](../README.md): start the engine with
 or the engine admin's sign-in), then `pnpm install && pnpm dev`. Open http://localhost:3000. The
 walkthrough stepper at the bottom follows steps 0–5. That is the one-host mode.
 
-On a server: `docker compose up -d` with `deploy/compose.yaml` ([install.md](install.md)). Pages
+On a server: the four blocks of [install.md](install.md). Pages
 hosted elsewhere: build them with `NEXT_PUBLIC_ONTOLOGY_RELAY=1` and connect each platform's server
 under **Connect a server**.

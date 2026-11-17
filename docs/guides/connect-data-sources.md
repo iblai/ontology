@@ -133,7 +133,7 @@ names it.
 ## Changing or removing a source
 
 The engine's own UI is not served on the server's host name: it opens through an SSH tunnel to the
-server ([install.md](../install.md)).
+server ([operations.md](../operations.md#the-generated-secrets)).
 
 - Rotating a password: change it in the engine's own UI (**Settings → Connections**) and in
   `$ONTOLOGY_HOME/platforms/<platform>/env` under `<NAME>_DB_PASSWORD`, then deploy each server

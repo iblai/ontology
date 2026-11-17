@@ -7,7 +7,7 @@ import { HostError } from "./errors";
 import { assertServed, inPlatform } from "./platform";
 import { relay } from "./relay";
 
-const CLOSED = "Admin access to the ontology console is required.";
+const CLOSED = "Admin access to ibl.ai/ontology is required.";
 
 /**
  * Runs `run` as the signed-in console user of the platform the request names, inside that

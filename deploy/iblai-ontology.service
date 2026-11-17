@@ -1,16 +1,16 @@
-# The ontology console built from source in /home/ontology/console (docs/install.md).
+# ibl.ai/ontology built from source in /home/ontology/repo (docs/install.md).
 # NVIDIA's engine, its database and Caddy run beside it from compose.yaml.
 [Unit]
-Description=ibl.ai ontology console
-After=network-online.target
-Wants=network-online.target
+Description=ibl.ai/ontology
 
 [Service]
+# exec: a start that cannot run, or lacks its secrets, is reported by systemctl.
+Type=exec
 User=ontology
-WorkingDirectory=/home/ontology/console
+WorkingDirectory=/home/ontology/repo
 # The settings Compose reads too: ONTOLOGY_PLATFORM, ONTOLOGY_DM_URL and the OPENAI_* names.
 EnvironmentFile=/opt/iblai-ontology/.env
-Environment=NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+Environment=NEXT_TELEMETRY_DISABLED=1
 # What `pnpm start` passes from pnpm-workspace.yaml.
 Environment=NODE_OPTIONS=--no-experimental-webstorage
 # The console's own files: /var/lib/ontology.
@@ -23,8 +23,8 @@ Environment=AO_ADMIN_EMAIL=admin@ontology.local
 # Two of the secrets Compose generated, read from its volume by root as the service starts.
 LoadCredential=admin-password:/var/lib/docker/volumes/iblai-ontology-console_secrets/_data/admin-password
 LoadCredential=model-key:/var/lib/docker/volumes/iblai-ontology-console_secrets/_data/model-key
-Environment=AO_ADMIN_PASSWORD_FILE=/run/credentials/ontology-console.service/admin-password
-Environment=ONTOLOGY_MODEL_KEY_FILE=/run/credentials/ontology-console.service/model-key
+Environment=AO_ADMIN_PASSWORD_FILE=/run/credentials/iblai-ontology.service/admin-password
+Environment=ONTOLOGY_MODEL_KEY_FILE=/run/credentials/iblai-ontology.service/model-key
 # Loopback only: Caddy is the one way in, and next start listens everywhere unless told.
 ExecStart=/home/ontology/.local/bin/mise exec -- node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
 Restart=on-failure

@@ -66,7 +66,7 @@ Sign-in returns only to origins on your platform's allowed redirect origins on i
 A platform's server serves the whole console at `https://<host>/`: the pages, the host API and the
 MCP gateway, which agents call at `https://<host>/<platform>/<slug>/mcp`. The console is built on
 the server from this repository and run by systemd
-([`deploy/ontology-console.service`](deploy/ontology-console.service)); NVIDIA's engine with its
+([`deploy/iblai-ontology.service`](deploy/iblai-ontology.service)); NVIDIA's engine with its
 database, and Caddy for TLS, run beside it in Docker
 ([`deploy/compose.yaml`](deploy/compose.yaml)). Nothing of ibl.ai's arrives as a prebuilt image.
 
@@ -111,7 +111,7 @@ iblai-ontology --region us-east-1`). A draft whose image is never pushed is dele
 No tag is made by hand but the baseline: `v1.0.0` is pushed together with the commit it names.
 
 A server that builds the console from source ([docs/install.md](docs/install.md)) needs none of
-this: it follows `main`, and takes `compose.yaml` from its own checkout.
+this: it follows `main`, for the source and for `compose.yaml` alike.
 
 ## Documentation
 
@@ -184,7 +184,7 @@ Open Sans, `#0058cc`).
 | `lib/data.ts`, `lib/ibl-flows.ts`                                        | What each page reads and does; the ibl.ai writes (roles, policies, API keys, agents)                                                                                              |
 | [`lib/mock.ts`](lib/mock.ts)                                             | The fixed data demo mode shows                                                                                                                                                    |
 | [`deploy/compose.yaml`](deploy/compose.yaml)                             | What Docker runs on a server: NVIDIA's engine built from its pinned commit, Postgres, Caddy and the four generated secrets; the console's image under the `console` profile       |
-| [`deploy/ontology-console.service`](deploy/ontology-console.service)     | The systemd unit of a console built from source on the server ([docs/install.md](docs/install.md))                                                                                |
+| [`deploy/iblai-ontology.service`](deploy/iblai-ontology.service)         | The systemd unit of a console built from source on the server ([docs/install.md](docs/install.md))                                                                                |
 | [`deploy/install.sh`](deploy/install.sh)                                 | Optional: prepares an Ubuntu server and installs the console as an image ([docs/operations.md](docs/operations.md#the-console-as-an-image))                                       |
 | [`deploy/auto-ontology.override.yml`](deploy/auto-ontology.override.yml) | For development: runs a local checkout of the engine on the host's network, on loopback, its web app on `3100`; not part of a release                                             |
 | [`Dockerfile`](Dockerfile)                                               | The console's image, `public.ecr.aws/ibleducation/iblai-ontology`: Next's standalone build of the whole console with the Toolbox binary; the ibl.ai addresses are build arguments |

@@ -100,9 +100,9 @@ removing an administrator within five.
 
 A server with an engine of its own (`AO_URL`) serves one platform, the one its `ONTOLOGY_PLATFORM`
 setting names, and checks that before it asks ibl.ai anything: a host call or a gateway call for
-another platform answers `403` “This server serves another platform.” A server installed with
-`deploy/compose.yaml` always has an engine of its own, and its operator names the platform in that
-file ([install.md](install.md)). With `AO_URL` and no `ONTOLOGY_PLATFORM` the server refuses to
+another platform answers `403` “This server serves another platform.” A server installed as
+[install.md](install.md) says always has an engine of its own, and its operator names the platform
+in its `.env`. With `AO_URL` and no `ONTOLOGY_PLATFORM` the server refuses to
 start, and every host call and gateway call answers `503` naming the setting. A server with
 neither serves any platform, each through the `engine.json` its operator writes in the platform's
 folder; a platform with none answers `503` “No engine is connected” ([network.md](network.md)).

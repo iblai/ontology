@@ -1,15 +1,16 @@
-# Operate the ontology server
+# Operate ibl.ai/ontology
 
 For the IT team that looks after a server installed as [install.md](install.md) says: what runs
 on it, its settings, giving the engine a model, upgrades, backups, and what to do when something
-stops. The last sections cover running the console as ibl.ai's image instead of building it, and
-a console hosted elsewhere.
+stops. The last sections cover running ibl.ai/ontology as an image instead of building it, and a
+console hosted elsewhere. On this page "the console" is ibl.ai/ontology itself, next to NVIDIA's
+engine.
 
 ## What runs on the server
 
 | Part                          | How it runs                                                                                                   | What it does                                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| The console                   | A systemd service, `ontology-console`, as the user `ontology`, from the source in `/home/ontology/console`.   | The pages you manage it from, the API those pages call, and the MCP servers your agents call.      |
+| ibl.ai/ontology, the console  | A systemd service, `iblai-ontology`, as the user `ontology`, from the source in `/home/ontology/repo`.        | The pages you manage it from, the API those pages call, and the MCP servers your agents call.      |
 | NVIDIA's auto-ontology engine | Docker: its web app, its API and its ingestion service, built on the server from NVIDIA's source at a commit. | It reads your systems and builds the terms.                                                        |
 | The engine's database         | Docker: Postgres, for the engine alone.                                                                       | Keeps the systems the engine reads, its terms and what was certified, its users and keys.          |
 | Caddy                         | Docker.                                                                                                       | Gets and renews the certificate for your host name, sends http on to https, and is the one way in. |
@@ -24,13 +25,13 @@ connect. The server serves that one platform and no other.
 
 Where things are:
 
-| Path                                             | What                                                                                                   |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `/opt/iblai-ontology/.env`                       | The settings, for Docker and for the console alike.                                                    |
-| `/opt/iblai-ontology/compose.yaml`               | What Docker runs: root's copy of the repository's `deploy/compose.yaml`.                               |
-| `/home/ontology/console`                         | The console's source and its build. `/home/ontology/.local` holds mise, Node and pnpm.                 |
-| `/etc/systemd/system/ontology-console.service`   | How the console is started: root's copy of `deploy/ontology-console.service`.                          |
-| `/var/lib/ontology`                              | The console's files: the MCP servers deployed on it, their revisions, the logs, its key to the engine. |
+| Path                                            | What                                                                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `/opt/iblai-ontology/.env`                      | The settings, for Docker and for the console alike.                                                    |
+| `/opt/iblai-ontology/compose.yaml`              | What Docker runs: the repository's `deploy/compose.yaml`, downloaded by root.                          |
+| `/home/ontology/repo`                           | The console's source and its build. `/home/ontology/.local` holds mise, Node and pnpm.                 |
+| `/etc/systemd/system/iblai-ontology.service`    | How the console is started: `deploy/iblai-ontology.service`, downloaded by root.                       |
+| `/var/lib/ontology`                             | The console's files: the MCP servers deployed on it, their revisions, the logs, its key to the engine. |
 | Docker volumes named `iblai-ontology-console_…` | `secrets`, `postgres_data` (the engine's database) and `certificates` (Caddy's).                       |
 
 ## What the server needs
@@ -46,26 +47,33 @@ Where things are:
   [When something stops](#when-something-stops)).
 - **Docker with Compose 2.23.1 or later and buildx, and git.** Docker builds NVIDIA's services
   from its git address, which needs git on the server. Ubuntu's own archive has all four.
-- **Outbound access while it is installed or upgraded** to GitHub, `mise.run`, `jdx.dev`,
-  `nodejs.org`, the npm registry, `nvcr.io`, Docker Hub, PyPI, `astral.sh`,
+- **Outbound access while it is installed or upgraded** to GitHub (with
+  `raw.githubusercontent.com`), `mise.run`, `jdx.dev`, `nodejs.org`, the npm registry, Google
+  Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`), `nvcr.io`, Docker Hub, PyPI, `astral.sh`,
   `deb.nodesource.com` and Ubuntu's archive: the console and the engine are built from them.
   **Once it runs**, to your ibl.ai platform, to the data sources you connect, to Let's Encrypt
   to renew the certificate, and to your model's address if you give it one.
 
+The files root runs, `compose.yaml` and the console's unit, are downloaded from GitHub and never
+copied out of `/home/ontology/repo`: the user the console runs as can write there, and what
+that user can write must not become what root starts.
+
 ## The settings
 
-They live in `/opt/iblai-ontology/.env`, one `NAME=value` per line. Docker Compose reads the file
-for the engine and Caddy, and the console's service reads the same file.
+They live in `/opt/iblai-ontology/.env`. Docker Compose reads the file for the engine and Caddy,
+and the console's service reads the same file. Write one `NAME=value` per line, with no quotes
+and nothing after the value; a comment is a line of its own that starts with `#`. Set them
+there and not at the top of `compose.yaml`, which the console does not read.
 
-| Setting                  | Default                        | What it does                                                                                            |
-| ------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Setting                  | Default                         | What it does                                                                                            |
+| ------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `ONTOLOGY_PLATFORM`      | None: nothing starts without it | Your platform's key. The server serves that platform only; another platform's administrator is refused. |
-| `ONTOLOGY_HOST`          | `localhost`                    | The host name. Caddy gets the certificate for it.                                                       |
-| `ONTOLOGY_DM_URL`        | `https://api.iblai.app/dm`     | The ibl.ai platform's address, where every sign-in and key is checked.                                  |
-| `OPENAI_API_KEY`         | Empty                          | Turns the semantic features on (see [A model](#a-model)).                                               |
-| `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`    | Where the model calls go: OpenAI, or a gateway that speaks its API.                                     |
-| `OPENAI_MODEL`           | `gpt-4.1`                      | The chat model.                                                                                         |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`       | The embedding model.                                                                                    |
+| `ONTOLOGY_HOST`          | `localhost`                     | The host name. Caddy gets the certificate for it.                                                       |
+| `ONTOLOGY_DM_URL`        | `https://api.iblai.app/dm`      | The ibl.ai platform's address, where every sign-in and key is checked.                                  |
+| `OPENAI_API_KEY`         | Empty                           | Turns the semantic features on (see [A model](#a-model)).                                               |
+| `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`     | Where the model calls go: OpenAI, or a gateway that speaks its API.                                     |
+| `OPENAI_MODEL`           | `gpt-4.1`                       | The chat model.                                                                                         |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`        | The embedding model.                                                                                    |
 
 Without `ONTOLOGY_HOST` the console answers at `https://localhost`, from the server itself only,
 with a certificate of Caddy's own that browsers warn about.
@@ -75,7 +83,7 @@ After a change, both read the file again:
 ```bash
 cd /opt/iblai-ontology
 sudo docker compose up -d
-sudo systemctl restart ontology-console
+sudo systemctl restart iblai-ontology
 ```
 
 `ONTOLOGY_PLATFORM` is the one setting not to change on a server that holds data. The engine's
@@ -108,7 +116,7 @@ To give it one, add the key to `.env` and restart the console:
 
 ```bash
 echo 'OPENAI_API_KEY=<your key>' | sudo tee -a /opt/iblai-ontology/.env >/dev/null
-sudo systemctl restart ontology-console
+sudo systemctl restart iblai-ontology
 ```
 
 The engine never holds the key. It calls a route of the console on the server's loopback with a
@@ -138,7 +146,8 @@ service, `secrets`, writes four random secrets into the `secrets` volume, and ne
 The console reads two of them, `admin-password` and `model-key`. systemd hands them to its
 service from that volume each time it starts (`LoadCredential=` in the unit), so there is no
 second copy to keep in step. The unit names Docker's default place for volumes,
-`/var/lib/docker/volumes`.
+`/var/lib/docker/volumes`. A console that is already running keeps the ones it started with:
+restart it after the volume is replaced.
 
 The console makes its own key to the engine: it signs in as the engine's admin, makes a key and
 keeps it in `/var/lib/ontology`. Nobody mints a key by hand.
@@ -165,9 +174,9 @@ Then open `http://localhost:3100` and sign in as `admin@ontology.local` with tha
 ## Day to day
 
 ```bash
-systemctl status ontology-console                           # is the console running
-sudo journalctl -u ontology-console --follow                # the console's log
-sudo systemctl restart ontology-console                     # restart the console
+systemctl status iblai-ontology                             # is the console running
+sudo journalctl -u iblai-ontology --follow                  # the console's log
+sudo systemctl restart iblai-ontology                       # restart the console
 
 cd /opt/iblai-ontology
 sudo docker compose ps                                      # the engine, its database, Caddy
@@ -175,50 +184,42 @@ sudo docker compose logs --tail 50 auto-ontology-frontend   # NVIDIA's web app
 sudo docker compose restart                                 # restart all three
 ```
 
-**Upgrade**: build the new source, then start again. The console is down while it builds, a
-minute or two.
+**Upgrade**: stop the console and take the newest source, then paste blocks 3 and 4 of
+[install.md](install.md) again.
 
 ```bash
-sudo systemctl stop ontology-console
-sudo -u ontology -H bash -ec '
-  cd ~/console
-  export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
-  git fetch origin main
-  git reset --hard origin/main
-  mise install
-  pnpm install --frozen-lockfile
-  pnpm build
-'
 cd /opt/iblai-ontology
-sudo cp /home/ontology/console/deploy/compose.yaml .
-sudo cp /home/ontology/console/deploy/ontology-console.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo docker compose up -d
-sudo systemctl start ontology-console
+sudo systemctl stop iblai-ontology
+sudo -u ontology -H git -C /home/ontology/repo fetch origin main
+sudo -u ontology -H git -C /home/ontology/repo reset --hard origin/main
 ```
 
-`git reset --hard` puts the tracked files as `main` has them; the build, `node_modules` and a
-`.env.local` of yours stay. When the new source pins another commit of NVIDIA's engine,
-`docker compose up -d` builds it again by itself, which takes several minutes. If the build
-fails, the console stays stopped: fix what it names and paste the block again.
+Block 3 builds the new source; block 4 takes the newest `compose.yaml` and unit and starts
+everything. The console is down while it builds, a minute or two: left running, it would answer
+from a build that is being replaced, and block 4 would not restart it. `git reset --hard` puts
+the tracked files as `main` has them; the build, `node_modules` and a `.env.local` of yours
+stay. When the new source pins another commit of NVIDIA's engine, block 4 builds it again by
+itself, which takes several minutes. If the build fails, the console stays stopped: fix what it
+names and paste the block again.
 
 **Back up**: `/opt/iblai-ontology/.env`, `/var/lib/ontology`, and the two Docker volumes that go
 together. Stop first, so the database and the files are copied whole:
-`sudo systemctl stop ontology-console` and `sudo docker compose stop`.
+`sudo systemctl stop iblai-ontology` and `sudo docker compose stop`.
 
-| What                                         | What it holds                                                                                          |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `/var/lib/ontology`                          | The console's files: the MCP servers deployed on it, their revisions, the logs, its key to the engine. |
-| Volume `iblai-ontology-console_secrets`      | The four generated secrets. Goes with `postgres_data`.                                                 |
+| What                                          | What it holds                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `/var/lib/ontology`                           | The console's files: the MCP servers deployed on it, their revisions, the logs, its key to the engine. |
+| Volume `iblai-ontology-console_secrets`       | The four generated secrets. Goes with `postgres_data`.                                                 |
 | Volume `iblai-ontology-console_postgres_data` | The engine's database: the systems it reads, its terms and what was certified, its users and keys.     |
-| Volume `iblai-ontology-console_certificates` | Caddy's certificate. It is issued again by itself, so it needs no backup.                              |
+| Volume `iblai-ontology-console_certificates`  | Caddy's certificate. It is issued again by itself, so it needs no backup.                              |
 
 **Remove**: remove each agent's connection in the console first, so its key is deleted in your
 platform. Then:
 
 ```bash
-sudo systemctl disable --now ontology-console
-sudo rm /etc/systemd/system/ontology-console.service
+sudo systemctl disable --now iblai-ontology
+sudo rm /etc/systemd/system/iblai-ontology.service
+sudo systemctl daemon-reload
 cd /opt/iblai-ontology && sudo docker compose down     # the containers go; the data stays
 ```
 
@@ -235,10 +236,10 @@ sudo userdel --remove ontology
 The settings above point the server at the hosted ibl.ai platform. For another ibl.ai deployment,
 `ONTOLOGY_DM_URL` is the server's half of the choice. The browser's half is fixed when the
 console is built: write that deployment's addresses into `.env.local` in the checkout, then
-build again with the upgrade block above.
+build again as an upgrade does.
 
 ```bash
-sudo -u ontology tee /home/ontology/console/.env.local <<'EOF'
+sudo -u ontology tee /home/ontology/repo/.env.local <<'EOF'
 NEXT_PUBLIC_API_BASE_URL=<...>
 NEXT_PUBLIC_AUTH_URL=<...>
 NEXT_PUBLIC_BASE_WS_URL=<...>
@@ -258,7 +259,8 @@ image of it, `public.ecr.aws/ibleducation/iblai-ontology`: `COMPOSE_PROFILES=con
 turns that on, and then no user, checkout or service is needed. Use one or the other on a
 server, never both: they hold the same port.
 
-On a server with Docker (Compose 2.23.1 or later, and buildx) and git:
+On a server with Docker (Compose 2.23.1 or later, and buildx) and git, and outbound access to
+`public.ecr.aws` as well:
 
 ```bash
 sudo mkdir -p /opt/iblai-ontology && cd /opt/iblai-ontology
@@ -345,22 +347,23 @@ replaces it. A `--platform` other than the one the server already serves is refu
 
 ## When something stops
 
-Two places say why: `sudo journalctl -u ontology-console -n 30` for the console, and
+Two places say why: `sudo journalctl -u iblai-ontology -n 30` for the console, and
 `sudo docker compose logs --tail 30 <service>` in `/opt/iblai-ontology` for the rest.
 
-| What you see                                                                                              | What it means                                                                                   | What to do                                                                                                                                                                        |
-| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Compose stops with `required variable ONTOLOGY_PLATFORM is missing a value`                               | The platform is not set.                                                                        | Set `ONTOLOGY_PLATFORM` in `.env` (see [The settings](#the-settings)).                                                                                                            |
-| The console's log says `ONTOLOGY_PLATFORM is not set`, and the service starts again every five seconds    | The same, seen by the console.                                                                  | Set it in `.env`. The service comes up by itself at its next try.                                                                                                                 |
-| `systemctl status ontology-console` shows `status=243/CREDENTIALS`                                        | The engine's secrets are not where the unit looks: Docker has not written them yet, or keeps its volumes elsewhere. | Run `sudo docker compose up -d` first. If Docker's data is not in `/var/lib/docker`, put the path `sudo docker volume inspect iblai-ontology-console_secrets` prints in the unit's two `LoadCredential=` lines. |
-| `systemctl status ontology-console` shows `status=203/EXEC`                                               | mise is not in `/home/ontology/.local/bin`: block 3 of the install did not finish.              | Paste block 3 again, without its first line if the user exists.                                                                                                                   |
-| `https://<host>/` answers 502                                                                             | Caddy is up and the console is not.                                                             | Read the console's log.                                                                                                                                                           |
-| `pnpm build` ends with `Killed`                                                                           | The server ran out of memory while building.                                                    | Give it 4 GB, or add swap, and build again.                                                                                                                                       |
-| The build stops at `nvcr.io/nvidia/base/ubuntu:jammy-20250619` with `DeadlineExceeded`                    | Pulling NVIDIA's base image timed out. It reads like a missing login; it is not.                | `sudo docker pull nvcr.io/nvidia/base/ubuntu:jammy-20250619`, then `sudo docker compose up -d` again.                                                                             |
-| `proxy` keeps restarting; `sudo docker compose logs proxy` says `address already in use`                  | Something else holds 80 or 443, such as the older ibl.ai ontology backend (v0.2.x).             | Stop it. The older backend is removed with its own installer: `curl -fsSL https://github.com/iblai/ontology/releases/download/v0.2.13/install.sh \| sudo bash -s -- --uninstall`. |
-| The browser warns about the certificate, and `sudo docker compose logs proxy` shows the certificate failing | Let's Encrypt cannot reach the server by its host name.                                         | Check that `ONTOLOGY_HOST` points to this server and that 80 and 443 are open to the internet. Caddy tries again by itself.                                                       |
-| Signing in ends on ibl.ai with the address refused                                                        | `https://<host>` is not among the platform's allowed redirect origins.                          | Add it (see [Addresses](#addresses)).                                                                                                                                             |
-| An administrator gets 403 `This server serves another platform.`                                          | They signed in to another platform than `ONTOLOGY_PLATFORM`.                                    | Sign in to the platform this server serves.                                                                                                                                       |
+| What you see                                                                                                | What it means                                                                                                       | What to do                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compose stops with `required variable ONTOLOGY_PLATFORM is missing a value`                                 | The platform is not set.                                                                                            | Set `ONTOLOGY_PLATFORM` in `.env` (see [The settings](#the-settings)).                                                                                                                                          |
+| The console's log says `ONTOLOGY_PLATFORM is not set`, and the service starts again every five seconds      | The same, seen by the console.                                                                                      | Set it in `.env`. The service comes up by itself at its next try.                                                                                                                                               |
+| `systemctl status iblai-ontology` shows `status=243/CREDENTIALS`                                            | The engine's secrets are not where the unit looks: Docker has not written them yet, or keeps its volumes elsewhere. | Run `sudo docker compose up -d` first. If Docker's data is not in `/var/lib/docker`, put the path `sudo docker volume inspect iblai-ontology-console_secrets` prints in the unit's two `LoadCredential=` lines. |
+| `systemctl status iblai-ontology` shows `status=203/EXEC`                                                   | mise is not in `/home/ontology/.local/bin`: block 3 of the install did not finish.                                  | Paste block 3 again.                                                                                                                                                                                            |
+| `apt-get` says `Could not get lock`                                                                         | Ubuntu is updating itself, as it does on a server's first minutes.                                                  | Wait a minute and run it again.                                                                                                                                                                                 |
+| `https://<host>/` answers 502                                                                               | Caddy is up and the console is not.                                                                                 | Read the console's log.                                                                                                                                                                                         |
+| `pnpm build` ends with `Killed`                                                                             | The server ran out of memory while building.                                                                        | Give it 4 GB, or add swap, and build again.                                                                                                                                                                     |
+| The build stops at `nvcr.io/nvidia/base/ubuntu:jammy-20250619` with `DeadlineExceeded`                      | Pulling NVIDIA's base image timed out. It reads like a missing login; it is not.                                    | `sudo docker pull nvcr.io/nvidia/base/ubuntu:jammy-20250619`, then `sudo docker compose up -d` again.                                                                                                           |
+| `proxy` keeps restarting; `sudo docker compose logs proxy` says `address already in use`                    | Something else holds 80 or 443, such as the older ibl.ai ontology backend (v0.2.x).                                 | Stop it. The older backend is removed with its own installer: `curl -fsSL https://github.com/iblai/ontology/releases/download/v0.2.13/install.sh \| sudo bash -s -- --uninstall`.                               |
+| The browser warns about the certificate, and `sudo docker compose logs proxy` shows the certificate failing | Let's Encrypt cannot reach the server by its host name.                                                             | Check that `ONTOLOGY_HOST` points to this server and that 80 and 443 are open to the internet. Caddy tries again by itself.                                                                                     |
+| Signing in ends on ibl.ai with the address refused                                                          | `https://<host>` is not among the platform's allowed redirect origins.                                              | Add it (see [Addresses](#addresses)).                                                                                                                                                                           |
+| An administrator gets 403 `This server serves another platform.`                                            | They signed in to another platform than `ONTOLOGY_PLATFORM`.                                                        | Sign in to the platform this server serves.                                                                                                                                                                     |
 
 ## A console hosted elsewhere
 

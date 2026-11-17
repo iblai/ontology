@@ -65,9 +65,10 @@ export function ConnectServer() {
         <Card>
           <h3 className="text-sm font-semibold text-gray-900">Install one</h3>
           <p className="mt-1 text-[12.5px] text-gray-600">
-            An ontology server is installed with Docker Compose on an Ubuntu server of the
-            platform’s own (22.04, 24.04 or 26.04). It serves its own console at its own address;
-            connecting it here is only for a console hosted elsewhere, like this one.{" "}
+            An ontology server is installed on an Ubuntu server of the platform’s own (22.04, 24.04
+            or 26.04): the console from source, NVIDIA’s engine in Docker. It serves its own console
+            at its own address; connecting it here is only for a console hosted elsewhere, like this
+            one.{" "}
             <a
               href={INSTALL_GUIDE}
               target="_blank"

@@ -1,11 +1,11 @@
-# Install the ontology console
+# Install ibl.ai/ontology
 
 Four blocks to paste on a fresh Ubuntu server, and one step on ibl.ai. It takes about fifteen
 minutes, most of it two builds.
 
 What ends up on the server:
 
-- **The console**, built there from this repository's source and run by systemd. Nothing of
+- **ibl.ai/ontology**, built there from this repository's source and run by systemd. Nothing of
   ibl.ai's arrives as a prebuilt image.
 - **NVIDIA's auto-ontology engine, its database and Caddy**, in Docker. Docker builds the engine
   from NVIDIA's source, and Caddy gets the HTTPS certificate.
@@ -17,19 +17,21 @@ What ends up on the server:
 - **A host name** that points to the server, such as `ontology.example.edu`, with ports 80 and
   443 open to the internet. Create the DNS record first: the certificate cannot be issued until
   the name resolves to the server.
-- **Your ibl.ai platform's key**, such as `acme-university`, and an administrator of that
+- **Your ibl.ai platform's key**, such as `example-university`, and an administrator of that
   platform.
 
-Paste each block as it is into a terminal on the server. Only the first one needs your values.
+Paste each block into a terminal on the server and press Enter. Only the first one needs your
+values.
 
 ## 1. Name the platform and the host
 
-Replace `acme-university` and `ontology.example.edu` with yours.
+Replace `example-university` and `ontology.example.edu` with yours. Run this block once: a second
+run writes the file anew.
 
 ```bash
 sudo mkdir -p /opt/iblai-ontology
 sudo tee /opt/iblai-ontology/.env <<'EOF'
-ONTOLOGY_PLATFORM=acme-university
+ONTOLOGY_PLATFORM=example-university
 ONTOLOGY_HOST=ontology.example.edu
 EOF
 sudo chmod 600 /opt/iblai-ontology/.env
@@ -37,26 +39,28 @@ sudo chmod 600 /opt/iblai-ontology/.env
 
 ## 2. Install Docker
 
-NVIDIA's engine, its database and Caddy run in it.
+NVIDIA's engine, its database and Caddy run in it. The last line makes `ontology`, the user that
+builds and runs ibl.ai/ontology and has no other rights.
 
 ```bash
 sudo apt-get update
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
+sudo apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
+sudo useradd --system --create-home ontology
 ```
 
-## 3. Build the console
+## 3. Build ibl.ai/ontology
 
-A user of its own, `ontology`, builds the console and later runs it. [mise](https://mise.jdx.dev)
-gives that user the Node and pnpm versions this repository names.
+[mise](https://mise.jdx.dev) gives the `ontology` user the Node and pnpm versions this repository
+names, and pnpm builds it from the source.
 
 ```bash
-sudo useradd --system --create-home ontology
-sudo -u ontology -H bash -ec '
+cd /opt/iblai-ontology
+sudo -u ontology -H bash -eo pipefail -c '
   cd ~
-  curl -fsSL https://mise.run | sh
-  export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
-  git clone --branch main https://github.com/iblai/ontology.git console
-  cd console
+  export NEXT_TELEMETRY_DISABLED=1 PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+  command -v mise >/dev/null || curl -fsSL https://mise.run | MISE_INSTALL_HELP=0 sh
+  test -d repo || git clone --branch main https://github.com/iblai/ontology.git repo
+  cd repo
   mise install
   pnpm install --frozen-lockfile
   pnpm build
@@ -67,15 +71,16 @@ sudo -u ontology -H bash -ec '
 
 ```bash
 cd /opt/iblai-ontology
-sudo cp /home/ontology/console/deploy/compose.yaml .
-sudo cp /home/ontology/console/deploy/ontology-console.service /etc/systemd/system/
+sudo curl -fsSLO https://raw.githubusercontent.com/iblai/ontology/main/deploy/compose.yaml
+sudo curl -fsSLo /etc/systemd/system/iblai-ontology.service https://raw.githubusercontent.com/iblai/ontology/main/deploy/iblai-ontology.service
 sudo docker compose up -d
-sudo systemctl enable --now ontology-console
-curl -fsS --retry 5 --retry-connrefused http://127.0.0.1:3000/api/host/health
+sudo systemctl daemon-reload
+sudo systemctl enable --now iblai-ontology
+curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/api/host/health; echo
 ```
 
 `docker compose up -d` builds NVIDIA's engine the first time, which takes several minutes. The
-last line prints `{"ok":true}` once the console is up.
+last line prints `{"ok":true}` once ibl.ai/ontology is up.
 
 ## 5. Let people sign in
 
@@ -85,10 +90,16 @@ last line prints `{"ok":true}` once the console is up.
 
 ## If a step fails
 
-- **Block 4 stops with `DeadlineExceeded` at `nvcr.io`**: NVIDIA's registry timed out. Run
-  `sudo docker compose up -d` again.
-- **The last line prints no `{"ok":true}`**: `sudo journalctl -u ontology-console -n 30` says why
-  the console did not start.
+Blocks 2, 3 and 4 can be pasted again as they are: each takes up where it stopped.
+
+- **Block 2 says `Could not get lock`**: Ubuntu is updating itself. Wait a minute and paste it
+  again.
+- **Block 4 stops with `DeadlineExceeded` at `nvcr.io`**: NVIDIA's registry timed out. Paste it
+  again.
+- **The last line prints no `{"ok":true}`**: `sudo journalctl -u iblai-ontology -n 30` says why
+  it did not start.
+
+## Afterwards
 
 Everything else is in [operations.md](operations.md): giving the engine a model, the settings,
 logs, upgrades, backups, removing it, and

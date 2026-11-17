@@ -503,8 +503,8 @@ describe("the release stamps", () => {
 });
 
 // The console built from source takes the image's place: same addresses, same secrets.
-describe("ontology-console.service", () => {
-  const NAME = "ontology-console.service";
+describe("iblai-ontology.service", () => {
+  const NAME = "iblai-ontology.service";
   const UNIT = read(`deploy/${NAME}`);
   // Every NAME=value of the unit's Environment= lines.
   const set: Record<string, string> = Object.fromEntries(
@@ -553,5 +553,28 @@ describe("ontology-console.service", () => {
     expect(set.ONTOLOGY_HOME).toBe("/var/lib/ontology");
     // The settings come from .env alone: the unit fixes none of the operator's.
     for (const name of SETTINGS) expect(set[name], name).toBeUndefined();
+  });
+
+  it("is what the tutorial installs: the same user, paths, files and port", () => {
+    const guide = read("docs/install.md");
+    const raw = "https://raw.githubusercontent.com/iblai/ontology/main/deploy";
+    expect(guide).toContain("sudo useradd --system --create-home ontology\n");
+    // Where the tutorial clones to, under the user's home, is where the unit starts.
+    const checkout = guide.match(/ https:\/\/github\.com\/iblai\/ontology\.git (\S+)\n/)?.[1];
+    expect(checkout).toBeTruthy();
+    expect(guide).toContain(`test -d ${checkout} || git clone `);
+    expect(UNIT).toContain(`\nWorkingDirectory=/home/ontology/${checkout}\n`);
+    expect(UNIT).toContain("\nExecStart=/home/ontology/.local/bin/mise exec -- node ");
+    expect(guide).toContain("sudo tee /opt/iblai-ontology/.env <<'EOF'\n");
+    // Root downloads what it runs: the service's user can write its own checkout.
+    expect(guide).toContain(`sudo curl -fsSLO ${raw}/compose.yaml\n`);
+    expect(guide).toContain(`sudo curl -fsSLo /etc/systemd/system/${NAME} ${raw}/${NAME}\n`);
+    expect(guide).not.toMatch(/sudo cp \/home\/ontology/);
+    expect(guide).toContain("http://127.0.0.1:3000/api/host/health");
+    // The build runs inside one pair of single quotes: an apostrophe in it would end them.
+    const open = "bash -eo pipefail -c '\n";
+    const from = guide.indexOf(open) + open.length;
+    expect(from).toBeGreaterThan(open.length);
+    expect(guide.slice(from, guide.indexOf("\n'\n", from))).not.toContain("'");
   });
 });

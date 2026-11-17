@@ -31,7 +31,7 @@ function NotAdmin() {
       <div className="max-w-md">
         <h1 className="text-lg font-semibold text-gray-900">Administrators only</h1>
         <p className="mt-1 text-sm text-gray-600">
-          The ontology console manages data sources, definitions and MCP servers for{" "}
+          ibl.ai/ontology manages data sources, definitions and MCP servers for{" "}
           <b>{s.tenantName}</b>. Ask an administrator of this organization for access, or switch to
           an organization you administer.
         </p>
