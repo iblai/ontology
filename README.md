@@ -443,123 +443,205 @@ at `https://<host>/iblai`, which an administrator connects under **Connect a ser
 
 ## FAQ
 
-**Does my data leave my network?**
-No. ibl.ai/ontology runs on your server, and the ontology, the passwords and the MCP servers stay
-there. If you give the engine a model key, its model calls go to the address you set, with the
-samples of personal columns masked first ([a model](docs/operations.md#a-model),
-[network](docs/network.md)).
+[Getting started](#getting-started) · [Connections](#connections) · [Security and data](#security-and-data) · [Models](#models) · [Agents and access](#agents-and-access) · [Running it](#running-it)
 
-**Can an agent change my data?**
-Not by default. SQL connections are read-only, as a security measure. With an HTTP API connection
-you can choose to let an agent modify data: the endpoints that write go in a toolset of their own,
-which an agent reaches only when you grant it by name
-([permissions](docs/guides/permissions.md)).
+### Getting started
 
-**Do I need an LLM key?**
-It is not required. Connecting a system, the map, certifying terms and the tools all work without
-one. An OpenAI API key turns on the semantic features of NVIDIA auto-ontology, such as inferred
-joins and questions in plain words: set
-[`OPENAI_API_KEY`](docs/operations.md#a-model) in the server's `.env`.
+#### Can I try it before installing anything?
 
-**Do I need an ibl.ai account?**
-Yes: an ibl.ai platform and an administrator of it. Sign-in, roles and API keys are checked there.
-Your platform's key is shown at [login.iblai.app/me](https://login.iblai.app/me).
-
-**Which systems can it connect?**
-SQL connections to PostgreSQL, MySQL, Snowflake and ClickHouse, which are dissected into terms and
-served as tools. Trino and Databricks are dissected and shown on the map, and not served as tools.
-DuckDB, HeavyDB, Kyuubi, SQLite, SQL Server, Oracle and BigQuery are coming soon as SQL connections.
-HTTP API connections reach everything else today: any system with an HTTP API, with no connector
-to wait for, best with an OpenAPI document
-([connect data sources](docs/guides/connect-data-sources.md)).
-
-**Which agents can call it?**
-ibl.ai agents, Claude Desktop and Claude Code, Codex, Cursor, and anything else that speaks MCP
-([connect agents](docs/guides/connect-agents.md)).
-
-**How is this different from pointing an agent at a database MCP server?**
-An agent gets certified business terms, each a tool with a fixed definition and fixed SQL, and it
-reaches only the toolsets its grant names.
-
-**Why is Docker there if it is built from source?**
-Only NVIDIA's engine, its Postgres and Caddy run in Docker. ibl.ai/ontology itself is built on
-your server from this repository ([install](docs/install.md)).
-
-**What does the server need?**
-Ubuntu 22.04, 24.04 or 26.04 on x86-64 is recommended, 4 GB of memory, 15 GB free, and ports 80 and 443 open
-([install](docs/install.md)).
-
-**Can one server serve several platforms?**
-No. One server serves one platform ([network](docs/network.md#one-platform-or-any)).
-
-**Who sees what?**
-Each caller sees only the tools in the toolsets its grant reaches, so two people can get
-different lists from the same address ([permissions](docs/guides/permissions.md)).
-
-**How do I upgrade, back up or remove it?**
-[Day to day](docs/operations.md#day-to-day) in the operations guide.
-
-**What does it cost, and what is the licence?**
-ibl.ai/ontology is MIT-licensed. The ibl.ai backend platform it signs in with is separate
-([ibl.ai/contact](https://ibl.ai/contact)).
-
-**My system is not on the list. Can I still connect it?**
-Yes, if it has an HTTP API. An HTTP API connection needs no connector: give it the base URL and an
-OpenAPI document, or name the endpoints by hand
-([connect data sources](docs/guides/connect-data-sources.md)).
-
-**Can I try it before installing anything?**
 Yes. Watch [the demo](https://www.youtube.com/watch?v=pAFl0trxwcM), or run demo mode from the
 [Quick Start](#quick-start): sample data, no account and no engine.
 
-**Where are my database passwords kept?**
-On your server only: in a file that its service alone can read, and in the engine's own database
-([connect data sources](docs/guides/connect-data-sources.md)).
+#### Do I need an ibl.ai account?
 
-**What is exposed to the internet?**
+Yes: an ibl.ai platform and an administrator of it. Sign-in, roles and API keys are checked there.
+
+Your platform's key is shown at [login.iblai.app/me](https://login.iblai.app/me).
+
+#### What does it cost, and what is the licence?
+
+ibl.ai/ontology is MIT-licensed. The ibl.ai backend platform it signs in with is separate
+([ibl.ai/contact](https://ibl.ai/contact)).
+
+#### How is this different from pointing an agent at a database MCP server?
+
+An agent gets certified business terms, each a tool with a fixed definition and fixed SQL, and it
+reaches only the toolsets its grant names.
+
+### Connections
+
+#### Which systems can it connect?
+
+| Connection | Systems                                                       | Status                                               |
+| ---------- | ------------------------------------------------------------- | ---------------------------------------------------- |
+| SQL        | PostgreSQL, MySQL, Snowflake, ClickHouse                      | Dissected into terms and served as tools             |
+| SQL        | Trino, Databricks                                             | Dissected and shown on the map; not served as tools  |
+| SQL        | DuckDB, HeavyDB, Kyuubi, SQLite, SQL Server, Oracle, BigQuery | Coming soon                                          |
+| HTTP API   | Any system with an HTTP API                                   | Served as tools today, with no connector to wait for |
+
+More: [connect data sources](docs/guides/connect-data-sources.md).
+
+#### My system is not on the list. Can I still connect it?
+
+Yes, if it has an HTTP API. An HTTP API connection needs no connector: give it the base URL and an
+OpenAPI document, or name the endpoints by hand.
+
+More: [connect data sources](docs/guides/connect-data-sources.md).
+
+#### Can an agent change my data?
+
+Not by default. SQL connections are read-only, as a security measure.
+
+With an HTTP API connection you can choose to let an agent modify data: the endpoints that write
+go in a toolset of their own, which an agent reaches only when you grant it by name.
+
+More: [permissions](docs/guides/permissions.md).
+
+### Security and data
+
+#### Does my data leave my network?
+
+No. ibl.ai/ontology runs on your server, and the ontology, the passwords and the MCP servers stay
+there.
+
+If you give the engine a model key, its model calls go to the address you set, with the samples of
+personal columns masked first.
+
+More: [a model](docs/operations.md#a-model), [network](docs/network.md).
+
+#### Where are my database passwords kept?
+
+On your server only: in a file that its service alone can read, and in the engine's own database.
+
+More: [connect data sources](docs/guides/connect-data-sources.md).
+
+#### What is exposed to the internet?
+
 Ports 80 and 443, through Caddy. NVIDIA auto-ontology engine, the engine's database and every MCP
-server's process listen on the server's loopback only ([network](docs/network.md)).
+server's process listen on the server's loopback only.
 
-**Does NVIDIA's engine get my OpenAI key?**
-No. The engine calls a route on the server's loopback, and ibl.ai/ontology adds your key and sends
-the call on ([a model](docs/operations.md#a-model)).
+More: [network](docs/network.md).
 
-**Can I use a model other than OpenAI's?**
-Yes: any gateway that speaks OpenAI's API, set in `OPENAI_API_BASE_URL`. The embedding model must
-be able to answer in 2048 dimensions ([a model](docs/operations.md#a-model)).
+#### How is personal data handled?
 
-**How is personal data handled?**
 Columns that look personal are tagged and flagged in the Ontology, and you decide per toolset
-which tools may return them ([permissions](docs/guides/permissions.md)).
+which tools may return them.
 
-**Can I limit what each person sees, down to the row?**
-Yes, three ways: by the toolsets a grant names, by the certified SQL, which a caller cannot widen,
-and by binding a parameter to a claim of the caller's verified sign-in
-([permissions](docs/guides/permissions.md)).
+More: [permissions](docs/guides/permissions.md).
 
-**How do callers sign in?**
-With ibl.ai credentials, Microsoft Entra ID, Google or a custom OIDC issuer, chosen per MCP server
-([permissions](docs/guides/permissions.md)).
+#### Can I limit what each person sees, down to the row?
 
-**Is there an audit log?**
+Yes, three ways:
+
+- by the toolsets a grant names,
+- by the certified SQL, which a caller cannot widen,
+- by binding a parameter to a claim of the caller's verified sign-in.
+
+More: [permissions](docs/guides/permissions.md).
+
+#### Is there an audit log?
+
 Yes. Every tool call and every refusal is logged on your server and shown under Activity, and the
-log can be shipped to your SIEM ([permissions](docs/guides/permissions.md)).
+log can be shipped to your SIEM.
 
-**Are there rate limits?**
-Yes: 120 requests or 30 tool calls a minute, per caller
-([connect agents](docs/guides/connect-agents.md)).
+More: [permissions](docs/guides/permissions.md).
 
-**How do I take access away?**
+### Models
+
+#### Do I need an LLM key?
+
+It is not required. Connecting a system, the map, certifying terms and the tools all work without
+one.
+
+An OpenAI API key turns on the semantic features of NVIDIA auto-ontology, such as inferred joins
+and questions in plain words: set [`OPENAI_API_KEY`](docs/operations.md#a-model) in the server's
+`.env`.
+
+#### Does NVIDIA's engine get my OpenAI key?
+
+No. The engine calls a route on the server's loopback, and ibl.ai/ontology adds your key and sends
+the call on.
+
+More: [a model](docs/operations.md#a-model).
+
+#### Can I use a model other than OpenAI's?
+
+Yes: any gateway that speaks OpenAI's API, set in `OPENAI_API_BASE_URL`. The embedding model must
+be able to answer in 2048 dimensions.
+
+More: [a model](docs/operations.md#a-model).
+
+### Agents and access
+
+#### Which agents can call it?
+
+ibl.ai agents, Claude Desktop and Claude Code, Codex, Cursor, and anything else that speaks MCP.
+
+More: [connect agents](docs/guides/connect-agents.md).
+
+#### Does it work from browser-based agents?
+
+Yes, once their origin is on the server's Allowed Origins.
+
+More: [connect agents](docs/guides/connect-agents.md).
+
+#### How do callers sign in?
+
+With ibl.ai credentials, Microsoft Entra ID, Google or a custom OIDC issuer, chosen per MCP server.
+
+More: [permissions](docs/guides/permissions.md).
+
+#### Who sees what?
+
+Each caller sees only the tools in the toolsets its grant reaches, so two people can get
+different lists from the same address.
+
+More: [permissions](docs/guides/permissions.md).
+
+#### How do I take access away?
+
 Revoke the key under Tokens & Origins on the server's page, or remove the group from the toolset's
-policy on ibl.ai ([walkthrough](docs/console.md)).
+policy on ibl.ai.
 
-**Can I undo a deploy?**
-Yes. Each MCP server keeps its revisions, and Roll Back puts the previous one back
-([walkthrough](docs/console.md)).
+More: [walkthrough](docs/console.md).
 
-**Does it work from browser-based agents?**
-Yes, once their origin is on the server's Allowed Origins
-([connect agents](docs/guides/connect-agents.md)).
+#### Are there rate limits?
+
+Yes: 120 requests or 30 tool calls a minute, per caller.
+
+More: [connect agents](docs/guides/connect-agents.md).
+
+### Running it
+
+#### What does the server need?
+
+Ubuntu 22.04, 24.04 or 26.04 on x86-64 is recommended, 4 GB of memory, 15 GB free, and ports 80
+and 443 open.
+
+More: [install](docs/install.md).
+
+#### Why is Docker there if it is built from source?
+
+Only NVIDIA's engine, its Postgres and Caddy run in Docker. ibl.ai/ontology itself is built on
+your server from this repository.
+
+More: [install](docs/install.md).
+
+#### Can one server serve several platforms?
+
+No. One server serves one platform.
+
+More: [network](docs/network.md#one-platform-or-any).
+
+#### Can I undo a deploy?
+
+Yes. Each MCP server keeps its revisions, and Roll Back puts the previous one back.
+
+More: [walkthrough](docs/console.md).
+
+#### How do I upgrade, back up or remove it?
+
+See [Day to day](docs/operations.md#day-to-day) in the operations guide.
 
 ---
 
