@@ -28,7 +28,7 @@ Connect the systems you already run, dissect them into business terms and relati
 
 <br>
 
-[![Watch the demo](https://img.youtube.com/vi/pAFl0trxwcM/maxresdefault.jpg)](https://www.youtube.com/watch?v=pAFl0trxwcM)
+[![Watch the demo](docs/screenshots/demo-video.png)](https://www.youtube.com/watch?v=pAFl0trxwcM)
 
 **▶︎ [Watch the demo](https://www.youtube.com/watch?v=pAFl0trxwcM)** &nbsp;·&nbsp; _Install it on your own server and connect a database to an agent_
 
@@ -517,7 +517,10 @@ More: [connect data sources](docs/guides/connect-data-sources.md).
 
 #### 10. What is exposed to the internet?
 
-Ports 80 and 443, through Caddy. NVIDIA auto-ontology engine, the engine's database and every MCP
+No data is exposed by default. Only ports 80 and 443 are open, through Caddy, and anything
+behind them that returns data asks for a sign-in or a key.
+
+NVIDIA auto-ontology engine, the engine's database and every MCP
 server's process listen on the server's loopback only.
 
 More: [network](docs/network.md).
