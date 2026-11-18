@@ -257,9 +257,8 @@ ibl.ai/ontology runs on your own server, inside your network. The ibl.ai platfor
 sign-in, roles, API keys and agents; your server keeps the ontology, the database passwords and
 the MCP servers. One server serves one platform.
 
-### Option A: Hosted ibl.ai platform
-
-If your organization is on the hosted ibl.ai platform:
+Platforms are hosted on `api.iblai.app` unless yours runs its own ibl.ai deployment, and the
+install points there by default. A self-hosted platform is under [Advanced](#advanced).
 
 1. **Install it on a fresh Ubuntu server**
 
@@ -289,14 +288,6 @@ If your organization is on the hosted ibl.ai platform:
    in [docs/operations.md](docs/operations.md), which also covers running ibl.ai/ontology as
    ibl.ai's prebuilt image instead (`COMPOSE_PROFILES=console`, with the optional
    `deploy/install.sh`). What talks to what is in [docs/network.md](docs/network.md).
-
-### Option B: Self-hosted platform
-
-If you run your own ibl.ai deployment, point the server at it: `ONTOLOGY_DM_URL` in the server's
-`.env`, and that deployment's addresses in `.env.local` before the build
-([docs/operations.md](docs/operations.md#another-iblai-deployment)). If you need the full
-backend, reach out at [ibl.ai/contact](https://ibl.ai/contact) for an enterprise license and
-deploy it with [iblai/infra-cli](https://github.com/iblai/infra-cli).
 
 > **Note**: ibl.ai/ontology requires the ibl.ai platform for sign-in, roles, API keys and agents. The platform is not included in this repository — visit [ibl.ai](https://ibl.ai) to get started.
 
@@ -411,37 +402,6 @@ on screen comes from in [docs/data-sources.md](docs/data-sources.md).
 
 ---
 
-## Releases
-
-Every push to `main` prepares a release. [release-it](.release-it.json) takes the version and the
-[CHANGELOG.md](CHANGELOG.md) entry from the conventional commit subjects since the last `v*` tag: a
-breaking change is a major, `feat:` a minor, anything else a patch.
-[The workflow](.github/workflows/release.yml) then stamps that version into `compose.yaml` and
-`install.sh` and attaches both to a **draft** release.
-
-ibl.ai/ontology's image is not built on GitHub. It is built from the release's tag and pushed to
-ECR by hand, and the release is published after it, so nobody downloads a `compose.yaml` whose
-image does not exist:
-
-```bash
-version=<the draft's version, without the v>
-image=public.ecr.aws/ibleducation/iblai-ontology
-docker build --platform linux/amd64 --provenance=false --tag "$image:$version" \
-  "https://github.com/iblai/ontology.git#v$version"
-aws ecr-public get-login-password --region us-east-1 |
-  docker login --username AWS --password-stdin public.ecr.aws
-docker push "$image:$version" && gh release edit "v$version" --draft=false --latest
-```
-
-The ECR repository is created once (`aws ecr-public create-repository --repository-name
-iblai-ontology --region us-east-1`). A draft whose image is never pushed is deleted, not published.
-No tag is made by hand but the baseline: `v1.0.0` is pushed together with the commit it names.
-
-A server that builds ibl.ai/ontology from source ([docs/install.md](docs/install.md)) needs none
-of this: it follows `main`, for the source and for `compose.yaml` alike.
-
----
-
 ## Testing
 
 This project is covered by Vitest unit tests beside the code they test, in [`lib/`](lib/) and [`deploy/`](deploy/). **Run them for any change** so nothing regresses:
@@ -461,6 +421,18 @@ Other useful commands:
 | `node scripts/screenshots.mjs`  | Regenerates every screenshot in `docs/screenshots/` (with `NEXT_PUBLIC_DEMO=1 pnpm dev` running)                                                      |
 
 There is no end-to-end suite yet.
+
+---
+
+## Advanced
+
+### Self-hosted platform
+
+If you run your own ibl.ai deployment, point the server at it: `ONTOLOGY_DM_URL` in the server's
+`.env`, and that deployment's addresses in `.env.local` before the build
+([docs/operations.md](docs/operations.md#another-iblai-deployment)). If you need the full
+backend, reach out at [ibl.ai/contact](https://ibl.ai/contact) for an enterprise license and
+deploy it with [iblai/infra-cli](https://github.com/iblai/infra-cli).
 
 ---
 
