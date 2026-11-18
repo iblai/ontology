@@ -503,6 +503,64 @@ different lists from the same address ([permissions](docs/guides/permissions.md)
 ibl.ai/ontology is MIT-licensed. The ibl.ai backend platform it signs in with is separate
 ([ibl.ai/contact](https://ibl.ai/contact)).
 
+**My system is not on the list. Can I still connect it?**
+Yes, if it has an HTTP API. An HTTP API connection needs no connector: give it the base URL and an
+OpenAPI document, or name the endpoints by hand
+([connect data sources](docs/guides/connect-data-sources.md)).
+
+**Can I try it before installing anything?**
+Yes. Watch [the demo](https://www.youtube.com/watch?v=pAFl0trxwcM), or run demo mode from the
+[Quick Start](#quick-start): sample data, no account and no engine.
+
+**Where are my database passwords kept?**
+On your server only: in a file that its service alone can read, and in the engine's own database
+([connect data sources](docs/guides/connect-data-sources.md)).
+
+**What is exposed to the internet?**
+Ports 80 and 443, through Caddy. NVIDIA auto-ontology engine, the engine's database and every MCP
+server's process listen on the server's loopback only ([network](docs/network.md)).
+
+**Does NVIDIA's engine get my OpenAI key?**
+No. The engine calls a route on the server's loopback, and ibl.ai/ontology adds your key and sends
+the call on ([a model](docs/operations.md#a-model)).
+
+**Can I use a model other than OpenAI's?**
+Yes: any gateway that speaks OpenAI's API, set in `OPENAI_API_BASE_URL`. The embedding model must
+be able to answer in 2048 dimensions ([a model](docs/operations.md#a-model)).
+
+**How is personal data handled?**
+Columns that look personal are tagged and flagged in the Ontology, and you decide per toolset
+which tools may return them ([permissions](docs/guides/permissions.md)).
+
+**Can I limit what each person sees, down to the row?**
+Yes, three ways: by the toolsets a grant names, by the certified SQL, which a caller cannot widen,
+and by binding a parameter to a claim of the caller's verified sign-in
+([permissions](docs/guides/permissions.md)).
+
+**How do callers sign in?**
+With ibl.ai credentials, Microsoft Entra ID, Google or a custom OIDC issuer, chosen per MCP server
+([permissions](docs/guides/permissions.md)).
+
+**Is there an audit log?**
+Yes. Every tool call and every refusal is logged on your server and shown under Activity, and the
+log can be shipped to your SIEM ([permissions](docs/guides/permissions.md)).
+
+**Are there rate limits?**
+Yes: 120 requests or 30 tool calls a minute, per caller
+([connect agents](docs/guides/connect-agents.md)).
+
+**How do I take access away?**
+Revoke the key under Tokens & Origins on the server's page, or remove the group from the toolset's
+policy on ibl.ai ([walkthrough](docs/console.md)).
+
+**Can I undo a deploy?**
+Yes. Each MCP server keeps its revisions, and Roll Back puts the previous one back
+([walkthrough](docs/console.md)).
+
+**Does it work from browser-based agents?**
+Yes, once their origin is on the server's Allowed Origins
+([connect agents](docs/guides/connect-agents.md)).
+
 ---
 
 ## Contributing
