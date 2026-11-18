@@ -451,7 +451,6 @@ We welcome contributions! Open an issue or a pull request. Before you push, run 
 - [Authentication](docs/auth.md) — ibl.ai SSO: the session as iblai/os implements it, how it is wired here, configuration, demo mode
 - [Network](docs/network.md) — topology, inbound, outbound to `ext.ibl.ai` and data sources, what runs where, hardening
 - [Data sources](docs/data-sources.md) — where every value on screen comes from, and where each thing is saved
-- [Build plan](docs/plan.md) — what is built and what is not yet verified
 - [ibl.ai/os](https://github.com/iblai/os) — the agent platform whose agents call these servers
 - [NVIDIA auto-ontology](https://github.com/NVIDIA/auto-ontology) — the engine that infers terms, joins and metrics
 - [Google MCP Toolbox](https://github.com/googleapis/mcp-toolbox) — the runtime that serves the tools
