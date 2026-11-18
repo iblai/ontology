@@ -246,9 +246,6 @@ One engine serves one platform. To serve several from one host, leave `AO_URL` a
 `$ONTOLOGY_HOME/platforms/<platform>/engine.json` as `{"url": "...", "key": "..."}`
 ([docs/network.md](docs/network.md#one-platform-or-any)).
 
-Sign-in returns only to origins on your platform's allowed redirect origins on ibl.ai; add
-`http://localhost:3000` there.
-
 ---
 
 ## Deployment
@@ -291,13 +288,6 @@ install points there by default. A self-hosted platform is under [Advanced](#adv
 
 > **Note**: ibl.ai/ontology requires the ibl.ai platform for sign-in, roles, API keys and agents. The platform is not included in this repository — visit [ibl.ai](https://ibl.ai) to get started.
 
-### Pages hosted elsewhere
-
-The pages can also be hosted apart from the server. Built with `NEXT_PUBLIC_ONTOLOGY_RELAY=1`,
-ibl.ai/ontology serves pages only and forwards every `/api/host/*` call to the platform's server
-at `https://<host>/iblai`, which an administrator connects under **Connect a server**
-([docs/operations.md](docs/operations.md#a-console-hosted-elsewhere)).
-
 ### Troubleshooting
 
 - **A block of the install fails.** Blocks 2, 3 and 4 can be pasted again as they are
@@ -306,8 +296,6 @@ at `https://<host>/iblai`, which an administrator connects under **Connect a ser
   ibl.ai/ontology, and `sudo docker compose logs --tail 30 <service>` in `/opt/iblai-ontology`
   for the rest. What each message means is in
   [docs/operations.md](docs/operations.md#when-something-stops).
-- **Signing in ends on ibl.ai with the address refused.** `https://<host>` is not among the
-  platform's allowed redirect origins ([docs/operations.md](docs/operations.md#addresses)).
 
 ---
 
@@ -433,6 +421,13 @@ If you run your own ibl.ai deployment, point the server at it: `ONTOLOGY_DM_URL`
 ([docs/operations.md](docs/operations.md#another-iblai-deployment)). If you need the full
 backend, reach out at [ibl.ai/contact](https://ibl.ai/contact) for an enterprise license and
 deploy it with [iblai/infra-cli](https://github.com/iblai/infra-cli).
+
+### Pages hosted elsewhere
+
+The pages can also be hosted apart from the server. Built with `NEXT_PUBLIC_ONTOLOGY_RELAY=1`,
+ibl.ai/ontology serves pages only and forwards every `/api/host/*` call to the platform's server
+at `https://<host>/iblai`, which an administrator connects under **Connect a server**
+([docs/operations.md](docs/operations.md#a-console-hosted-elsewhere)).
 
 ---
 
