@@ -195,11 +195,14 @@ Universities, enterprises, and government agencies build on ibl.ai — deploying
 
 ## Quick Start
 
+This runs ibl.ai/ontology in **demo mode**: sample data, with no ibl.ai account and no engine.
+For the real thing, see [With a real engine](#with-a-real-engine) or [Deployment](#deployment).
+
 ```bash
 git clone https://github.com/iblai/ontology.git
 cd ontology
 pnpm install
-NEXT_PUBLIC_DEMO=1 pnpm dev
+NEXT_PUBLIC_DEMO=1 pnpm dev   # demo mode
 ```
 
 **Using [Claude Code](https://claude.ai/claude-code)?** Read [`AGENTS.md`](AGENTS.md) first: this is Next.js 16, and its conventions differ from earlier releases.
@@ -407,7 +410,6 @@ Other useful commands:
 | `pnpm format:check`             | oxfmt (`pnpm format` rewrites)                                                                                                                        |
 | `node scripts/audit-layout.mjs` | Checks every page at 375, 768, 1024, 1280, 1440 and 1920 px for overflow, overlap and sideways scrolling (with `NEXT_PUBLIC_DEMO=1 pnpm dev` running) |
 | `node scripts/screenshots.mjs`  | Regenerates every screenshot in `docs/screenshots/` (with `NEXT_PUBLIC_DEMO=1 pnpm dev` running)                                                      |
-
 
 ---
 
