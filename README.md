@@ -53,10 +53,10 @@ Connect the systems you already run, dissect them into business terms and relati
 |                                    |                                                                                                                                                                                                                                 |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔓 **Your code, your data**        | MIT-licensed and built from this source on your own server. The ontology, the database passwords and the MCP servers stay in your network, and ibl.ai/ontology keeps no database of its own.                                    |
-| 🧭 **One ontology, every system**  | Databases and HTTP APIs become one set of business terms and relationships: a Student is the same Student in the SIS, the LMS and the CRM.                                                                                      |
+| 🧭 **One ontology, every system**  | SQL connections and HTTP API connections become one set of business terms and relationships: a Student is the same Student in the SIS, the LMS and the CRM.                                                                     |
 | ✅ **People certify, agents call** | The engine suggests terms, joins and metrics, and a person certifies them. A certified term becomes a tool with a fixed definition and fixed SQL, so an agent picks the right one and cannot widen it.                          |
 | 🤖 **Any agent, over MCP**         | ibl.ai agents, Claude, Codex, Cursor or your own code call the same endpoint, and each caller sees only the toolsets its grant reaches.                                                                                         |
-| 🏢 **Enterprise-ready**            | ibl.ai SSO and RBAC, Microsoft Entra ID, Google and custom OIDC, allowed origins and hosts, API keys limited to toolsets, rate limits, and a log of every call and every refusal.                                               |
+| 🏢 **Enterprise-ready**            | Read-only SQL connections, ibl.ai SSO and RBAC, Microsoft Entra ID, Google and custom OIDC, allowed origins and hosts, API keys limited to toolsets, rate limits, and a log of every call and every refusal.                    |
 | 🧩 **Built on proven engines**     | [NVIDIA auto-ontology](https://github.com/NVIDIA/auto-ontology) infers the terms, [Google MCP Toolbox](https://github.com/googleapis/mcp-toolbox) serves the tools, and the ibl.ai platform provides sign-in, roles and agents. |
 
 ---
@@ -90,9 +90,9 @@ On the other side, anything that speaks MCP can call it: ibl.ai agents, attached
 
 **🔌 Connect**
 
-- **Databases** — a connection URL with a read-only login, a schema scope, and a connection test
-- **HTTP APIs** — a base URL and an OpenAPI document; tick the endpoints to wrap as tools
-- **Prebuilt toolsets** — raw SQL per database, for the analysts who need it
+- **SQL connections** — PostgreSQL, MySQL, Snowflake and ClickHouse by connection URL, with a schema scope and a connection test
+- **HTTP API connections** — a base URL and an OpenAPI document; tick the endpoints to wrap as tools
+- **Prebuilt toolsets** — raw SQL per database
 - **Secrets on your server** — database passwords and upstream API keys are saved there and nowhere else
 
 **🧠 Dissect & model**
@@ -115,6 +115,7 @@ On the other side, anything that speaks MCP can call it: ibl.ai agents, attached
 
 **🔐 Govern & operate**
 
+- **Read-only SQL** — SQL connections use a read-only login, so no agent can change your data
 - **Sign-in** — ibl.ai credentials, Microsoft Entra ID, Google, or a custom OIDC issuer
 - **Roles & access** — one ibl.ai policy per toolset; a toolset that writes is reached only by a grant that names it
 - **Origins & hosts** — checked by the gateway before the credential
@@ -132,13 +133,13 @@ On the other side, anything that speaks MCP can call it: ibl.ai agents, attached
 Five steps, one page each. [docs/console.md](docs/console.md) walks through every page with
 screenshots.
 
-| Step            | Page                         | What happens                                                                                                               |
-| --------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **1 · Connect** | Systems                      | Add a database with a read-only login, or an HTTP API. The password is saved on your server.                               |
-| **2 · Dissect** | Map                          | The engine reads the tables and names the business terms above them. Terms that span several systems are called out.       |
-| **3 · Model**   | Ontology                     | Review what was inferred and certify it: object types, their properties, links and metrics.                                |
-| **4 · Expose**  | MCP Gateway → New MCP Server | Pick the toolsets, how callers sign in, and the allowed origins and hosts. The config file is shown as it will be written. |
-| **5 · Serve**   | MCP Gateway → the server     | Deploy, attach it to an ibl.ai agent or paste a snippet into Claude, Codex or Cursor, and watch the calls arrive.          |
+| Step            | Page                         | What happens                                                                                                                                |
+| --------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1 · Connect** | Systems                      | Add a SQL connection or an HTTP API connection. SQL connections are read-only, as a security measure. The password is saved on your server. |
+| **2 · Dissect** | Map                          | The engine reads the tables and names the business terms above them. Terms that span several systems are called out.                        |
+| **3 · Model**   | Ontology                     | Review what was inferred and certify it: object types, their properties, links and metrics.                                                 |
+| **4 · Expose**  | MCP Gateway → New MCP Server | Pick the toolsets, how callers sign in, and the allowed origins and hosts. The config file is shown as it will be written.                  |
+| **5 · Serve**   | MCP Gateway → the server     | Deploy, attach it to an ibl.ai agent or paste a snippet into Claude, Codex or Cursor, and watch the calls arrive.                           |
 
 ---
 
@@ -173,7 +174,7 @@ Universities, enterprises, and government agencies build on ibl.ai — deploying
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/02-systems.png" alt="Systems"><br><sub><b>Systems</b> — connect a database or an HTTP API</sub></td>
+<td width="50%"><img src="docs/screenshots/02-systems.png" alt="Systems"><br><sub><b>Systems</b> — add a SQL connection or an HTTP API connection</sub></td>
 <td width="50%"><img src="docs/screenshots/04-ontology.png" alt="Ontology"><br><sub><b>Ontology</b> — review and certify object types, links and metrics</sub></td>
 </tr>
 <tr>
@@ -476,7 +477,7 @@ We welcome contributions! Open an issue or a pull request. Before you push, run 
 - [Install](docs/install.md) — four blocks to paste on a fresh Ubuntu server
 - [Operations](docs/operations.md) — looking after that server: settings, a model, upgrades, backups, the image, failures
 - [Walkthrough](docs/console.md) — every page with screenshots, and what each control does
-- [Connect data sources](docs/guides/connect-data-sources.md) — databases and HTTP APIs: read-only logins, scope, PII, what Connect & Dissect does, troubleshooting
+- [Connect data sources](docs/guides/connect-data-sources.md) — SQL and HTTP API connections: read-only logins, scope, PII, what Connect & Dissect does, troubleshooting
 - [Permissions](docs/guides/permissions.md) — policies and toolsets, sign-in methods, row-level restriction, PII, writes, origins, audit
 - [Connect agents](docs/guides/connect-agents.md) — ibl.ai agents, Claude Desktop and Claude Code, Codex, Cursor, Python, cURL
 - [Authentication](docs/auth.md) — ibl.ai SSO: the session as iblai/os implements it, how it is wired here, configuration, demo mode
