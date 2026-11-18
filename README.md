@@ -50,7 +50,7 @@ Connect the systems you already run, dissect them into business terms and relati
 
 ## Why ibl.ai/ontology
 
-|                                    |                                                                                                                                                                                                                                 |
+| Why                                | What it means                                                                                                                                                                                                                   |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔓 **Your code, your data**        | MIT-licensed and built from this source on your own server. The ontology, the database passwords and the MCP servers stay in your network, and ibl.ai/ontology keeps no database of its own.                                    |
 | 🧭 **One ontology, every system**  | SQL connections and HTTP API connections become one set of business terms and relationships: a Student is the same Student in the SIS, the LMS and the CRM.                                                                     |
@@ -325,15 +325,15 @@ at `https://<host>/iblai`, which an administrator connects under **Connect a ser
 On a server the settings live in `/opt/iblai-ontology/.env`, which Docker Compose and
 ibl.ai/ontology's service both read ([docs/operations.md](docs/operations.md#the-settings)).
 
-| Setting                  | Default                         | What it does                                                                                            |
-| ------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `ONTOLOGY_PLATFORM`      | None: nothing starts without it | Your platform's key. The server serves that platform only; another platform's administrator is refused. |
-| `ONTOLOGY_HOST`          | `localhost`                     | The host name. Caddy gets the certificate for it.                                                       |
-| `ONTOLOGY_DM_URL`        | `https://api.iblai.app/dm`      | The ibl.ai platform's address, where every sign-in and key is checked.                                  |
-| `OPENAI_API_KEY`         | Empty                           | Turns the semantic features on ([a model](docs/operations.md#a-model)).                                 |
-| `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`     | Where the model calls go: OpenAI, or a gateway that speaks its API.                                     |
-| `OPENAI_MODEL`           | `gpt-4.1`                       | The chat model.                                                                                         |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`        | The embedding model.                                                                                    |
+| Setting                  | Default                         | What it does                                                                                                                                                       |
+| ------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ONTOLOGY_PLATFORM`      | None: nothing starts without it | Your platform's key, shown at [login.iblai.app/me](https://login.iblai.app/me). The server serves that platform only; another platform's administrator is refused. |
+| `ONTOLOGY_HOST`          | `localhost`                     | The host name. Caddy gets the certificate for it.                                                                                                                  |
+| `ONTOLOGY_DM_URL`        | `https://api.iblai.app/dm`      | The ibl.ai platform's address, where every sign-in and key is checked.                                                                                             |
+| `OPENAI_API_KEY`         | Empty                           | Turns the semantic features on ([a model](docs/operations.md#a-model)).                                                                                            |
+| `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`     | Where the model calls go: OpenAI, or a gateway that speaks its API.                                                                                                |
+| `OPENAI_MODEL`           | `gpt-4.1`                       | The chat model.                                                                                                                                                    |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`        | The embedding model.                                                                                                                                               |
 
 For `pnpm dev`, [`.env.example`](.env.example) lists every setting of the one-host shape with its
 comment.
