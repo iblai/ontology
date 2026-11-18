@@ -34,7 +34,7 @@ Connect the systems you already run, dissect them into business terms and relati
 
 <br>
 
-[Why ibl.ai/ontology](#why-iblaiontology) · [Every system](#every-system-one-ontology) · [Features](#features) · [How it works](#how-it-works) · [Case studies](#case-studies) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Deployment](#deployment) · [Architecture](#architecture)
+[Why ibl.ai/ontology](#why-iblaiontology) · [Every system](#every-system-one-ontology) · [Features](#features) · [How it works](#how-it-works) · [Case studies](#case-studies) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Deployment](#deployment) · [Architecture](#architecture) · [FAQ](#faq)
 
 </div>
 
@@ -67,16 +67,25 @@ Most agent integrations are wired one system at a time. ibl.ai/ontology reads th
 
 <div align="center">
 
-| System                 |     | Status                                                                                   |
-| ---------------------- | --- | ---------------------------------------------------------------------------------------- |
-| **PostgreSQL**         | 🐘  | Dissected into terms and served as tools                                                 |
-| **MySQL**              | 🐬  | Dissected into terms and served as tools                                                 |
-| **Snowflake**          | ❄️  | Dissected into terms and served as tools                                                 |
-| **ClickHouse**         | ⚡  | Dissected into terms and served as tools                                                 |
-| **Trino · Databricks** | 🧱  | Dissected into terms and shown on the map; not served as tools                           |
-| **HTTP APIs**          | 🌐  | Served as named tools, from an OpenAPI document or the endpoints you name; not dissected |
+| System                                 |     | Status                                                                                                |
+| -------------------------------------- | --- | ----------------------------------------------------------------------------------------------------- |
+| **PostgreSQL**                         | 🐘  | Dissected into terms and served as tools                                                              |
+| **MySQL**                              | 🐬  | Dissected into terms and served as tools                                                              |
+| **Snowflake**                          | ❄️  | Dissected into terms and served as tools                                                              |
+| **ClickHouse**                         | ⚡  | Dissected into terms and served as tools                                                              |
+| **HTTP APIs**                          | 🌐  | Any system with an HTTP API, served as named tools from an OpenAPI document or the endpoints you name |
+| **Trino · Databricks**                 | 🧱  | Dissected into terms and shown on the map; not served as tools                                        |
+| **DuckDB · HeavyDB · Kyuubi · SQLite** | 🔜  | SQL connections coming soon                                                                           |
+| **SQL Server · Oracle · BigQuery**     | 🔜  | SQL connections coming soon                                                                           |
 
 </div>
+
+**An HTTP API connection reaches everything else.** If a system has an HTTP API, it can be
+connected today, with no connector to wait for: a CRM, an SIS, an LMS, a ticketing system, a
+SaaS product or a service you wrote yourself. Point at its OpenAPI document and tick the
+endpoints, or name them by hand; each becomes a tool. Reads and writes go in separate toolsets,
+so you decide per agent whether it may only look or also act, and the upstream credential stays
+on your server.
 
 On the other side, anything that speaks MCP can call it: ibl.ai agents, attached in one dialog; Claude Desktop and Claude Code; Codex CLI; Cursor and Windsurf; your own code with the MCP SDK; cURL ([connecting agents](docs/guides/connect-agents.md)).
 
@@ -91,7 +100,7 @@ On the other side, anything that speaks MCP can call it: ibl.ai agents, attached
 **🔌 Connect**
 
 - **SQL connections** — PostgreSQL, MySQL, Snowflake and ClickHouse by connection URL, with a schema scope and a connection test
-- **HTTP API connections** — a base URL and an OpenAPI document; tick the endpoints to wrap as tools
+- **HTTP API connections** — any system with an HTTP API, no connector needed: a base URL and an OpenAPI document, then tick the endpoints to wrap as tools
 - **Prebuilt toolsets** — raw SQL per database
 - **Secrets on your server** — database passwords and upstream API keys are saved there and nowhere else
 
@@ -115,7 +124,7 @@ On the other side, anything that speaks MCP can call it: ibl.ai agents, attached
 
 **🔐 Govern & operate**
 
-- **Read-only SQL** — SQL connections use a read-only login, so no agent can change your data
+- **Read-only SQL** — SQL connections use a read-only login, so no agent can change your data through them
 - **Sign-in** — ibl.ai credentials, Microsoft Entra ID, Google, or a custom OIDC issuer
 - **Roles & access** — one ibl.ai policy per toolset; a toolset that writes is reached only by a grant that names it
 - **Origins & hosts** — checked by the gateway before the credential
@@ -429,6 +438,70 @@ The pages can also be hosted apart from the server. Built with `NEXT_PUBLIC_ONTO
 ibl.ai/ontology serves pages only and forwards every `/api/host/*` call to the platform's server
 at `https://<host>/iblai`, which an administrator connects under **Connect a server**
 ([docs/operations.md](docs/operations.md#a-console-hosted-elsewhere)).
+
+---
+
+## FAQ
+
+**Does my data leave my network?**
+No. ibl.ai/ontology runs on your server, and the ontology, the passwords and the MCP servers stay
+there. If you give the engine a model key, its model calls go to the address you set, with the
+samples of personal columns masked first ([a model](docs/operations.md#a-model),
+[network](docs/network.md)).
+
+**Can an agent change my data?**
+Not by default. SQL connections are read-only, as a security measure. With an HTTP API connection
+you can choose to let an agent modify data: the endpoints that write go in a toolset of their own,
+which an agent reaches only when you grant it by name
+([permissions](docs/guides/permissions.md)).
+
+**Do I need an LLM key?**
+It is not required. Connecting a system, the map, certifying terms and the tools all work without
+one. An OpenAI API key turns on the semantic features of NVIDIA auto-ontology, such as inferred
+joins and questions in plain words: set
+[`OPENAI_API_KEY`](docs/operations.md#a-model) in the server's `.env`.
+
+**Do I need an ibl.ai account?**
+Yes: an ibl.ai platform and an administrator of it. Sign-in, roles and API keys are checked there.
+Your platform's key is shown at [login.iblai.app/me](https://login.iblai.app/me).
+
+**Which systems can it connect?**
+SQL connections to PostgreSQL, MySQL, Snowflake and ClickHouse, which are dissected into terms and
+served as tools. Trino and Databricks are dissected and shown on the map, and not served as tools.
+DuckDB, HeavyDB, Kyuubi, SQLite, SQL Server, Oracle and BigQuery are coming soon as SQL connections.
+HTTP API connections reach everything else today: any system with an HTTP API, with no connector
+to wait for, best with an OpenAPI document
+([connect data sources](docs/guides/connect-data-sources.md)).
+
+**Which agents can call it?**
+ibl.ai agents, Claude Desktop and Claude Code, Codex, Cursor, and anything else that speaks MCP
+([connect agents](docs/guides/connect-agents.md)).
+
+**How is this different from pointing an agent at a database MCP server?**
+An agent gets certified business terms, each a tool with a fixed definition and fixed SQL, and it
+reaches only the toolsets its grant names.
+
+**Why is Docker there if it is built from source?**
+Only NVIDIA's engine, its Postgres and Caddy run in Docker. ibl.ai/ontology itself is built on
+your server from this repository ([install](docs/install.md)).
+
+**What does the server need?**
+Ubuntu 22.04, 24.04 or 26.04 on x86-64 is recommended, 4 GB of memory, 15 GB free, and ports 80 and 443 open
+([install](docs/install.md)).
+
+**Can one server serve several platforms?**
+No. One server serves one platform ([network](docs/network.md#one-platform-or-any)).
+
+**Who sees what?**
+Each caller sees only the tools in the toolsets its grant reaches, so two people can get
+different lists from the same address ([permissions](docs/guides/permissions.md)).
+
+**How do I upgrade, back up or remove it?**
+[Day to day](docs/operations.md#day-to-day) in the operations guide.
+
+**What does it cost, and what is the licence?**
+ibl.ai/ontology is MIT-licensed. The ibl.ai backend platform it signs in with is separate
+([ibl.ai/contact](https://ibl.ai/contact)).
 
 ---
 
