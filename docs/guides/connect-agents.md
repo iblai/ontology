@@ -32,6 +32,12 @@ An agent gets the server when you attach it:
 The agent only ever talks to ibl.ai; ibl.ai calls `https://<host>/<platform>/<slug>/mcp` on your
 server, which must be reachable on 443 from ibl.ai's egress ([network.md](../network.md)).
 
+**From the OS instead.** The same connection can be made in the agent's own settings on
+os.ibl.ai: **MCP**, then **Add Connector**, with the server's endpoint as **Connector Server**,
+**API Key** as **Authentication Method**, **API-Token** as **Token Type** and, as **Token**, a
+key that reaches the server's toolsets. Watch, from 1:39:
+[Connect the data source, create an MCP, and connect to an agent in 3 minutes](https://www.youtube.com/watch?v=gvjs9ZLCvrc&t=99s).
+
 ## Claude Desktop and Claude Code
 
 Both read a `mcpServers` map. The person must reach the host (on the VPN, if it sits behind one)

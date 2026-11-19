@@ -93,6 +93,8 @@ A data source is either a **database** (dissected into the ontology and served) 
 HTTP APIs are not dissected. The runtime calls them live, as named tools, with an upstream credential
 that never leaves the host.
 
+Watch: [Connect the data source, create an MCP, and connect to an agent in 3 minutes](https://www.youtube.com/watch?v=gvjs9ZLCvrc).
+
 1. **Systems → HTTP API** tab. Enter the **Base URL**. The host refuses an address it may not
    call, in the rule's own words. An address on the host's own machine is taken outside production
    only.

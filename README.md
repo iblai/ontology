@@ -34,6 +34,12 @@ Connect the systems you already run, dissect them into business terms and relati
 
 <br>
 
+[![Watch the HTTP API demo](docs/screenshots/demo-video-http-api.png)](https://www.youtube.com/watch?v=gvjs9ZLCvrc)
+
+**▶︎ [Watch the HTTP API demo](https://www.youtube.com/watch?v=gvjs9ZLCvrc)** &nbsp;·&nbsp; _Connect the data source, create an MCP, and connect to an agent in 3 minutes_
+
+<br>
+
 [Why ibl.ai/ontology](#why-iblaiontology) · [Every system](#every-system-one-ontology) · [Features](#features) · [How it works](#how-it-works) · [Case studies](#case-studies) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Deployment](#deployment) · [Architecture](#architecture) · [FAQ](#faq)
 
 </div>
@@ -449,7 +455,8 @@ at `https://<host>/iblai`, which an administrator connects under **Connect a ser
 
 #### 1. Can I try it before installing anything?
 
-Yes. Watch [the demo](https://www.youtube.com/watch?v=pAFl0trxwcM), or run demo mode from the
+Yes. Watch [the demo](https://www.youtube.com/watch?v=pAFl0trxwcM) and
+[the HTTP API demo](https://www.youtube.com/watch?v=gvjs9ZLCvrc), or run demo mode from the
 [Quick Start](#quick-start): sample data, no account and no engine.
 
 #### 2. Do I need an ibl.ai account?
@@ -486,7 +493,8 @@ More: [connect data sources](docs/guides/connect-data-sources.md).
 Yes, if it has an HTTP API. An HTTP API connection needs no connector: give it the base URL and an
 OpenAPI document, or name the endpoints by hand.
 
-More: [connect data sources](docs/guides/connect-data-sources.md).
+More: [connect data sources](docs/guides/connect-data-sources.md),
+[the HTTP API demo](https://www.youtube.com/watch?v=gvjs9ZLCvrc).
 
 #### 7. Can an agent change my data?
 
