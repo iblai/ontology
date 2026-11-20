@@ -43,3 +43,6 @@ next-env.d.ts
 
 # host state the console writes: server configs, revisions and the secrets env
 /.ontology/
+
+# what docs/dev_local.md makes: secrets, settings, NVIDIA's source, files to read
+/.dev/

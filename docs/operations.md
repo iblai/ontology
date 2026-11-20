@@ -320,8 +320,8 @@ What differs from the rest of this page is as listed above, but for the upgrade:
 `docker compose pull` out on this route: it asks ibl.ai's registry for that name. For another
 ibl.ai deployment, give `docker build` that deployment's addresses as `--build-arg`, as above.
 
-On a machine of your own ([install_local.md](install_local.md)), the upgrade is the same lines,
-with `--scale proxy=0` on `docker compose up -d`.
+On a machine of your own it runs from a checkout ([dev_local.md](dev_local.md)): `git pull`
+there, then its build and start blocks again.
 
 ### Or let the script do it
 

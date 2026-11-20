@@ -293,8 +293,8 @@ install points there by default. A self-hosted platform is under [Advanced](#adv
    still nothing prebuilt from ibl.ai
    ([docs/install_docker_local.md](docs/install_docker_local.md)).
 
-   **Or on a machine of your own.** With no host name: the Docker install without Caddy, at
-   `http://localhost:3000` on that machine only ([docs/install_local.md](docs/install_local.md)).
+   **Or on a machine of your own.** With no host name and no Caddy, with Docker or with none, at
+   `http://localhost:3000` on that machine only ([docs/dev_local.md](docs/dev_local.md)).
 
 2. **Sign in**
 
@@ -650,18 +650,21 @@ More: [install](docs/install.md).
 
 #### 25. Can I run it without a host name?
 
-Yes, on a machine of your own with Docker. It answers at `http://localhost:3000` on that machine
-only, still needs the internet for ibl.ai sign-in, and ibl.ai's agents cannot call it.
+Yes, on a machine of your own, with Docker or without it. It answers at `http://localhost:3000`
+on that machine only, still needs the internet for ibl.ai sign-in, and ibl.ai's agents cannot
+call it.
 
-More: [install on your own machine](docs/install_local.md).
+More: [run it on your own machine](docs/dev_local.md).
 
 #### 26. Why is Docker there if it is built from source?
 
 Only NVIDIA's engine, its Postgres and Caddy run in Docker. ibl.ai/ontology itself is built on
 your server from this repository. It can run in Docker too, as an image you build on your server
-from this repository's `Dockerfile`.
+from this repository's `Dockerfile`. On a machine of your own it can also run with no Docker at
+all, the engine built from NVIDIA's source.
 
-More: [install](docs/install.md), [the Docker install](docs/install_docker_local.md).
+More: [install](docs/install.md), [the Docker install](docs/install_docker_local.md),
+[your own machine](docs/dev_local.md#without-docker).
 
 #### 27. Can one server serve several platforms?
 

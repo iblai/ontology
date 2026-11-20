@@ -135,7 +135,7 @@ curl -sS -X POST https://ontology.university.edu/acme/institution/mcp \
 
 ## A client on the same machine
 
-A server run on your own machine ([install_local.md](../install_local.md)) answers at
+A server run on your own machine ([dev_local.md](../dev_local.md)) answers at
 `http://localhost:3000/<platform>/<slug>/mcp`, to MCP clients on that machine only. Issue a token
 under the server's **Tokens & Origins** tab, and use the address and the snippets its **Connect**
 tab shows. A browser client served from this machine (any `http://localhost:<port>` origin) is

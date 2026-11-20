@@ -4,12 +4,12 @@ The console has two halves: its pages, and its server half (the route handlers u
 `/api/host/*`, the MCP gateway, the Toolbox processes and the files under `$ONTOLOGY_HOME`). One
 codebase runs them four ways:
 
-| Shape                      | Setting                                          | Behaviour                                                                                                                                           |
-| -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The client's server        | `ONTOLOGY_PLATFORM`, with the engine in `AO_URL` | the whole console, built from source on the server, beside NVIDIA's engine and Caddy in Docker ([install.md](install.md)); serves that one platform |
-| A console hosted elsewhere | `NEXT_PUBLIC_ONTOLOGY_RELAY=1` at build          | serves pages only; every `/api/host/*` call is forwarded to the platform's server the browser names in the `x-ontology-server` header               |
-| One host run by hand       | none, or `AO_URL` with `ONTOLOGY_PLATFORM`       | pages and server half as one process: a developer's machine (`pnpm dev`), or one host inside the institution's network behind a TLS proxy           |
-| Your own machine           | `ONTOLOGY_PLATFORM`, no `ONTOLOGY_HOST`          | the client's server without Caddy (`--scale proxy=0`), at `http://localhost:3000` on that machine only ([install_local.md](install_local.md))       |
+| Shape                      | Setting                                          | Behaviour                                                                                                                                                |
+| -------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The client's server        | `ONTOLOGY_PLATFORM`, with the engine in `AO_URL` | the whole console, built from source on the server, beside NVIDIA's engine and Caddy in Docker ([install.md](install.md)); serves that one platform      |
+| A console hosted elsewhere | `NEXT_PUBLIC_ONTOLOGY_RELAY=1` at build          | serves pages only; every `/api/host/*` call is forwarded to the platform's server the browser names in the `x-ontology-server` header                    |
+| One host run by hand       | none, or `AO_URL` with `ONTOLOGY_PLATFORM`       | pages and server half as one process: a developer's machine (`pnpm dev`), or one host inside the institution's network behind a TLS proxy                |
+| Your own machine           | `ONTOLOGY_PLATFORM`, `ONTOLOGY_HOST` `localhost` | a checkout run without Caddy, in Docker (`--scale proxy=0`) or with none, at `http://localhost:3000` on that machine only ([dev_local.md](dev_local.md)) |
 
 By default a platform's server serves the whole console at `https://<host>/`. The console is built
 there from source and run by systemd, and NVIDIA's engine and Caddy run in Docker
