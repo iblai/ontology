@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.2](https://github.com/iblai/ontology/compare/v1.1.1...v1.1.2) (2026-11-20)
+
+### Chores
+
+* publish each release from the workflow once its install files are attached ([4632e98](https://github.com/iblai/ontology/commit/4632e988bd2a9ab0b28bf0d989ff572839f330e3))
+
 ## [1.1.1](https://github.com/iblai/ontology/compare/v1.1.0...v1.1.1) (2026-11-20)
 
 ### Bug Fixes
