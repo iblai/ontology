@@ -12,6 +12,7 @@ import type {
   AoTableExplorationDetails,
 } from "@/lib/ao-types";
 import { aoFetch, aoJson } from "./ao";
+import { openai } from "./env";
 import { currentPlatform } from "./platform";
 import { readEngine } from "./reading";
 import type { McpTool, McpToolResult } from "./types";
@@ -232,11 +233,12 @@ async function askQuestion(question: string): Promise<McpToolResult> {
   }
   await reader.cancel();
   if (!answer) return failed("the engine ended the run without an answer");
-  // With no model to call, the engine ends its run in a result that only says so.
+  // Three model calls failed, for any reason: only a missing key is known here.
   if (!answer.sql_code && NO_ANSWER.test(answer.response ?? "")) {
-    return failed(
-      `${answer.response} The server needs a model to answer questions: its operator sets OPENAI_API_KEY.`,
-    );
+    const why = openai().key
+      ? "The engine’s model did not answer in three tries: check the key, its quota and the provider."
+      : "This server holds no model key: its operator sets OPENAI_API_KEY.";
+    return failed(`${answer.response} ${why}`);
   }
   return {
     content: [text({ answer: answer.response, sql: answer.sql_code ?? null, provenance })],

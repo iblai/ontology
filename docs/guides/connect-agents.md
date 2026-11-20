@@ -143,8 +143,9 @@ MCP_AUTHORIZATION="Api-Token $ONTOLOGY_TOKEN" \
   node scripts/mcp-smoke.mjs https://ontology.university.edu/acme/institution/mcp
 ```
 
-Add `--insecure` for a server on `localhost`, whose certificate is Caddy's own. Without
-`MCP_AUTHORIZATION` it checks the refusals only.
+Add `--insecure` for a server at `https://localhost`, whose certificate is Caddy's own; a run
+without Caddy is plain `http://localhost:3000/…` and needs no flag. Without `MCP_AUTHORIZATION`
+it checks the refusals only.
 
 ## A client on the same machine
 
@@ -167,8 +168,8 @@ at the token.
 - Tool descriptions carry the certified definition of the term ("Student = a person admitted to and
   enrolled in ≥1 program"), which is what makes agents pick the right tool.
 - `ask_question` (when included) accepts natural language, answers with certified SQL, and returns
-  the SQL and the provenance alongside the rows. On a server with no model it fails, and says the
-  server needs one ([a model](../operations.md#a-model)).
+  the SQL and the provenance alongside the rows. When the engine's model gives no answer it fails,
+  and says whether the server holds a model key ([a model](../operations.md#a-model)).
 
 ## Troubleshooting
 

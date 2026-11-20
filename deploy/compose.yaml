@@ -97,8 +97,8 @@ services:
   postgres:
     image: pgvector/pgvector:pg17
     network_mode: host
-    # One reading of the engine fans out a call per term and table, each on a connection of its
-    # own: the default 100 run out (TooManyConnections) and the console answers 500 and 502.
+    # Each engine process (API, ingestion, a chat worker) pools up to 50 connections: past the
+    # default 100 the engine fails with TooManyConnections and the console answers 500 and 502.
     command:
       [
         "postgres",

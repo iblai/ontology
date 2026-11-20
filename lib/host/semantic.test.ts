@@ -19,7 +19,10 @@ const stream = (...events: unknown[]) =>
 const ask = () => callSemantic("ask_question", { question: "How many students are enrolled?" });
 
 describe("ask_question", () => {
-  beforeEach(() => vi.mocked(aoFetch).mockReset());
+  beforeEach(() => {
+    vi.mocked(aoFetch).mockReset();
+    vi.unstubAllEnvs();
+  });
 
   it("returns the answer and the SQL that ran", async () => {
     const answer = { response: "153 students.", sql_code: "SELECT count(*) FROM enrollments" };
@@ -33,13 +36,24 @@ describe("ask_question", () => {
     });
   });
 
-  it("fails when the engine's model gave no answer, and says what the server needs", async () => {
-    const answer = { response: "LLM failed to produce a response.", sql_code: "" };
-    vi.mocked(aoFetch).mockResolvedValue(stream({ type: "result", answer }));
+  const noAnswer = { response: "LLM failed to produce a response.", sql_code: "" };
+
+  it("fails when the engine's model gave no answer, and says the server holds no key", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.mocked(aoFetch).mockResolvedValue(stream({ type: "result", answer: noAnswer }));
     const result = await ask();
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/^LLM failed to produce a response\. /);
-    expect(result.content[0].text).toContain("OPENAI_API_KEY");
+    expect(result.content[0].text).toContain("its operator sets OPENAI_API_KEY");
+  });
+
+  it("does not blame a missing key when the server holds one", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "set");
+    vi.mocked(aoFetch).mockResolvedValue(stream({ type: "result", answer: noAnswer }));
+    const result = await ask();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("did not answer in three tries");
+    expect(result.content[0].text).not.toContain("OPENAI_API_KEY");
   });
 
   it("fails in the engine's words when the run ends in an error", async () => {
