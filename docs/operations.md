@@ -2,8 +2,8 @@
 
 For the IT team that looks after a server installed as [install.md](install.md) says: what runs
 on it, its settings, giving the engine a model, upgrades, backups, and what to do when something
-stops. The last sections cover running ibl.ai/ontology as an image instead of building it, and a
-console hosted elsewhere. On this page "the console" is ibl.ai/ontology itself, next to NVIDIA's
+stops. The last sections cover running ibl.ai/ontology in Docker as an image, and a console
+hosted elsewhere. On this page "the console" is ibl.ai/ontology itself, next to NVIDIA's
 engine.
 
 ## What runs on the server
@@ -254,13 +254,14 @@ platform's address, an empty one blanks it.
 
 ## The console as an image
 
-Building the console on the server is the default. Docker can instead run ibl.ai's prebuilt
-image of it, `public.ecr.aws/ibleducation/iblai-ontology`: `COMPOSE_PROFILES=console` in `.env`
-turns that on, and then no user, checkout or service is needed. Use one or the other on a
+Building the console on the server is the default. Docker can instead run it as an image:
+ibl.ai's prebuilt one, `public.ecr.aws/ibleducation/iblai-ontology`, or one
+[you build on the server](#or-build-the-image-yourself). `COMPOSE_PROFILES=console` in `.env`
+turns that on, and then no `ontology` user, mise or service is needed. Use one or the other on a
 server, never both: they hold the same port.
 
-On a server with Docker and Compose 2.23.1 or later, and outbound access to `public.ecr.aws` as
-well:
+ibl.ai's image, on a server with Docker and Compose 2.23.1 or later, and outbound access to
+`public.ecr.aws` as well:
 
 ```bash
 sudo mkdir -p /opt/iblai-ontology && cd /opt/iblai-ontology
@@ -300,6 +301,35 @@ What differs from the rest of this page:
     --build-arg NEXT_PUBLIC_MFE_URL=<...> \
     .
   ```
+
+### Or build the image yourself
+
+Nothing of ibl.ai's is pulled: the image is built on the server from this repository's
+[`Dockerfile`](../Dockerfile), under the name `compose.yaml` asks for, so Compose finds it there.
+Docker is all the server needs:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
+sudo mkdir -p /opt/iblai-ontology && cd /opt/iblai-ontology
+sudo tee .env <<'EOF'
+ONTOLOGY_PLATFORM=example-university
+ONTOLOGY_HOST=ontology.example.edu
+COMPOSE_PROFILES=console
+EOF
+sudo chmod 600 .env
+test -d repo || sudo git clone --branch main https://github.com/iblai/ontology.git repo
+sudo docker build -t public.ecr.aws/ibleducation/iblai-ontology:dev repo
+sudo cp repo/deploy/compose.yaml .
+sudo docker compose up -d
+curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/api/host/health; echo
+```
+
+The last line prints `{"ok":true}` once ibl.ai/ontology is up. What differs from the rest of this
+page is as listed above, but for the upgrade: `sudo git -C repo pull`, then the `docker build`,
+`cp` and `docker compose up -d` lines again. Leave `docker compose pull` out on this route: it
+asks ibl.ai's registry for that name. For another ibl.ai deployment, give `docker build` that
+deployment's addresses as `--build-arg`, as above.
 
 ### Or let the script do it
 

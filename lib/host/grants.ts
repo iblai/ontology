@@ -7,8 +7,9 @@ import { NAME, ROOT, VERBS, type GrantKind } from "@/lib/ontology-rbac";
 export type Grants = Record<string, { actions?: string[] }>;
 
 export type Scope = {
+  everything: boolean; // a platform admin: every toolset, those that write too
   allToolsets: boolean; // every toolset that only reads
-  toolsets: string[]; // toolsets held by name; a toolset that writes is reached only this way
+  toolsets: string[]; // toolsets held by name; a role reaches one that writes only this way
   tools: string[]; // single tools held by name
   console: boolean;
 };
@@ -52,15 +53,28 @@ export function scopeOf(grants: Grants): Scope {
     } else if (kind === "tools" && has("tools") && NAME.test(tail)) tools.add(tail);
     else if (kind === "console" && has("console") && !tail) console = true;
   }
-  return { allToolsets, toolsets: [...toolsets].sort(), tools: [...tools].sort(), console };
+  // No grant amounts to everything: that is a platform admin's alone (adminScope).
+  return {
+    everything: false,
+    allToolsets,
+    toolsets: [...toolsets].sort(),
+    tools: [...tools].sort(),
+    console,
+  };
 }
 
-/** What a platform admin reaches with no role listing them: every read toolset and the console. */
+/** What a platform admin reaches with no role listing them: every toolset and the console. */
 export function adminScope(held: Scope): Scope {
-  return { ...held, allToolsets: true, console: true };
+  return { ...held, everything: true, allToolsets: true, console: true };
 }
 
 /** Whether the scope reaches anything at all. */
 export function reaches(scope: Scope): boolean {
-  return scope.allToolsets || scope.console || scope.toolsets.length > 0 || scope.tools.length > 0;
+  return (
+    scope.everything ||
+    scope.allToolsets ||
+    scope.console ||
+    scope.toolsets.length > 0 ||
+    scope.tools.length > 0
+  );
 }

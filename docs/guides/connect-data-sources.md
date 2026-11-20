@@ -107,7 +107,7 @@ Watch: [Connect the data source, create an MCP, and connect to an agent in 3 min
    may write `${NAME}` yourself for a secret already in `env`.
 4. Tick the **Endpoints to Wrap**, or name them by hand. Each becomes an `http` tool. `GET` and
    `HEAD` endpoints go in the toolset `<api>-reads`; the rest go in `<api>-writes`, which is reached
-   only by a policy that names it.
+   by a policy that names it, or by a platform admin's own credential.
 5. **Add & Expose** saves the API in `$ONTOLOGY_HOME/platforms/<platform>/apis.yaml` and takes you
    to the server builder.
 

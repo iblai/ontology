@@ -22,31 +22,32 @@ hand-written `actions.yaml`.
 
 A caller reaches what ibl.ai RBAC grants them under `/custom/ontology/`:
 
-| Grant on ibl.ai                        | Reaches                                        |
-| -------------------------------------- | ---------------------------------------------- |
-| `/custom/ontology/toolsets/<toolset>/` | that toolset                                   |
-| `/custom/ontology/toolsets/`           | every toolset that only reads                  |
-| `/custom/ontology/console/`            | the console                                    |
-| `/custom/ontology/`                    | every toolset that only reads, and the console |
-| none, as a platform admin              | every toolset that only reads, and the console |
+| Grant on ibl.ai                        | Reaches                                              |
+| -------------------------------------- | ---------------------------------------------------- |
+| `/custom/ontology/toolsets/<toolset>/` | that toolset                                         |
+| `/custom/ontology/toolsets/`           | every toolset that only reads                        |
+| `/custom/ontology/console/`            | the console                                          |
+| `/custom/ontology/`                    | every toolset that only reads, and the console       |
+| none, as a platform admin              | every toolset, those that write too, and the console |
 
 A resource counts only when the role holds its verb (`Ontology/Toolsets/action`,
 `Ontology/Console/action`). A toolset that writes (it holds a tool that changes data; the raw
-toolsets count as writing) is reached only by a grant that names it. No broad grant and no admin
-status lends it.
+toolsets count as writing) is reached by a grant that names it, or by a platform admin's own
+credential: a session, or an API key the admin made with **Owner permissions**. No broad grant
+lends it.
 
 The console keeps one role and one policy per toolset on ibl.ai: a platform role named after the
 toolset, holding `Ontology/*`, with one policy `Ontology: <toolset>` that grants
 `/custom/ontology/toolsets/<toolset>/`. It creates them, when missing, as you issue a key or attach
 an agent. A key or an agent limited to several toolsets carries several policies.
 
-| Policy on ibl.ai         | Grants                                 | Who typically holds it          |
-| ------------------------ | -------------------------------------- | ------------------------------- |
-| (none: platform admin)   | every toolset that only reads          | platform admins                 |
-| `Ontology: advising`     | toolset `advising`                     | advisors group                  |
-| `Ontology: enrollment`   | toolset `enrollment`                   | admissions and IR analysts      |
-| `Ontology: sis-raw`      | toolset `sis-raw` (writes: named only) | a few analysts, read-only login |
-| `Ontology: slate-writes` | toolset `slate-writes`                 | one service agent               |
+| Policy on ibl.ai         | Grants                                | Who typically holds it                  |
+| ------------------------ | ------------------------------------- | --------------------------------------- |
+| (none: platform admin)   | every toolset, those that write too   | platform admins, and their own API keys |
+| `Ontology: advising`     | toolset `advising`                    | advisors group                          |
+| `Ontology: enrollment`   | toolset `enrollment`                  | admissions and IR analysts              |
+| `Ontology: sis-raw`      | toolset `sis-raw` (counts as writing) | a few analysts, read-only login         |
+| `Ontology: slate-writes` | toolset `slate-writes`                | one service agent                       |
 
 When a call arrives at `/<platform>/<slug>/mcp`, the gateway asks ibl.ai what the credential is
 granted on that platform (ibl.ai refuses a credential of another platform) and lends the server's
@@ -65,6 +66,8 @@ Set per server, under **Authentication**:
 - **ibl.ai credentials**. An API key as `Authorization: Api-Token …`, a session as
   `Authorization: Token …`, or either one as `Bearer`. **Issue Token** creates an API key limited to
   the toolsets you tick and shows the secret once. Used by people with Claude, Codex or Cursor.
+  A key a platform admin makes under **API** with **Owner permissions** is the admin's own
+  credential: it reaches every toolset the server offers, those that write too.
 - **Microsoft Entra ID / Google / custom OIDC**. Declared as an auth service in the server config
   and verified by the runtime itself (signature, audience, issuer, expiry). The caller still
   presents an ibl.ai credential to the gateway; the ID token rides along so rows can be bound to the
@@ -122,8 +125,8 @@ read-only role. Writes happen only through **Actions**, tools you add deliberate
 - a separate database login with the exact grant (`INSERT ON advising_notes`), stored as its own
   entry in `$ONTOLOGY_HOME/platforms/<platform>/env`,
 - a separate toolset (`advising-actions`), shown with a **writes** badge in the builder,
-- a separate policy (`Ontology: advising-actions`). A toolset that writes is reached only by a
-  policy that names it.
+- a separate policy (`Ontology: advising-actions`). A toolset that writes is reached by a policy
+  that names it, or by a platform admin.
 
 ## 6. Origins and hosts
 

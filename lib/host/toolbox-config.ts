@@ -131,7 +131,7 @@ export function writingTools(docs: ToolboxDoc[]): Record<string, string> {
   return why;
 }
 
-/** The toolsets that hold a tool that writes. A caller reaches these only by name. */
+/** The toolsets that hold a tool that writes: reached by name, or by a platform admin. */
 export function writingToolsets(docs: ToolboxDoc[]): string[] {
   const writing = writingTools(docs);
   return Object.entries(members(docs))

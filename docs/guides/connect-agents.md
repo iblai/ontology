@@ -35,7 +35,9 @@ server, which must be reachable on 443 from ibl.ai's egress ([network.md](../net
 **From the OS instead.** The same connection can be made in the agent's own settings on
 os.ibl.ai: **MCP**, then **Add Connector**, with the server's endpoint as **Connector Server**,
 **API Key** as **Authentication Method**, **API-Token** as **Token Type** and, as **Token**, a
-key that reaches the server's toolsets. Watch, from 1:39:
+key that reaches the server's toolsets. A key a platform admin makes under **API** with **Owner
+permissions** reaches every toolset the server offers, those that write too; a key from **Issue
+Token** reaches only the toolsets ticked. Watch, from 1:39:
 [Connect the data source, create an MCP, and connect to an agent in 3 minutes](https://www.youtube.com/watch?v=gvjs9ZLCvrc&t=99s).
 
 ## Claude Desktop and Claude Code

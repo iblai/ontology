@@ -35,6 +35,39 @@ describe("platformGrants", () => {
   });
 });
 
+describe("resolveCaller", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // As the DM answers a key made with Owner permissions: no ontology grant, and its owner.
+  const ownedBy = (admin: boolean) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(url: string) => Promise<Response>>(async (url) => {
+        if (url.includes("/rbac/permissions/")) return Response.json({});
+        if (url.includes("/token/verify/")) return Response.json({ username: "ada", email: "" });
+        return Response.json([{ username: "ada", key: "acme", active: true, is_admin: admin }]);
+      }),
+    );
+
+  it("lends a platform admin’s own API key everything, with no grant", async () => {
+    ownedBy(true);
+    await expect(resolveCaller("Api-Token admin-key", "acme")).resolves.toMatchObject({
+      subject: "ibl:ada",
+      admin: true,
+      scope: { everything: true, allToolsets: true, console: true },
+    });
+  });
+
+  it("refuses the key of an owner who is no admin and holds no grant", async () => {
+    ownedBy(false);
+    await expect(resolveCaller("Api-Token member-key", "acme")).rejects.toThrow(
+      /no ontology grant/,
+    );
+  });
+});
+
 describe("parseAuthorization", () => {
   it("takes the three schemes in any case", () => {
     expect(parseAuthorization("Token abc")).toEqual({ scheme: "Token", credential: "abc" });

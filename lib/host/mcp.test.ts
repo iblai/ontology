@@ -37,6 +37,7 @@ const serving: Serving = {
 };
 
 const scope = (held: Partial<Scope>): Scope => ({
+  everything: false,
   allToolsets: false,
   toolsets: [],
   tools: [],
@@ -64,6 +65,14 @@ describe("lentToolsets", () => {
   it("lends a writing toolset only when it is named", () => {
     expect(lentToolsets(scope({ toolsets: ["sis-raw"] }), serving)).toEqual(["sis-raw"]);
     expect(lentToolsets(scope({ allToolsets: true, toolsets: ["sis-raw"] }), serving)).toEqual([
+      "sis",
+      "sis-raw",
+      "semantic",
+    ]);
+  });
+
+  it("lends a platform admin every toolset the server offers, those that write too", () => {
+    expect(lentToolsets(scope({ everything: true }), serving)).toEqual([
       "sis",
       "sis-raw",
       "semantic",

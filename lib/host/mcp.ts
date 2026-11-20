@@ -79,8 +79,8 @@ export async function handleMessage(ctx: RpcContext, message: unknown): Promise<
 }
 
 /**
- * The server's toolsets this caller may use. `allToolsets` lends every toolset that only reads;
- * a toolset that writes is lent only when the scope names it.
+ * The server's toolsets this caller may use. A platform admin is lent every one. `allToolsets`
+ * lends every toolset that only reads; a toolset that writes is otherwise lent only by name.
  */
 export function lentToolsets(scope: Scope, serving: Serving): string[] {
   const offered = Object.keys(serving.members);
@@ -89,7 +89,10 @@ export function lentToolsets(scope: Scope, serving: Serving): string[] {
     offered.push(SEMANTIC_TOOLSET);
   }
   return offered.filter(
-    (t) => scope.toolsets.includes(t) || (scope.allToolsets && !serving.writes.includes(t)),
+    (t) =>
+      scope.everything ||
+      scope.toolsets.includes(t) ||
+      (scope.allToolsets && !serving.writes.includes(t)),
   );
 }
 

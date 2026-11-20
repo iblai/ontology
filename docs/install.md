@@ -10,6 +10,9 @@ What ends up on the server:
 - **NVIDIA's auto-ontology engine, its database and Caddy**, in Docker. The engine is NVIDIA's
   own images, pulled from its registry, and Caddy gets the HTTPS certificate.
 
+To run ibl.ai/ontology in Docker too, as an image built on the server, follow
+[operations.md](operations.md#or-build-the-image-yourself) instead.
+
 ## Before you start
 
 - **An Ubuntu server**: 22.04, 24.04 or 26.04 on x86-64, with 4 GB of memory and 15 GB free, and
