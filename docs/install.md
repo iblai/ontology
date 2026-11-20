@@ -11,7 +11,12 @@ What ends up on the server:
   own images, pulled from its registry, and Caddy gets the HTTPS certificate.
 
 To run ibl.ai/ontology in Docker too, as an image built on the server, follow
-[install_docker_local.md](install_docker_local.md) instead.
+[install_docker_local.md](install_docker_local.md) instead. On a machine of your own, with no host
+name, follow [dev_local.md](dev_local.md).
+
+A Filesystem source reads only inside `ONTOLOGY_LOCAL_ROOT`: add `ONTOLOGY_LOCAL_ROOT=/srv/data` to
+`/opt/iblai-ontology/.env` to choose the folder. Unset, it is `/home/ontology`. The files must be
+readable by the `ontology` user.
 
 ## Before you start
 

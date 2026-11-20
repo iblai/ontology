@@ -5,7 +5,7 @@ export type CatalogKind = {
   name: string;
   abbr: string;
   color: string;
-  group: "db" | "wh" | "api" | "gc";
+  group: "db" | "wh" | "api" | "gc" | "fs";
   dissect: boolean; // the engine supports it
   serve: boolean; // the runtime has a source kind
 };
@@ -37,6 +37,7 @@ export const catalog: CatalogKind[] = [
     dissect: false,
     serve: true,
   },
+  { name: "Filesystem", abbr: "FS", color: "#64748B", group: "fs", dissect: false, serve: true },
 ];
 
 // The engine's connector types (lib/ao-types.ts AoConnectionConfig) by catalog name.

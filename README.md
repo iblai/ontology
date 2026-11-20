@@ -16,7 +16,6 @@ Connect the systems you already run, dissect them into business terms and relati
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![MCP](https://img.shields.io/badge/MCP-Model_Context_Protocol-000000)](https://modelcontextprotocol.io)
 
-
 <a href="docs/install.md"><img src="https://img.shields.io/badge/Install_on_Your_Server-2563eb?style=for-the-badge&logo=ubuntu&logoColor=white" alt="Install on your server" height="42"></a>
 &nbsp;
 <a href="#quick-start"><img src="https://img.shields.io/badge/Run_It_Locally-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Run it locally" height="42"></a>
@@ -77,6 +76,7 @@ Most agent integrations are wired one system at a time. ibl.ai/ontology reads th
 | **Snowflake**                          | ❄️  | Dissected into terms and served as tools                                                              |
 | **ClickHouse**                         | ⚡  | Dissected into terms and served as tools                                                              |
 | **HTTP APIs**                          | 🌐  | Any system with an HTTP API, served as named tools from an OpenAPI document or the endpoints you name |
+| **Filesystem**                         | 📁  | A folder or file on your server, served as tools to list and read text files; not dissected           |
 | **Trino · Databricks**                 | 🧱  | Dissected into terms and shown on the map; not served as tools                                        |
 | **DuckDB · HeavyDB · Kyuubi · SQLite** | 🔜  | SQL connections coming soon                                                                           |
 | **SQL Server · Oracle · BigQuery**     | 🔜  | SQL connections coming soon                                                                           |
@@ -293,6 +293,9 @@ install points there by default. A self-hosted platform is under [Advanced](#adv
    still nothing prebuilt from ibl.ai
    ([docs/install_docker_local.md](docs/install_docker_local.md)).
 
+   **Or on a machine of your own.** With no host name and no Caddy, with Docker or with none, at
+   `http://localhost:3000` on that machine only ([docs/dev_local.md](docs/dev_local.md)).
+
 2. **Sign in**
 
    Open `https://<host>/` and sign in as an administrator of that platform. The server serves the
@@ -325,15 +328,16 @@ install points there by default. A self-hosted platform is under [Advanced](#adv
 On a server the settings live in `/opt/iblai-ontology/.env`, which Docker Compose and
 ibl.ai/ontology's service both read ([docs/operations.md](docs/operations.md#the-settings)).
 
-| Setting                  | Default                         | What it does                                                                                                                                                       |
-| ------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ONTOLOGY_PLATFORM`      | None: nothing starts without it | Your platform's key, shown at [login.iblai.app/me](https://login.iblai.app/me). The server serves that platform only; another platform's administrator is refused. |
-| `ONTOLOGY_HOST`          | `localhost`                     | The host name. Caddy gets the certificate for it.                                                                                                                  |
-| `ONTOLOGY_DM_URL`        | `https://api.iblai.app/dm`      | The ibl.ai platform's address, where every sign-in and key is checked.                                                                                             |
-| `OPENAI_API_KEY`         | Empty                           | Turns the semantic features on ([a model](docs/operations.md#a-model)).                                                                                            |
-| `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`     | Where the model calls go: OpenAI, or a gateway that speaks its API.                                                                                                |
-| `OPENAI_MODEL`           | `gpt-4.1`                       | The chat model.                                                                                                                                                    |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`        | The embedding model.                                                                                                                                               |
+| Setting                  | Default                                           | What it does                                                                                                                                                       |
+| ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ONTOLOGY_PLATFORM`      | None: nothing starts without it                   | Your platform's key, shown at [login.iblai.app/me](https://login.iblai.app/me). The server serves that platform only; another platform's administrator is refused. |
+| `ONTOLOGY_HOST`          | `localhost`                                       | The host name. Caddy gets the certificate for it.                                                                                                                  |
+| `ONTOLOGY_DM_URL`        | `https://api.iblai.app/dm`                        | The ibl.ai platform's address, where every sign-in and key is checked.                                                                                             |
+| `OPENAI_API_KEY`         | Empty                                             | Turns the semantic features on ([a model](docs/operations.md#a-model)).                                                                                            |
+| `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`                       | Where the model calls go: OpenAI, or a gateway that speaks its API.                                                                                                |
+| `OPENAI_MODEL`           | `gpt-4.1`                                         | The chat model.                                                                                                                                                    |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`                          | The embedding model.                                                                                                                                               |
+| `ONTOLOGY_LOCAL_ROOT`    | See [operations](docs/operations.md#the-settings) | The one folder a Filesystem source may read. Nothing outside it is listed or read.                                                                                 |
 
 For `pnpm dev`, [`.env.example`](.env.example) lists every setting of the one-host shape with its
 comment.
@@ -488,6 +492,7 @@ reaches only the toolsets its grant names.
 | SQL        | Trino, Databricks                                             | Dissected and shown on the map; not served as tools  |
 | SQL        | DuckDB, HeavyDB, Kyuubi, SQLite, SQL Server, Oracle, BigQuery | Coming soon                                          |
 | HTTP API   | Any system with an HTTP API                                   | Served as tools today, with no connector to wait for |
+| Filesystem | A folder or file on your server                               | Text files served as tools; not dissected            |
 
 More: [connect data sources](docs/guides/connect-data-sources.md).
 
@@ -509,9 +514,17 @@ reaches it with a key granted that toolset by name, or with a platform admin's o
 
 More: [permissions](docs/guides/permissions.md).
 
+#### 8. Can it read files on my server?
+
+Yes, text files. A Filesystem connection serves one folder or file under `ONTOLOGY_LOCAL_ROOT` as
+two tools, one to list a folder and one to read a file. Files whose name starts with a dot are
+never read, and PDF, Office files and images are not read at all.
+
+More: [connect data sources](docs/guides/connect-data-sources.md#adding-a-filesystem).
+
 ### Security and data
 
-#### 8. Does my data leave my network?
+#### 9. Does my data leave my network?
 
 No. ibl.ai/ontology runs on your server, and the ontology, the passwords and the MCP servers stay
 there.
@@ -521,13 +534,13 @@ personal columns masked first.
 
 More: [a model](docs/operations.md#a-model), [network](docs/network.md).
 
-#### 9. Where are my database passwords kept?
+#### 10. Where are my database passwords kept?
 
 On your server only: in a file that its service alone can read, and in the engine's own database.
 
 More: [connect data sources](docs/guides/connect-data-sources.md).
 
-#### 10. What is exposed to the internet?
+#### 11. What is exposed to the internet?
 
 No data is exposed by default. Only ports 80 and 443 are open, through Caddy, and anything
 behind them that returns data asks for a sign-in or a key.
@@ -537,14 +550,14 @@ server's process listen on the server's loopback only.
 
 More: [network](docs/network.md).
 
-#### 11. How is personal data handled?
+#### 12. How is personal data handled?
 
 Columns that look personal are tagged and flagged in the Ontology, and you decide per toolset
 which tools may return them.
 
 More: [permissions](docs/guides/permissions.md).
 
-#### 12. Can I limit what each person sees, down to the row?
+#### 13. Can I limit what each person sees, down to the row?
 
 Yes, three ways:
 
@@ -554,7 +567,7 @@ Yes, three ways:
 
 More: [permissions](docs/guides/permissions.md).
 
-#### 13. Is there an audit log?
+#### 14. Is there an audit log?
 
 Yes. Every tool call and every refusal is logged on your server and shown under Activity, and the
 log can be shipped to your SIEM.
@@ -563,7 +576,7 @@ More: [permissions](docs/guides/permissions.md).
 
 ### Models
 
-#### 14. Do I need an LLM key?
+#### 15. Do I need an LLM key?
 
 It is not required. Connecting a system, the map, certifying terms and the tools all work without
 one.
@@ -572,14 +585,14 @@ An OpenAI API key turns on the semantic features of NVIDIA auto-ontology, such a
 and questions in plain words: set [`OPENAI_API_KEY`](docs/operations.md#a-model) in the server's
 `.env`.
 
-#### 15. Does NVIDIA's engine get my OpenAI key?
+#### 16. Does NVIDIA's engine get my OpenAI key?
 
 No. The engine calls a route on the server's loopback, and ibl.ai/ontology adds your key and sends
 the call on.
 
 More: [a model](docs/operations.md#a-model).
 
-#### 16. Can I use a model other than OpenAI's?
+#### 17. Can I use a model other than OpenAI's?
 
 Yes: any gateway that speaks OpenAI's API, set in `OPENAI_API_BASE_URL`. The embedding model must
 be able to answer in 2048 dimensions.
@@ -588,39 +601,39 @@ More: [a model](docs/operations.md#a-model).
 
 ### Agents and access
 
-#### 17. Which agents can call it?
+#### 18. Which agents can call it?
 
 ibl.ai agents, Claude Desktop and Claude Code, Codex, Cursor, and anything else that speaks MCP.
 
 More: [connect agents](docs/guides/connect-agents.md).
 
-#### 18. Does it work from browser-based agents?
+#### 19. Does it work from browser-based agents?
 
 Yes, once their origin is on the server's Allowed Origins.
 
 More: [connect agents](docs/guides/connect-agents.md).
 
-#### 19. How do callers sign in?
+#### 20. How do callers sign in?
 
 With ibl.ai credentials, Microsoft Entra ID, Google or a custom OIDC issuer, chosen per MCP server.
 
 More: [permissions](docs/guides/permissions.md).
 
-#### 20. Who sees what?
+#### 21. Who sees what?
 
 Each caller sees only the tools in the toolsets its grant reaches, so two people can get
 different lists from the same address.
 
 More: [permissions](docs/guides/permissions.md).
 
-#### 21. How do I take access away?
+#### 22. How do I take access away?
 
 Revoke the key under Tokens & Origins on the server's page, or remove the group from the toolset's
 policy on ibl.ai.
 
 More: [walkthrough](docs/console.md).
 
-#### 22. Are there rate limits?
+#### 23. Are there rate limits?
 
 Yes: 120 requests or 30 tool calls a minute, per caller.
 
@@ -628,34 +641,44 @@ More: [connect agents](docs/guides/connect-agents.md).
 
 ### Running it
 
-#### 23. What does the server need?
+#### 24. What does the server need?
 
 Ubuntu 22.04, 24.04 or 26.04 on x86-64 is recommended, 4 GB of memory, 15 GB free, and ports 80
 and 443 open.
 
 More: [install](docs/install.md).
 
-#### 24. Why is Docker there if it is built from source?
+#### 25. Can I run it without a host name?
+
+Yes, on a machine of your own, with Docker or without it. It answers at `http://localhost:3000`
+on that machine only, still needs the internet for ibl.ai sign-in, and ibl.ai's agents cannot
+call it.
+
+More: [run it on your own machine](docs/dev_local.md).
+
+#### 26. Why is Docker there if it is built from source?
 
 Only NVIDIA's engine, its Postgres and Caddy run in Docker. ibl.ai/ontology itself is built on
 your server from this repository. It can run in Docker too, as an image you build on your server
-from this repository's `Dockerfile`.
+from this repository's `Dockerfile`. On a machine of your own it can also run with no Docker at
+all, the engine built from NVIDIA's source.
 
-More: [install](docs/install.md), [the Docker install](docs/install_docker_local.md).
+More: [install](docs/install.md), [the Docker install](docs/install_docker_local.md),
+[your own machine](docs/dev_local.md#without-docker).
 
-#### 25. Can one server serve several platforms?
+#### 27. Can one server serve several platforms?
 
 No. One server serves one platform.
 
 More: [network](docs/network.md#one-platform-or-any).
 
-#### 26. Can I undo a deploy?
+#### 28. Can I undo a deploy?
 
 Yes. Each MCP server keeps its revisions, and Roll Back puts the previous one back.
 
 More: [walkthrough](docs/console.md).
 
-#### 27. How do I upgrade, back up or remove it?
+#### 29. How do I upgrade, back up or remove it?
 
 See [Day to day](docs/operations.md#day-to-day) in the operations guide.
 

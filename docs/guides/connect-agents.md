@@ -30,7 +30,8 @@ An agent gets the server when you attach it:
    The call appears under the server's **Activity** tab.
 
 The agent only ever talks to ibl.ai; ibl.ai calls `https://<host>/<platform>/<slug>/mcp` on your
-server, which must be reachable on 443 from ibl.ai's egress ([network.md](../network.md)).
+server, which must be reachable on 443 from ibl.ai's egress ([network.md](../network.md)). A
+server that answers on `localhost` cannot be attached to an ibl.ai agent.
 
 **From the OS instead.** The same connection can be made in the agent's own settings on
 os.ibl.ai: **MCP**, then **Add Connector**, with the server's endpoint as **Connector Server**,
@@ -144,6 +145,14 @@ MCP_AUTHORIZATION="Api-Token $ONTOLOGY_TOKEN" \
 
 Add `--insecure` for a server on `localhost`, whose certificate is Caddy's own. Without
 `MCP_AUTHORIZATION` it checks the refusals only.
+
+## A client on the same machine
+
+A server run on your own machine ([dev_local.md](../dev_local.md)) answers at
+`http://localhost:3000/<platform>/<slug>/mcp`, to MCP clients on that machine only. Issue a token
+under the server's **Tokens & Origins** tab, and use the address and the snippets its **Connect**
+tab shows. A browser client served from this machine (any `http://localhost:<port>` origin) is
+taken as well.
 
 ## Browser-based agents and apps
 

@@ -18,7 +18,7 @@ export const TOOL_NAME_MAX = 64; // what an agent's model takes for a tool's nam
 const NOTE_MAX = 300; // characters of what a parameter means
 // The private networks an API inside one may reach; loopback is LOOPBACK, link-local in neither.
 const PRIVATE = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"];
-// This machine, which an API on it may reach (outside production only, by apiAddress).
+// This machine, which an API on it may reach (when apiAddress takes it: see its rule).
 const LOOPBACK = ["127.0.0.0/8", "::1/128"];
 const HEADER = /^[A-Za-z0-9-]{1,64}$/;
 // The request's own headers, never a key's.

@@ -38,7 +38,14 @@ export type ApiRow = { name: string; baseUrl: string; endpoints: number; tools: 
 /** One raw toolset per connected system, for the Prebuilt tab. */
 export type PrebuiltRow = { toolset: string; label: string };
 
-export type SystemsView = { systems: SystemRow[]; apis: ApiRow[]; prebuilt: PrebuiltRow[] };
+export type FileRow = { name: string; url: string };
+
+export type SystemsView = {
+  systems: SystemRow[];
+  apis: ApiRow[];
+  prebuilt: PrebuiltRow[];
+  files: FileRow[];
+};
 
 /* ---------- map ---------- */
 

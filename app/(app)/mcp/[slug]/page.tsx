@@ -17,7 +17,7 @@ import {
 import { Card, PageHeader, Pill, Stat, Tag } from "@/components/shell/page-header";
 import { AttachDialog } from "@/components/attach-dialog";
 import { QueryState } from "@/components/query-state";
-import { useActions, useApiKeys, useServer, useServerActivity } from "@/lib/data";
+import { servedLocally, useActions, useApiKeys, useServer, useServerActivity } from "@/lib/data";
 import { isDemo } from "@/lib/iblai/session";
 import type { PlayTool, ServerView, ToolRun } from "@/lib/view/types";
 
@@ -218,26 +218,37 @@ function Server({ srv }: { srv: ServerView }) {
             <TabsContent value="connect">
               <div className="grid gap-4 lg:grid-cols-2">
                 <div>
-                  <div className="eyebrow mb-1.5">ibl.ai agent</div>
-                  <div className="flex items-center gap-3 rounded-[10px] border border-[var(--border-color)] bg-[#fafbfc] p-3">
-                    <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#0ea5e9] to-[#0058cc] text-xs font-semibold text-white">
-                      AG
-                    </span>
-                    <div className="flex-1">
-                      <b className="text-sm text-gray-900">{demo ? "agentAI" : "ibl.ai agent"}</b>
-                      <div className="text-xs text-gray-600">
-                        Attach <code className="mono">{srv.slug}</code> ·{" "}
-                        {demo ? "sign-in scope: user" : "a key per agent"}
+                  {servedLocally() ? (
+                    <p className="text-xs text-gray-600">
+                      This server answers on this machine only, so agents on ibl.ai cannot call it.
+                      Use an MCP client on this machine, with a token from Tokens &amp; Origins.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="eyebrow mb-1.5">ibl.ai agent</div>
+                      <div className="flex items-center gap-3 rounded-[10px] border border-[var(--border-color)] bg-[#fafbfc] p-3">
+                        <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#0ea5e9] to-[#0058cc] text-xs font-semibold text-white">
+                          AG
+                        </span>
+                        <div className="flex-1">
+                          <b className="text-sm text-gray-900">
+                            {demo ? "agentAI" : "ibl.ai agent"}
+                          </b>
+                          <div className="text-xs text-gray-600">
+                            Attach <code className="mono">{srv.slug}</code> ·{" "}
+                            {demo ? "sign-in scope: user" : "a key per agent"}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="ibl-button-primary"
+                          onClick={() => setAttaching(true)}
+                        >
+                          Attach
+                        </Button>
                       </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="ibl-button-primary"
-                      onClick={() => setAttaching(true)}
-                    >
-                      Attach
-                    </Button>
-                  </div>
+                    </>
+                  )}
                   <div className="eyebrow mt-3.5 mb-1.5">cURL</div>
                   <Code>{`curl -X POST ${url} \\
   -H "Authorization: Api-Token <ibl.ai platform token>" \\

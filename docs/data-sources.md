@@ -71,6 +71,7 @@ in the console's directory.
 | Table and PII counts | AO `GET /api/exploration/graph` and the column tags the PII detector sets                                                                                                                                                                               |
 | Ingest status        | Derived: “ingesting” until the system's tables appear, “compiling” while AO `GET /api/semantic-compilation/status` says a compile runs                                                                                                                  |
 | HTTP API systems     | TB `apis.yaml` (served only, never dissected)                                                                                                                                                                                                           |
+| Filesystem systems   | TB `locals.yaml`: a folder or file under `ONTOLOGY_LOCAL_ROOT`, served by the gateway itself as the `<name>-files` toolset; never dissected                                                                                                             |
 | Catalog of kinds     | static: what the engine dissects and what Toolbox serves                                                                                                                                                                                                |
 | Test Connection      | AO `POST /api/connections/test`                                                                                                                                                                                                                         |
 | Connect & Dissect    | The password to TB `env`; AO `PUT /api/configurations/pii-detection` and `…/distinct-value-probing`; AO `POST /api/connections`, which starts the ingest                                                                                                |
@@ -177,7 +178,8 @@ Agent traffic uses a second path, straight to the platform's server:
   `https://<host>/iblai/<platform>/<slug>/mcp`) is the **gateway**. It refuses a credential sent
   over plain HTTP (except on loopback), checks `Origin` and `Host` against the server's lists, asks
   ibl.ai what the caller's credential is granted on that platform (ibl.ai refuses a credential of another platform), limits the call
-  to the toolsets that grant reaches, and forwards to Toolbox on `127.0.0.1:<port>`. It writes
+  to the toolsets that grant reaches, and forwards to Toolbox on `127.0.0.1:<port>`. A Filesystem
+  source's two tools it answers itself, not through Toolbox. It writes
   only its own log. On a console hosted elsewhere, its own `/<platform>/<slug>/mcp` answers `404`.
 - Toolbox listens on loopback only, so every call goes through the gateway. An OIDC ID token rides
   along in the header Toolbox expects (for example `entra_token`) and Toolbox verifies it.

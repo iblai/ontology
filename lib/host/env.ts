@@ -45,6 +45,11 @@ export function ownPlatform(): string | null {
   return named;
 }
 
+/** Whether this server answers on its own machine only: ONTOLOGY_HOST is "localhost". */
+export function localOnly(): boolean {
+  return process.env.ONTOLOGY_HOST === "localhost";
+}
+
 /** The server's own engine without a trailing slash: AO_URL, else null. */
 export function engineUrl(): string | null {
   return process.env.AO_URL?.replace(/\/+$/, "") || null;

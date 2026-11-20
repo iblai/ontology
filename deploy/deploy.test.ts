@@ -14,6 +14,7 @@ const IMAGE = "public.ecr.aws/ibleducation/iblai-ontology";
 const SETTINGS = [
   "ONTOLOGY_PLATFORM",
   "ONTOLOGY_HOST",
+  "ONTOLOGY_LOCAL_ROOT",
   "ONTOLOGY_DM_URL",
   "OPENAI_API_KEY",
   "OPENAI_API_BASE_URL",
@@ -42,7 +43,10 @@ interface Service {
   init?: boolean;
   restart?: string;
   environment?: Record<string, string>;
-  volumes?: string[];
+  volumes?: (
+    | string
+    | { type: string; source: string; target: string; read_only: boolean; bind: object }
+  )[];
   configs?: { source: string; target: string }[];
   extra_hosts?: string[];
   healthcheck?: { test: string[] };
@@ -123,11 +127,11 @@ describe("compose.yaml", () => {
     expect(compose.name).toBe("iblai-ontology-console");
   });
 
-  it("reads the seven settings, each once, at the top, and nothing else", () => {
+  it("reads the eight settings, each once, at the top, and nothing else", () => {
     expect(interpolated(COMPOSE)).toEqual(SETTINGS);
     expect(Object.keys(compose["x-settings"])).toEqual(SETTINGS);
     const last = COMPOSE.split("\n").findIndex((line) => line.includes("${OPENAI_EMBEDDING_MODEL"));
-    expect(last).toBeLessThan(30);
+    expect(last).toBeLessThan(32);
   });
 
   it("gives every setting a default but ONTOLOGY_PLATFORM, which stops compose with a message", () => {
@@ -136,6 +140,7 @@ describe("compose.yaml", () => {
     expect(uses.find((m) => m[2] === ":?")?.[3]).toMatch(/key of the ibl\.ai platform/);
     expect(Object.fromEntries(uses.filter((m) => m[2] === ":-").map((m) => [m[1], m[3]]))).toEqual({
       ONTOLOGY_HOST: "localhost",
+      ONTOLOGY_LOCAL_ROOT: "/opt/iblai-ontology/files",
       ONTOLOGY_DM_URL: "https://api.iblai.app/dm",
       OPENAI_API_KEY: "",
       OPENAI_API_BASE_URL: "https://api.openai.com/v1",
@@ -206,7 +211,9 @@ describe("compose.yaml", () => {
 
   it("makes every service that mounts the secrets wait for them, read-only", () => {
     const readers = SERVICES.filter((name) =>
-      services[name].volumes?.some((volume) => volume.startsWith("secrets:")),
+      services[name].volumes?.some(
+        (volume) => typeof volume === "string" && volume.startsWith("secrets:"),
+      ),
     );
     expect(readers).toEqual(["secrets", "postgres", ...ENGINE, "ontology"]);
     for (const name of readers.slice(1)) {
@@ -384,6 +391,8 @@ describe("compose.yaml", () => {
         "HOSTNAME",
         "PORT",
         "ONTOLOGY_PLATFORM",
+        "ONTOLOGY_HOST",
+        "ONTOLOGY_LOCAL_ROOT",
         "ONTOLOGY_DM_URL",
         "AO_URL",
         "AO_ORIGIN",
@@ -405,11 +414,21 @@ describe("compose.yaml", () => {
       AO_ADMIN_PASSWORD_FILE: "/secrets/admin-password",
       ONTOLOGY_MODEL_KEY_FILE: "/secrets/model-key",
     });
-    for (const name of SETTINGS.filter((setting) => setting !== "ONTOLOGY_HOST")) {
+    for (const name of SETTINGS) {
       expect(env("ontology")[name], name).toMatch(new RegExp(`^\\$\\{${name}:`));
     }
     expect(app.init).toBe(true);
-    expect(app.volumes).toEqual(["ontology_data:/data", "secrets:/secrets:ro"]);
+    expect(app.volumes).toEqual([
+      "ontology_data:/data",
+      "secrets:/secrets:ro",
+      {
+        type: "bind",
+        source: "${ONTOLOGY_LOCAL_ROOT:-/opt/iblai-ontology/files}",
+        target: "${ONTOLOGY_LOCAL_ROOT:-/opt/iblai-ontology/files}",
+        read_only: true,
+        bind: { create_host_path: true },
+      },
+    ]);
     expect(app.healthcheck?.test.join(" ")).toContain("http://127.0.0.1:3000/api/host/health");
   });
 

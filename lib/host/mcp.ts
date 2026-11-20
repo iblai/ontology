@@ -6,6 +6,7 @@ import type { Caller } from "./dm";
 import { HostError } from "./errors";
 import { readEnv } from "./files";
 import type { Scope } from "./grants";
+import { callLocal, filesTools } from "./local";
 import { record } from "./log";
 import { SEMANTIC_TOOLS, SEMANTIC_TOOLSET, callSemantic, semanticReady } from "./semantic";
 import type { Serving } from "./servers";
@@ -80,7 +81,8 @@ export async function handleMessage(ctx: RpcContext, message: unknown): Promise<
 
 /**
  * The server's toolsets this caller may use. A platform admin is lent every one. `allToolsets`
- * lends every toolset that only reads; a toolset that writes is otherwise lent only by name.
+ * lends every toolset that only reads, a filesystem's among them; a toolset that writes is
+ * otherwise lent only by name.
  */
 export function lentToolsets(scope: Scope, serving: Serving): string[] {
   const offered = Object.keys(serving.members);
@@ -140,16 +142,29 @@ export function hostAllowed(host: string, allowed: string[]): boolean {
   });
 }
 
+const LOOPBACK_ORIGINS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** Whether an Origin may call a server: one on its list, or a page served from this machine. */
+export function originAllowed(origin: string, allowed: string[]): boolean {
+  if (allowed.some((entry) => entry.replace(/\/+$/, "") === origin)) return true;
+  return URL.canParse(origin) && LOOPBACK_ORIGINS.has(new URL(origin).hostname);
+}
+
 /* ---------- the two tool methods ---------- */
 
 // The caller's tools: each lent toolset's, the gateway's own, then any held by its own name.
 async function listFor(ctx: RpcContext): Promise<McpTool[]> {
   const { caller, serving, slug, forward } = ctx;
   const lent = lentToolsets(caller.scope, serving);
-  const served = lent.filter((t) => t !== SEMANTIC_TOOLSET && serving.members[t]?.length);
+  const mine = (t: string) => serving.files.includes(t); // a filesystem's: answered here
+  const served = lent.filter(
+    (t) => t !== SEMANTIC_TOOLSET && !mine(t) && serving.members[t]?.length,
+  );
+  const files = lent.filter(mine);
   const held = new Map<string, string[]>(); // toolset → tools held by name from it
   for (const name of caller.scope.tools) {
-    if (SEMANTIC_NAMES.has(name) || served.some((t) => serving.members[t].includes(name))) continue;
+    const lentAlready = [...served, ...files].some((t) => serving.members[t].includes(name));
+    if (SEMANTIC_NAMES.has(name) || lentAlready) continue;
     const toolset = holder(serving, name);
     if (toolset) held.set(toolset, [...(held.get(toolset) ?? []), name]);
   }
@@ -160,14 +175,18 @@ async function listFor(ctx: RpcContext): Promise<McpTool[]> {
       if (!tools.has(tool.name) && (!only || only.includes(tool.name))) tools.set(tool.name, tool);
     }
   };
-  if (served.length || held.size) await ensureRunning(slug);
+  // The runtime is started only for a toolset it serves.
+  if (served.length || [...held.keys()].some((t) => !mine(t))) await ensureRunning(slug);
   for (const toolset of served) add(await listTools(slug, toolset, forward));
+  for (const toolset of files) add(filesTools(toolset));
   // The gateway's own three tools, only while the engine holds a semantic layer to answer from.
   const all = lent.includes(SEMANTIC_TOOLSET);
   if ((all || offersSemantic(serving)) && (await semanticReady())) {
     add(SEMANTIC_TOOLS, all ? undefined : caller.scope.tools);
   }
-  for (const [toolset, names] of held) add(await listTools(slug, toolset, forward), names);
+  for (const [toolset, names] of held) {
+    add(mine(toolset) ? filesTools(toolset) : await listTools(slug, toolset, forward), names);
+  }
   return [...tools.values()];
 }
 
@@ -200,6 +219,8 @@ async function callFor(ctx: RpcContext, params: Record<string, unknown>): Promis
   try {
     if (toolset === SEMANTIC_TOOLSET) {
       result = await callSemantic(name, args);
+    } else if (serving.files.includes(toolset)) {
+      result = await callLocal(toolset, name, args);
     } else {
       await ensureRunning(slug);
       result = await callTool(slug, toolset, name, args, forward);

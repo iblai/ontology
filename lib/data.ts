@@ -13,6 +13,8 @@ import { skipToken } from "@reduxjs/toolkit/query/react";
 import { authorization, hostApi, hostHeaders } from "@/lib/host-api";
 import type {
   HostApiInput,
+  HostFolder,
+  HostLocalInput,
   HostServerDraft,
   HostSpec,
   HostSystemInput,
@@ -75,6 +77,18 @@ function consoleOrigin(): string {
 function serverOrigin(): string {
   if (!relaying()) return consoleOrigin();
   return storedServer(currentTenantKey()) ?? "";
+}
+
+/** Whether this platform's server answers on this machine only, out of reach of ibl.ai agents. */
+export function servedLocally(): boolean {
+  if (demoMode) return false;
+  const origin = serverOrigin();
+  if (!origin) return false;
+  try {
+    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** The origins a new server starts with: os.ibl.ai, claude.ai and the console's own. */
@@ -152,6 +166,8 @@ function useLiveSystems(): Query<SystemsView> {
   const s = q(hostApi.useGetSystemsQuery(undefined, poll));
   const a = q(hostApi.useGetApisQuery());
   const t = q(hostApi.useGetToolsetsQuery());
+  // A server from before filesystems has no such route: it has none, and the rest still shows.
+  const l = hostApi.useGetLocalsQuery();
   const data = useMemo(
     () =>
       s.data && a.data && t.data
@@ -159,11 +175,16 @@ function useLiveSystems(): Query<SystemsView> {
             systems: s.data.map(systemRow),
             apis: a.data.map(apiRow),
             prebuilt: prebuiltRows(t.data, s.data),
+            files: (l.data ?? []).map(({ name, url }) => ({ name, url })),
           }
         : undefined,
-    [s.data, a.data, t.data],
+    [s.data, a.data, t.data, l.data],
   );
   return join([s, a, t], data);
+}
+
+function useLiveLocalFolder(path: string | null): Query<HostFolder> {
+  return q(hostApi.useBrowseLocalQuery(path ?? skipToken));
 }
 
 function useLiveGraph(): Query<GraphView> {
@@ -413,6 +434,11 @@ export const useSystems: () => Query<SystemsView> = demoMode
   ? () => demoReads.systems
   : useLiveSystems;
 
+/** A folder on the server's machine, for the Filesystem picker; null skips. */
+export const useLocalFolder: (path: string | null) => Query<HostFolder> = demoMode
+  ? (path) => (path === null ? idle : ready(demo.demoFolder))
+  : useLiveLocalFolder;
+
 /** Tables, joins, terms and their links, as the Map draws them. */
 export const useGraph: () => Query<GraphView> = demoMode ? () => demoReads.graph : useLiveGraph;
 
@@ -500,6 +526,8 @@ export type Actions = {
   fetchSpec(input: { url: string; baseUrl: string; authHeader: string }): Promise<HostSpec>;
   /** Saves a custom HTTP API on the host. */
   addApi(input: HostApiInput): Promise<void>;
+  /** Saves a filesystem on the host. */
+  connectLocal(input: HostLocalInput): Promise<void>;
 
   /** Starts a compile now. */
   compile(): Promise<void>;
@@ -613,6 +641,9 @@ function useLiveActions(): Actions {
       addApi: async (input) => {
         await unwrap(dispatch(e.addApi.initiate(input)));
       },
+      connectLocal: async (input) => {
+        await unwrap(dispatch(e.addLocal.initiate(input)));
+      },
       compile: async () => {
         await unwrap(dispatch(e.setSwitch.initiate({ name: "compilation", on: true })));
       },
@@ -693,6 +724,7 @@ const demoActions: Actions = {
   connectSystem: done,
   fetchSpec: async () => ({ title: "", endpoints: demo.demoSpec }),
   addApi: done,
+  connectLocal: done,
   compile: done,
   certifyTerm: done,
   saveTerm: done,

@@ -6,6 +6,9 @@
 //   GET  /api/host/apis                       → HostApi[]
 //   POST /api/host/apis                       HostApiInput → HostApi
 //   POST /api/host/apis/spec                  { url, baseUrl?, authHeader? } → HostSpec
+//   GET  /api/host/locals                     → HostLocal[]
+//   POST /api/host/locals                     HostLocalInput → HostLocal
+//   GET  /api/host/locals/browse?path=        → HostFolder
 //   GET  /api/host/graph                      → HostGraph
 //   GET  /api/host/toolsets                   → HostToolset[]
 //   GET  /api/host/servers                    → HostServer[]
@@ -130,11 +133,36 @@ export type HostSpec = {
   withoutAuth?: string; // why the request with the auth header failed, when it came without it
 };
 
+/* ---------- filesystems (local://) ---------- */
+
+export type HostLocalInput = {
+  name: string; // names the toolset <name>-files and its two tools
+  url: string; // local:///absolute/path, a folder or one file
+};
+
+export type HostLocal = { name: string; url: string };
+
+export type HostFolderEntry = {
+  name: string;
+  dir: boolean;
+  size: number; // bytes; 0 for a folder
+  modified: string; // ISO time
+};
+
+/** One folder under ONTOLOGY_LOCAL_ROOT, as the file picker shows it. */
+export type HostFolder = {
+  root: string; // the root's real path: nothing above it is shown
+  path: string; // the folder listed
+  parent: string | null; // null at the root
+  entries: HostFolderEntry[]; // folders first, then by name
+  truncated: boolean; // it holds more than were listed
+};
+
 /* ---------- toolsets the host can offer ---------- */
 
 export type HostTool = { name: string; sig: string; note?: string };
 
-export type HostToolsetKind = "terms" | "raw" | "api" | "semantic" | "actions";
+export type HostToolsetKind = "terms" | "raw" | "api" | "semantic" | "actions" | "files";
 
 export type HostToolset = {
   name: string;

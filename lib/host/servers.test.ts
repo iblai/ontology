@@ -266,6 +266,25 @@ describe("serving", () => {
           semantic: ["ask_question", "search_terms", "describe_table"],
         },
         writes: ["sis-raw"],
+        files: [],
+      });
+    }),
+  );
+
+  it(
+    "adds a filesystem’s toolset with its two tools, unless a document has that name",
+    acme(async () => {
+      const tagged: ToolboxDoc = { kind: "toolset", name: "tag-files", tools: ["list_students"] };
+      vi.mocked(serverDocs).mockReturnValue([...docsB, tagged]);
+      const saved = await saveServer("sis", draft(["sis", "docs-files", "tag-files"]), true);
+      expect([saved.toolsets, saved.tools]).toEqual([3, 3]);
+      expect(await serving("sis")).toMatchObject({
+        members: {
+          sis: ["list_students"],
+          "tag-files": ["list_students"],
+          "docs-files": ["docs_list_files", "docs_read_file"],
+        },
+        files: ["docs-files"],
       });
     }),
   );
