@@ -4,7 +4,7 @@
 # Next's standalone build: the pages, /api/host/* and the MCP gateway; deploy/compose.yaml
 # runs it beside NVIDIA's engine. amd64 only: Toolbox ships one glibc x64 binary.
 #
-#   docker build --platform linux/amd64 -t public.ecr.aws/ibleducation/iblai-ontology:dev .
+#   docker build --platform linux/amd64 -t public.ecr.aws/ibleducation/iblai-ontology:local .
 # ============================================================
 FROM node:24-slim AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0

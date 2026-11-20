@@ -36,7 +36,7 @@ sudo mkdir -p /opt/iblai-ontology
 sudo tee /opt/iblai-ontology/.env <<'EOF'
 ONTOLOGY_PLATFORM=example-university
 ONTOLOGY_HOST=ontology.example.edu
-COMPOSE_PROFILES=console
+COMPOSE_PROFILES=all-in-one
 EOF
 sudo chmod 600 /opt/iblai-ontology/.env
 command -v ufw >/dev/null 2>&1 && {
@@ -45,7 +45,9 @@ command -v ufw >/dev/null 2>&1 && {
 }
 ```
 
-`COMPOSE_PROFILES=console` tells Docker Compose to run ibl.ai/ontology too.
+Without the `COMPOSE_PROFILES=all-in-one` line, `docker compose up -d` starts only NVIDIA's engine,
+its database and Caddy. With it, the same command also starts ibl.ai/ontology from the image
+built in block 3.
 
 ## 2. Install Docker
 
@@ -64,7 +66,7 @@ finds it on the server and pulls nothing of ibl.ai's.
 ```bash
 cd /opt/iblai-ontology
 test -d repo || sudo git clone --branch main https://github.com/iblai/ontology.git repo
-sudo docker build -t public.ecr.aws/ibleducation/iblai-ontology:dev repo
+sudo docker build -t public.ecr.aws/ibleducation/iblai-ontology:local repo
 ```
 
 ## 4. Start everything

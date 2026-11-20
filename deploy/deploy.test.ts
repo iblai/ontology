@@ -365,9 +365,11 @@ describe("compose.yaml", () => {
     expect(after("proxy")).toEqual({ ontology: "service_healthy" });
   });
 
-  it("starts the console's image under the console profile alone, and Caddy without it", () => {
+  it("starts the console's image under the all-in-one profile alone, and Caddy without it", () => {
     for (const name of SERVICES) {
-      expect(services[name].profiles, name).toEqual(name === "ontology" ? ["console"] : undefined);
+      expect(services[name].profiles, name).toEqual(
+        name === "ontology" ? ["all-in-one"] : undefined,
+      );
     }
     // A console built from source is not in Docker: Caddy must not wait for one that is.
     expect(services.proxy.depends_on?.ontology.required).toBe(false);
@@ -467,8 +469,8 @@ describe("compose.yaml", () => {
 
 describe("the release stamps", () => {
   it("hold the console's image tag once in compose.yaml", () => {
-    expect(COMPOSE.split(`${IMAGE}:dev`)).toHaveLength(2);
-    expect(COMPOSE).toContain(`image: ${IMAGE}:dev\n`);
+    expect(COMPOSE.split(`${IMAGE}:local`)).toHaveLength(2);
+    expect(COMPOSE).toContain(`image: ${IMAGE}:local\n`);
   });
 
   it("are replaced by the release workflow", () => {
@@ -477,7 +479,7 @@ describe("the release stamps", () => {
     expect(workflow).toContain(
       String.raw`sed -i "s/^VERSION=\"dev\"$/VERSION=\"$VERSION\"/" deploy/install.sh`,
     );
-    expect(workflow).toContain('sed -i "s|$IMAGE:dev|$IMAGE:$VERSION|" deploy/compose.yaml');
+    expect(workflow).toContain('sed -i "s|$IMAGE:local|$IMAGE:$VERSION|" deploy/compose.yaml');
     expect(workflow).toContain(
       'gh release upload "$TAG" deploy/compose.yaml deploy/install.sh --clobber',
     );

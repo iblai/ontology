@@ -4,7 +4,7 @@
 #   docker compose up -d
 #
 # The console itself is built from source beside this file and run by systemd (docs/install.md).
-# To run it as ibl.ai's image instead, set COMPOSE_PROFILES=console in a .env beside this file:
+# To run it as ibl.ai's image instead, set COMPOSE_PROFILES=all-in-one in a .env beside this file:
 #
 #   curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/compose.yaml
 #   docker compose up -d
@@ -227,12 +227,12 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # The whole console as ibl.ai's image, under the `console` profile only: without it the console
+  # The whole console as ibl.ai's image, under the `all-in-one` profile only: without it the console
   # runs from source outside Docker. It makes its engine key on the first call that needs one.
   ontology:
-    profiles: ["console"]
+    profiles: ["all-in-one"]
     # The release workflow stamps the version here and in install.sh.
-    image: public.ecr.aws/ibleducation/iblai-ontology:dev
+    image: public.ecr.aws/ibleducation/iblai-ontology:local
     network_mode: host
     init: true # reaps the Toolbox processes it starts
     environment:

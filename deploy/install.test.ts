@@ -38,7 +38,7 @@ describe("deploy/install.sh", () => {
       ["COMPOSE_PROFILES", "ONTOLOGY_DM_URL", "ONTOLOGY_HOST", "ONTOLOGY_PLATFORM"].sort(),
     );
     // Without the profile compose.yaml starts no console: this script installs the image.
-    expect(SCRIPT).toMatch(/^\s+put COMPOSE_PROFILES console$/m);
+    expect(SCRIPT).toMatch(/^\s+put COMPOSE_PROFILES all-in-one$/m);
     // put is the one writer of .env: one redirect into it, and no heredoc.
     expect(SCRIPT.match(/>\s*"\$DIR\/\.env/g)).toHaveLength(1);
     expect(SCRIPT).toContain('} >"$DIR/.env.new"');

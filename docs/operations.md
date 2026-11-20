@@ -256,7 +256,7 @@ platform's address, an empty one blanks it.
 
 Building the console on the server is the default. Docker can instead run it as an image:
 ibl.ai's prebuilt one, `public.ecr.aws/ibleducation/iblai-ontology`, or one
-[you build on the server](#or-build-the-image-yourself). `COMPOSE_PROFILES=console` in `.env`
+[you build on the server](#or-build-the-image-yourself). `COMPOSE_PROFILES=all-in-one` in `.env`
 turns that on, and then no `ontology` user, mise or service is needed. Use one or the other on a
 server, never both: they hold the same port.
 
@@ -269,7 +269,7 @@ sudo curl -fsSLO https://github.com/iblai/ontology/releases/latest/download/comp
 sudo tee .env <<'EOF'
 ONTOLOGY_PLATFORM=acme-university
 ONTOLOGY_HOST=ontology.example.edu
-COMPOSE_PROFILES=console
+COMPOSE_PROFILES=all-in-one
 EOF
 sudo chmod 600 .env
 sudo docker compose up -d
@@ -337,7 +337,7 @@ It:
    file is added.
 3. **Asks for the platform's key** if the command did not carry it.
 4. **Writes `/opt/iblai-ontology/.env`** with the names it was given (`ONTOLOGY_PLATFORM`,
-   `ONTOLOGY_HOST`, `ONTOLOGY_DM_URL`), `COMPOSE_PROFILES=console`, and no secret. Lines you
+   `ONTOLOGY_HOST`, `ONTOLOGY_DM_URL`), `COMPOSE_PROFILES=all-in-one`, and no secret. Lines you
    added, such as `OPENAI_API_KEY`, are left as they are.
 5. **Downloads** the `compose.yaml` of its own release into `/opt/iblai-ontology`.
 6. **Pulls the images**, up to three times, since NVIDIA's registry sometimes times out.

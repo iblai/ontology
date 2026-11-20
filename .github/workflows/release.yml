@@ -93,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           sed -i "s/^VERSION=\"dev\"$/VERSION=\"$VERSION\"/" deploy/install.sh
-          sed -i "s|$IMAGE:dev|$IMAGE:$VERSION|" deploy/compose.yaml
+          sed -i "s|$IMAGE:local|$IMAGE:$VERSION|" deploy/compose.yaml
           # A stamp that matched nothing would ship files that install nothing.
           grep -qx "VERSION=\"$VERSION\"" deploy/install.sh
           grep -q "image: $IMAGE:$VERSION\$" deploy/compose.yaml

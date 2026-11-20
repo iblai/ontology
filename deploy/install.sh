@@ -224,7 +224,7 @@ settings() {
   run mkdir -p "$DIR"
   put ONTOLOGY_PLATFORM "$PLATFORM"
   # The console as ibl.ai's image: without the profile Compose starts the engine and Caddy alone.
-  put COMPOSE_PROFILES console
+  put COMPOSE_PROFILES all-in-one
   [ -z "$HOST" ] || put ONTOLOGY_HOST "$HOST"
   [ -z "$PLATFORM_URL" ] || put ONTOLOGY_DM_URL "$PLATFORM_URL"
   if [ -z "$HOST" ]; then
