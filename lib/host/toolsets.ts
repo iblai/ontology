@@ -92,9 +92,12 @@ export function catalogFrom({ reading, apis, actions, env, locals = [] }: Catalo
   }
 
   const apiSets = apis.map((api) => ({ api, docs: apiDocs(api) }));
-  const taken = new Set(
-    [...apiSets.flatMap((a) => a.docs), ...actions].filter(isTool).map((d) => d.name),
-  );
+  // The gateway answers its own three tools by name before any toolset's, so a generated tool
+  // of the same name (search_terms, from a term named Term) could never be called.
+  const taken = new Set([
+    ...Object.keys(SEMANTIC_NOTES),
+    ...[...apiSets.flatMap((a) => a.docs), ...actions].filter(isTool).map((d) => d.name),
+  ]);
   const made: Made[] = [];
   const addTool = (tool: Generated, where: Omit<Made, "tool">) => {
     const { doc, sig, note, statement } = tool;

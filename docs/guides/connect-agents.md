@@ -133,6 +133,20 @@ curl -sS -X POST https://ontology.university.edu/acme/institution/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
+To check a whole server the same way an agent calls it, run the smoke test from a checkout of
+this repository. It checks the refusals (no key, a made-up key, an origin off the list), the
+handshake, `tools/list`, and every `search_…` tool with the `get_…` that goes with it. It only
+reads, and it paces itself under the tool-call limit:
+
+```bash
+MCP_AUTHORIZATION="Api-Token $ONTOLOGY_TOKEN" \
+  node scripts/mcp-smoke.mjs https://ontology.university.edu/acme/institution/mcp
+```
+
+Add `--insecure` for a server at `https://localhost`, whose certificate is Caddy's own; a run
+without Caddy is plain `http://localhost:3000/…` and needs no flag. Without `MCP_AUTHORIZATION`
+it checks the refusals only.
+
 ## A client on the same machine
 
 A server run on your own machine ([dev_local.md](../dev_local.md)) answers at
@@ -154,7 +168,8 @@ at the token.
 - Tool descriptions carry the certified definition of the term ("Student = a person admitted to and
   enrolled in ≥1 program"), which is what makes agents pick the right tool.
 - `ask_question` (when included) accepts natural language, answers with certified SQL, and returns
-  the SQL and the provenance alongside the rows.
+  the SQL and the provenance alongside the rows. When the engine's model gives no answer it fails,
+  and says whether the server holds a model key ([a model](../operations.md#a-model)).
 
 ## Troubleshooting
 

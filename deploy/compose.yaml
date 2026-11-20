@@ -97,7 +97,18 @@ services:
   postgres:
     image: pgvector/pgvector:pg17
     network_mode: host
-    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=5434"]
+    # Each engine process (API, ingestion, a chat worker) pools up to 50 connections: past the
+    # default 100 the engine fails with TooManyConnections and the console answers 500 and 502.
+    command:
+      [
+        "postgres",
+        "-c",
+        "listen_addresses=127.0.0.1",
+        "-c",
+        "port=5434",
+        "-c",
+        "max_connections=300",
+      ]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: auto_ontology

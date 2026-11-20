@@ -237,6 +237,18 @@ describe("catalogFrom", () => {
     ]);
   });
 
+  it("leaves out a generated tool named like one of the gateway's own", () => {
+    const reading = structuredClone(fixtureReading()); // the fixture's terms are shared
+    reading.terms.find((t) => t.term.name === "Section")!.term.name = "Term";
+    const made = catalogFrom({ reading, apis: [], actions: [], env: ["SIS_DB_PASSWORD"] });
+    const names = made.docs.filter((d) => d.kind === "tool").map((d) => d.name);
+    expect(names).not.toContain("search_terms");
+    expect(names).toContain("get_term");
+    expect(made.skipped).toContain(
+      "search_terms of Term was left out: another tool has that name.",
+    );
+  });
+
   it("gives an uncertified term nothing and leaves a writing metric out", () => {
     const names = catalog().docs.map((d) => d.name);
     expect(names.filter((n) => /course|fill_rate|draft|purge/.test(n))).toEqual([]);
