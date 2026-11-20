@@ -93,7 +93,7 @@ last line prints `{"ok":true}` once ibl.ai/ontology is up.
 
 ## 5. Let people sign in
 
-Open `https://<your host>/` and sign in with your ibl.ai account on that platform.
+Open `https://ontology.example.edu/` (your host) and sign in with your ibl.ai account on that platform.
 
 ## If a step fails
 
