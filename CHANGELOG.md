@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1](https://github.com/iblai/ontology/compare/v1.0.0...v1.0.1) (2026-11-20)
+
+### Bug Fixes
+
+* apt-get command for docker compose ([269127b](https://github.com/iblai/ontology/commit/269127babcccd021362adc4bb56aedd69f48b92f))
+
 ## 1.0.0
 
 The first release of the ontology console, which takes the place of the 0.2.x backend.
