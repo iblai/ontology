@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/iblai/ontology/compare/v1.1.0...v1.1.1) (2026-11-20)
+
+### Bug Fixes
+
+* grant a view instead of columns, say why ask_question's model gave no answer, correct the pool comment ([0c115db](https://github.com/iblai/ontology/commit/0c115db420122c5ca1bf6a8fdab400ee8eabce9c))
+* problems found testing MCP servers against a local Canvas LMS ([2ba2dbf](https://github.com/iblai/ontology/commit/2ba2dbf1abc297c426c5aacbe891b4d9613f51d8))
+
 ## [1.1.0](https://github.com/iblai/ontology/compare/v1.0.1...v1.1.0) (2026-11-20)
 
 ### Features
