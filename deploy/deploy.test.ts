@@ -504,10 +504,13 @@ describe("the release stamps", () => {
     );
   });
 
-  it("are attached to a draft: the workflow builds no image and publishes nothing", () => {
+  it("are attached before the release is published, and the workflow builds no image", () => {
     const workflow = read(".github/workflows/release.yml");
     expect(workflow).not.toMatch(/docker (build|push|login)/);
-    expect(workflow).not.toContain("--draft=false");
+    const upload = workflow.indexOf('gh release upload "$TAG"');
+    const publish = workflow.indexOf('gh release edit "$TAG" --draft=false --latest');
+    expect(upload).toBeGreaterThan(-1);
+    expect(publish).toBeGreaterThan(upload);
     expect(read(".release-it.json")).toMatch(/"draft": true/);
   });
 

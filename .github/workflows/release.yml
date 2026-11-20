@@ -1,11 +1,11 @@
 name: Release
 
-# Every push to main prepares a release with release-it: the version and the CHANGELOG.md entry
+# Every push to main makes a release with release-it: the version and the CHANGELOG.md entry
 # come from the conventional commit subjects since the last v* tag. The release commit, the
-# v<version> tag and a draft GitHub release are pushed by github-actions[bot] with the built-in
+# v<version> tag and the GitHub release are pushed by github-actions[bot] with the built-in
 # token, which triggers no other workflow, so the two files a server installs from are stamped
-# and attached here too. No image is built on GitHub: it is built and pushed to ECR by hand,
-# and the draft is published after it (README, Releases).
+# and attached here too, and the release is published once it holds them. No image is built on
+# GitHub: it is built and pushed to ECR by hand.
 # The baseline tag (v1.0.0) is pushed by hand, together with the commit it names.
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # push the release commit and its tag, create the draft release
+      contents: write # push the release commit and its tag, create the release
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write # create the draft for a baseline tag, attach compose.yaml and install.sh
+      contents: write # attach compose.yaml and install.sh, publish the release
     env:
       IMAGE: public.ecr.aws/ibleducation/iblai-ontology
       VERSION: ${{ needs.release.outputs.version }}
@@ -86,7 +86,7 @@ jobs:
           ref: v${{ needs.release.outputs.version }}
           persist-credentials: false
 
-      - name: Stamp the version into the install files and attach them to the draft release
+      - name: Stamp the version into the install files, attach them and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -97,11 +97,12 @@ jobs:
           # A stamp that matched nothing would ship files that install nothing.
           grep -qx "VERSION=\"$VERSION\"" deploy/install.sh
           grep -q "image: $IMAGE:$VERSION\$" deploy/compose.yaml
-          # release-it leaves a draft; a baseline tag pushed by hand has no release yet.
+          # release-it's release is unpublished until here; a baseline tag pushed by hand has none.
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --draft --verify-tag --title "$TAG" \
               --notes "See [CHANGELOG.md](https://github.com/$GH_REPO/blob/$TAG/CHANGELOG.md)."
           fi
           gh release upload "$TAG" deploy/compose.yaml deploy/install.sh --clobber
-          # Left a draft: "latest" must never name a compose.yaml whose image is not in ECR yet.
-          echo "::notice::$TAG is a draft. Push $IMAGE:$VERSION to ECR, then publish it (README, Releases)."
+          # Published only now: "latest" must never name a release without its install files.
+          gh release edit "$TAG" --draft=false --latest
+          echo "::notice::$TAG is published. Its compose.yaml needs $IMAGE:$VERSION in ECR."
