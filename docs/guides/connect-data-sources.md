@@ -26,6 +26,22 @@ A data source is either a **database** (dissected into the ontology and served) 
    ```
 
    Snowflake: a role with `USAGE` on the warehouse, database and schema, `SELECT` on the tables.
+
+   **Grant only what an agent may read.** `SELECT ON ALL TABLES` also hands over password hashes,
+   session tokens and API secrets where an application keeps them in its own tables (an LMS's
+   logins table, for one). The certified tools return certified columns only, but a raw toolset
+   runs any `SELECT` the login may. In place of the two `ALL TABLES` lines above (grants add up),
+   name the tables, and for a table that holds secrets grant a view of its safe columns:
+
+   ```sql
+   -- PostgreSQL: these tables, and of logins only the columns in a view
+   CREATE VIEW logins_safe AS SELECT id, user_id, unique_id, sis_user_id FROM logins;
+   GRANT SELECT ON courses, enrollments, submissions, logins_safe TO ontology_ro;
+   ```
+
+   Do not grant columns of the table itself (`GRANT SELECT (id, …) ON logins`): the engine lists
+   only what the login may read whole, so that table is left out of the ontology with no error.
+
    Prefer a **replica** or a reporting copy for transactional systems.
 
 2. **Network path.** The ontology host must reach the database host and port
@@ -197,3 +213,4 @@ server ([operations.md](../operations.md#the-generated-secrets)).
 | `503`, “ONTOLOGY_PLATFORM is not set” | the server has an engine but names no platform   | the server's operator sets `ONTOLOGY_PLATFORM` ([install.md](../install.md))                                                   |
 | `403`, “serves another platform”      | the server's `ONTOLOGY_PLATFORM` names another   | connect this platform's own server; a server with an engine of its own serves one platform                                     |
 | A system shows no tools               | the console does not serve that kind of database | it stays in the map without tools                                                                                              |
+| A term's `search_…` tool is missing   | its name is one of the gateway's own tools       | a term named Term would make `search_terms`, the glossary's; rename the term (Enrollment Term)                                 |
