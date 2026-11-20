@@ -95,6 +95,8 @@ export async function callSemantic(
 }
 
 const ASK_MS = 120_000;
+// The engine's words for a run its model did not answer (auto_ontology's chat agent).
+const NO_ANSWER = /^LLM failed to produce a response\.?$/i;
 const JSON_HEADERS = { "content-type": "application/json" };
 
 const text = (value: unknown) => ({ type: "text" as const, text: JSON.stringify(value) });
@@ -230,6 +232,12 @@ async function askQuestion(question: string): Promise<McpToolResult> {
   }
   await reader.cancel();
   if (!answer) return failed("the engine ended the run without an answer");
+  // With no model to call, the engine ends its run in a result that only says so.
+  if (!answer.sql_code && NO_ANSWER.test(answer.response ?? "")) {
+    return failed(
+      `${answer.response} The server needs a model to answer questions: its operator sets OPENAI_API_KEY.`,
+    );
+  }
   return {
     content: [text({ answer: answer.response, sql: answer.sql_code ?? null, provenance })],
   };

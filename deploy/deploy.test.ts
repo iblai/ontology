@@ -227,6 +227,8 @@ describe("compose.yaml", () => {
       "listen_addresses=127.0.0.1",
       "-c",
       "port=5434",
+      "-c",
+      "max_connections=300",
     ]);
   });
 

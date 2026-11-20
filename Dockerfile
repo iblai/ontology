@@ -48,8 +48,9 @@ COPY --from=build /toolbox /usr/local/bin/toolbox
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=127.0.0.1 PORT=3000 \
     ONTOLOGY_HOME=/data TOOLBOX_BIN=/usr/local/bin/toolbox
 
-# A new volume on /data takes this owner.
-RUN mkdir /data && chown node:node /data
+# A new volume on /data takes this owner. The image optimizer writes its cache under .next/cache;
+# without it every optimized image logs EACCES and is made again on each request.
+RUN mkdir /data .next/cache && chown node:node /data .next/cache
 USER node
 
 CMD ["node", "server.js"]
