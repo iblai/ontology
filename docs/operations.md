@@ -306,30 +306,13 @@ What differs from the rest of this page:
 
 Nothing of ibl.ai's is pulled: the image is built on the server from this repository's
 [`Dockerfile`](../Dockerfile), under the name `compose.yaml` asks for, so Compose finds it there.
-Docker is all the server needs:
+[install_docker_local.md](install_docker_local.md) is that install: four blocks to paste, and
+Docker is all the server needs.
 
-```bash
-sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
-sudo mkdir -p /opt/iblai-ontology && cd /opt/iblai-ontology
-sudo tee .env <<'EOF'
-ONTOLOGY_PLATFORM=example-university
-ONTOLOGY_HOST=ontology.example.edu
-COMPOSE_PROFILES=console
-EOF
-sudo chmod 600 .env
-test -d repo || sudo git clone --branch main https://github.com/iblai/ontology.git repo
-sudo docker build -t public.ecr.aws/ibleducation/iblai-ontology:dev repo
-sudo cp repo/deploy/compose.yaml .
-sudo docker compose up -d
-curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/api/host/health; echo
-```
-
-The last line prints `{"ok":true}` once ibl.ai/ontology is up. What differs from the rest of this
-page is as listed above, but for the upgrade: `sudo git -C repo pull`, then the `docker build`,
-`cp` and `docker compose up -d` lines again. Leave `docker compose pull` out on this route: it
-asks ibl.ai's registry for that name. For another ibl.ai deployment, give `docker build` that
-deployment's addresses as `--build-arg`, as above.
+What differs from the rest of this page is as listed above, but for the upgrade:
+`sudo git -C /opt/iblai-ontology/repo pull`, then blocks 3 and 4 of that guide again. Leave
+`docker compose pull` out on this route: it asks ibl.ai's registry for that name. For another
+ibl.ai deployment, give `docker build` that deployment's addresses as `--build-arg`, as above.
 
 ### Or let the script do it
 

@@ -11,7 +11,7 @@ What ends up on the server:
   own images, pulled from its registry, and Caddy gets the HTTPS certificate.
 
 To run ibl.ai/ontology in Docker too, as an image built on the server, follow
-[operations.md](operations.md#or-build-the-image-yourself) instead.
+[install_docker_local.md](install_docker_local.md) instead.
 
 ## Before you start
 
