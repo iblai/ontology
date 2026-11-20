@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, PageHeader, Pill, Tag } from "@/components/shell/page-header";
+import { FilePicker } from "@/components/file-picker";
 import { QueryState } from "@/components/query-state";
-import { catalog, useActions, useLocalFolder, useSystems, type CatalogKind } from "@/lib/data";
+import { catalog, useActions, useSystems, type CatalogKind } from "@/lib/data";
 import type { HostApiEndpoint, HostApiMethod, HostSystemTest } from "@/lib/host/types";
 import { isDemo } from "@/lib/iblai/session";
 import { cn } from "@/lib/utils";
@@ -66,13 +67,6 @@ function localNameOf(url: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 53);
-}
-
-/** Bytes as B, KB or MB. */
-function sizeOf(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /** "https://api.crm.example" → "crm". */
@@ -168,10 +162,9 @@ export default function SystemsPage() {
   const [label, setLabel] = useState<string | null>(demo ? "finance" : null);
   const input = { url, scope, pii, probing, label: (label ?? "").trim() };
 
-  // Filesystem form, while the URL is local://; the picker moves on clicks only.
-  const isLocal = url.startsWith("local://");
-  const [folder, setFolder] = useState("");
-  const folderQ = useLocalFolder(isLocal ? folder : null);
+  // Filesystem form: after a click on Filesystem, and while the URL is local://.
+  const [files, setFiles] = useState(false);
+  const isLocal = files || url.startsWith("local://");
   const expose = useRun();
 
   // HTTP API tab
@@ -205,6 +198,7 @@ export default function SystemsPage() {
     const scheme = schemeOf[c.name];
     if (scheme) {
       setUrl((u) => withScheme(u, scheme));
+      setFiles(scheme === "local://");
       setTab("db");
     } else if (c.group === "api") setTab("api");
   };
@@ -439,69 +433,12 @@ export default function SystemsPage() {
               </div>
               {isLocal ? (
                 <>
-                  <div className="max-h-[240px] overflow-y-auto rounded-md border border-[var(--border-color)] text-[13px]">
-                    {folderQ.isLoading && <p className="px-2.5 py-1.5 text-gray-600">Loading…</p>}
-                    {folderQ.error && (
-                      <p className="px-2.5 py-1.5 text-xs text-red-600">{folderQ.error}</p>
-                    )}
-                    {folderQ.data && (
-                      <>
-                        <div
-                          dir="rtl"
-                          className="mono truncate border-b border-[var(--border-color)] px-2.5 py-1.5 text-left text-gray-600"
-                        >
-                          <bdi>{folderQ.data.path}</bdi>
-                        </div>
-                        {folderQ.data.parent !== null && (
-                          <button
-                            type="button"
-                            className="mono block w-full px-2.5 py-1.5 text-left hover:bg-[var(--hover-bg)]"
-                            onClick={() => {
-                              const up = folderQ.data?.parent ?? "";
-                              setFolder(up);
-                              setUrl(`local://${up}`);
-                            }}
-                          >
-                            ..
-                          </button>
-                        )}
-                        {folderQ.data.entries.map((e) => {
-                          const at = `${folderQ.data?.path.replace(/\/+$/, "")}/${e.name}`;
-                          return (
-                            <button
-                              key={e.name}
-                              type="button"
-                              className={cn(
-                                "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left hover:bg-[var(--hover-bg)]",
-                                !e.dir && url === `local://${at}` && "bg-[#eef6fc] text-[#0058cc]",
-                              )}
-                              onClick={() => {
-                                if (e.dir) setFolder(at);
-                                setUrl(`local://${at}`);
-                              }}
-                            >
-                              <span className="mono truncate">
-                                {e.name}
-                                {e.dir && "/"}
-                              </span>
-                              {!e.dir && (
-                                <span className="flex-none text-xs text-gray-500">
-                                  {sizeOf(e.size)}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                        {folderQ.data.entries.length === 0 && (
-                          <p className="px-2.5 py-1.5 text-gray-600">This folder is empty.</p>
-                        )}
-                        {folderQ.data.truncated && (
-                          <p className="px-2.5 py-1.5 text-xs text-gray-500">
-                            More entries than are shown.
-                          </p>
-                        )}
-                      </>
-                    )}
+                  <div>
+                    <Label className="mb-1.5 text-gray-700">Folder or File</Label>
+                    <FilePicker
+                      picked={url.slice("local://".length)}
+                      onPick={(path) => setUrl(`local://${path}`)}
+                    />
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button

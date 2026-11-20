@@ -30,8 +30,7 @@ instead.
 
 Paste each block into that terminal and press Enter. Only the first one needs your values.
 Everything the blocks make stays in the checkout and is ignored by git: `.dev/` holds the
-secrets, the settings, NVIDIA's source and the files to read, and `deploy/.env` holds Compose's
-settings. Nothing goes under `/opt`, and no user is added to the machine.
+secrets, the settings and NVIDIA's source, and `deploy/.env` holds Compose's settings. Nothing goes under `/opt`, and no user is added to the machine.
 
 ## With Docker
 
@@ -47,17 +46,16 @@ What ends up on the machine:
 Replace `example-university` with yours. Run this block once: a second run writes the file anew.
 
 ```bash
-mkdir -p .dev/files
 tee deploy/.env <<EOF
 ONTOLOGY_PLATFORM=example-university
 COMPOSE_PROFILES=all-in-one
-ONTOLOGY_LOCAL_ROOT=$PWD/.dev/files
+ONTOLOGY_LOCAL_ROOT=$HOME
 EOF
 chmod 600 deploy/.env
 ```
 
-With no `ONTOLOGY_HOST` line, the server answers on this machine only. `.dev/files` is the folder
-a Filesystem source reads.
+With no `ONTOLOGY_HOST` line, the server answers on this machine only. `ONTOLOGY_LOCAL_ROOT` is
+your home folder: Docker mounts it into the console read-only, for Filesystem sources.
 
 ### 2. Install Docker
 
@@ -266,14 +264,15 @@ client on this machine connects with the address and the snippet its **Connect**
 
 ## Reading your own files
 
-A Filesystem source reads one folder, and nothing outside it. How to connect one is in
-[connect-data-sources.md](guides/connect-data-sources.md#adding-a-filesystem).
+A Filesystem source is a folder or a file inside your home folder, picked in the console; nothing
+outside it is listed or read, and neither is a name that starts with a dot. How to connect one is
+in [connect-data-sources.md](guides/connect-data-sources.md#adding-a-filesystem).
 
-- **With Docker**: a container sees only what is mounted, so the folder is `.dev/files` in the
-  checkout. To read another folder, change `ONTOLOGY_LOCAL_ROOT` in `deploy/.env` to its full
-  path and paste block 4 again. The files must be readable by uid 1000, the image's `node`
-  account.
-- **Without Docker**: the folder is your home folder. To read only one folder, add
+- **With Docker**: the home folder is mounted into the console read-only, at the same path. Its
+  files must be readable by uid 1000, the image's `node` account, which the first user of a
+  machine usually is. To share less, change `ONTOLOGY_LOCAL_ROOT` in `deploy/.env` to one
+  folder's full path and paste block 4 again.
+- **Without Docker**: the dev server reads the home folder as you. To share less, add
   `ONTOLOGY_LOCAL_ROOT=/home/you/data` to `.dev/console.env` and start the dev server again.
 
 ## If a step fails
@@ -286,6 +285,9 @@ With Docker, blocks 2, 3 and 4 can be pasted again as they are: each takes up wh
   that finished are kept.
 - **Block 4 stops with `DeadlineExceeded` at `nvcr.io`**: NVIDIA's registry timed out. Paste it
   again.
+- **Block 4 says the `ontology` container is unhealthy**: something else on the machine holds
+  port 3000, such as a dev server of this checkout. `ss -ltnp 'sport = :3000'` names it. Stop it
+  and paste block 4 again. The engine needs 3001, 3002, 3100 and 5434 free as well.
 - **The last line prints no `{"ok":true}`**: in `deploy`,
   `sudo docker compose logs --tail 30 ontology` says why it did not start.
 
