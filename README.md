@@ -16,9 +16,6 @@ Connect the systems you already run, dissect them into business terms and relati
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![MCP](https://img.shields.io/badge/MCP-Model_Context_Protocol-000000)](https://modelcontextprotocol.io)
 
-<br>
-
-### ⬇️ Get ibl.ai/ontology
 
 <a href="docs/install.md"><img src="https://img.shields.io/badge/Install_on_Your_Server-2563eb?style=for-the-badge&logo=ubuntu&logoColor=white" alt="Install on your server" height="42"></a>
 &nbsp;
