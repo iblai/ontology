@@ -60,7 +60,9 @@ Everything runs in it, and it builds the image.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 docker-buildx git curl
+sudo apt-get install -y docker.io git curl libatomic1
+sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose
+
 ```
 
 ## 3. Build ibl.ai/ontology
