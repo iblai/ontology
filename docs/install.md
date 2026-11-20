@@ -51,7 +51,9 @@ that builds and runs ibl.ai/ontology, and give it `/opt/iblai-ontology` to build
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 git curl libatomic1
+sudo apt-get install -y docker.io git curl libatomic1
+sudo apt-get install -y docker-compose-v2 || sudo apt-get install -y docker-compose
+
 sudo useradd --system --create-home -s /bin/bash ontology
 sudo chown -R ontology: /opt/iblai-ontology
 ```
