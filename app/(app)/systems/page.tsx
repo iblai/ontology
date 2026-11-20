@@ -10,10 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, PageHeader, Pill, Tag } from "@/components/shell/page-header";
 import { QueryState } from "@/components/query-state";
-import { catalog, useActions, useSystems, type CatalogKind } from "@/lib/data";
+import { catalog, useActions, useLocalFolder, useSystems, type CatalogKind } from "@/lib/data";
 import type { HostApiEndpoint, HostApiMethod, HostSystemTest } from "@/lib/host/types";
 import { isDemo } from "@/lib/iblai/session";
 import { cn } from "@/lib/utils";
+import { withScheme } from "@/lib/view/systems";
 
 const filters = ["All", "Databases", "Warehouses", "APIs", "Cloud"] as const;
 const groupOf: Record<string, CatalogKind["group"]> = {
@@ -23,12 +24,15 @@ const groupOf: Record<string, CatalogKind["group"]> = {
   Cloud: "gc",
 };
 
-// The kinds the engine dissects and the runtime serves; any other kind sets nothing.
+// The Connection URL scheme a catalog kind puts in the field; any other kind sets nothing.
 const schemeOf: Record<string, string> = {
   PostgreSQL: "postgresql://",
   MySQL: "mysql://",
   Snowflake: "snowflake://",
   ClickHouse: "clickhouse://",
+  Trino: "trino://",
+  Databricks: "databricks://",
+  Filesystem: "local://",
 };
 
 // The server builder reads this key to tick the same toolsets.
@@ -52,6 +56,23 @@ function databaseOf(url: string): string {
   } catch {
     return "";
   }
+}
+
+/** "local:///srv/Data Room" → "data-room". */
+function localNameOf(url: string): string {
+  const last = url.slice("local://".length).split("/").filter(Boolean).pop() ?? "";
+  return last
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 53);
+}
+
+/** Bytes as B, KB or MB. */
+function sizeOf(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /** "https://api.crm.example" → "crm". */
@@ -130,6 +151,7 @@ export default function SystemsPage() {
   const actions = useActions();
   const systemsQ = useSystems();
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
+  const [tab, setTab] = useState("db");
   const shown = catalog.filter((c) => filter === "All" || c.group === groupOf[filter]);
 
   // Database tab
@@ -145,6 +167,12 @@ export default function SystemsPage() {
   // What to call the system: the database's name until the person types one.
   const [label, setLabel] = useState<string | null>(demo ? "finance" : null);
   const input = { url, scope, pii, probing, label: (label ?? "").trim() };
+
+  // Filesystem form, while the URL is local://; the picker moves on clicks only.
+  const isLocal = url.startsWith("local://");
+  const [folder, setFolder] = useState("");
+  const folderQ = useLocalFolder(isLocal ? folder : null);
+  const expose = useRun();
 
   // HTTP API tab
   const [baseUrl, setBaseUrl] = useState(demo ? DEMO_BASE : "");
@@ -175,7 +203,10 @@ export default function SystemsPage() {
 
   const pickKind = (c: CatalogKind) => {
     const scheme = schemeOf[c.name];
-    if (scheme && !url) setUrl(scheme);
+    if (scheme) {
+      setUrl((u) => withScheme(u, scheme));
+      setTab("db");
+    } else if (c.group === "api") setTab("api");
   };
 
   // Closes the scope field, keeping what was typed; null drops it (Escape).
@@ -238,6 +269,7 @@ export default function SystemsPage() {
                     </h3>
                     <span className="text-xs text-gray-600">
                       {data.systems.length} databases · {data.apis.length} API
+                      {data.files.length > 0 && ` · ${data.files.length} filesystems`}
                     </span>
                   </div>
                   {data.systems.map((s) => (
@@ -296,6 +328,29 @@ export default function SystemsPage() {
                       </Pill>
                     </div>
                   ))}
+                  {data.files.map((f) => (
+                    <div
+                      key={f.name}
+                      className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
+                    >
+                      <div className="grid size-[34px] place-items-center rounded-lg bg-[#64748B] text-[11px] font-bold text-white">
+                        FS
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                          <b className="text-gray-900">{f.name}</b>{" "}
+                          <span className="text-gray-600">· Filesystem</span>{" "}
+                          <Tag tone="green">serve</Tag>
+                        </div>
+                        <small className="mono block truncate text-[11.5px] text-gray-600">
+                          {f.url}
+                        </small>
+                      </div>
+                      <Pill tone="green" dot>
+                        serving
+                      </Pill>
+                    </div>
+                  ))}
                 </>
               )}
             </QueryState>
@@ -331,7 +386,7 @@ export default function SystemsPage() {
         </div>
 
         <Card>
-          <Tabs defaultValue="db">
+          <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
             <TabsList
               variant="line"
               className="mb-3 w-full justify-start overflow-x-auto overflow-y-hidden border-b border-[var(--border-color)]"
@@ -340,7 +395,7 @@ export default function SystemsPage() {
                 value="db"
                 className="flex-none px-3 data-active:text-[#0058cc] data-active:after:bg-[#0058cc]"
               >
-                Database
+                {isLocal ? "Filesystem" : "Database"}
               </TabsTrigger>
               <TabsTrigger
                 value="api"
@@ -364,7 +419,7 @@ export default function SystemsPage() {
                 <Input
                   id="src-name"
                   className="mono h-9"
-                  value={label ?? databaseOf(url)}
+                  value={label ?? (isLocal ? localNameOf(url) : databaseOf(url))}
                   placeholder="finance"
                   maxLength={60}
                   onChange={(e) => setLabel(e.target.value)}
@@ -382,119 +437,209 @@ export default function SystemsPage() {
                   onChange={(e) => setUrl(e.target.value)}
                 />
               </div>
-              <div>
-                <Label className="mb-1.5 text-gray-700">Scope</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {scope.map((t) => (
-                    <span
-                      key={t}
-                      className="mono inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[var(--hover-bg)] px-2.5 text-gray-700"
+              {isLocal ? (
+                <>
+                  <div className="max-h-[240px] overflow-y-auto rounded-md border border-[var(--border-color)] text-[13px]">
+                    {folderQ.isLoading && <p className="px-2.5 py-1.5 text-gray-600">Loading…</p>}
+                    {folderQ.error && (
+                      <p className="px-2.5 py-1.5 text-xs text-red-600">{folderQ.error}</p>
+                    )}
+                    {folderQ.data && (
+                      <>
+                        <div
+                          dir="rtl"
+                          className="mono truncate border-b border-[var(--border-color)] px-2.5 py-1.5 text-left text-gray-600"
+                        >
+                          <bdi>{folderQ.data.path}</bdi>
+                        </div>
+                        {folderQ.data.parent !== null && (
+                          <button
+                            type="button"
+                            className="mono block w-full px-2.5 py-1.5 text-left hover:bg-[var(--hover-bg)]"
+                            onClick={() => {
+                              const up = folderQ.data?.parent ?? "";
+                              setFolder(up);
+                              setUrl(`local://${up}`);
+                            }}
+                          >
+                            ..
+                          </button>
+                        )}
+                        {folderQ.data.entries.map((e) => {
+                          const at = `${folderQ.data?.path.replace(/\/+$/, "")}/${e.name}`;
+                          return (
+                            <button
+                              key={e.name}
+                              type="button"
+                              className={cn(
+                                "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left hover:bg-[var(--hover-bg)]",
+                                !e.dir && url === `local://${at}` && "bg-[#eef6fc] text-[#0058cc]",
+                              )}
+                              onClick={() => {
+                                if (e.dir) setFolder(at);
+                                setUrl(`local://${at}`);
+                              }}
+                            >
+                              <span className="mono truncate">
+                                {e.name}
+                                {e.dir && "/"}
+                              </span>
+                              {!e.dir && (
+                                <span className="flex-none text-xs text-gray-500">
+                                  {sizeOf(e.size)}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                        {folderQ.data.entries.length === 0 && (
+                          <p className="px-2.5 py-1.5 text-gray-600">This folder is empty.</p>
+                        )}
+                        {folderQ.data.truncated && (
+                          <p className="px-2.5 py-1.5 text-xs text-gray-500">
+                            More entries than are shown.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="lg"
+                      className="ibl-button-primary"
+                      disabled={expose.busy}
+                      onClick={() =>
+                        void expose.run(async () => {
+                          await actions.connectLocal({
+                            name: (label ?? localNameOf(url)).trim(),
+                            url,
+                          });
+                          router.push("/mcp/new");
+                        })
+                      }
                     >
-                      {t}{" "}
-                      <button
-                        type="button"
-                        className="text-gray-400 hover:text-red-500"
-                        aria-label="remove"
-                        onClick={() => setScope(scope.filter((x) => x !== t))}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  {adding ? (
-                    <span className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400">
-                      <input
-                        autoFocus
-                        aria-label="table"
-                        className="w-56 bg-transparent text-gray-700 outline-none"
-                        placeholder="SCHEMA or SCHEMA.TABLE"
-                        value={scopeDraft}
-                        onChange={(e) => setScopeDraft(e.target.value)}
-                        onBlur={(e) => {
-                          if (!dropScope.current) closeScope(e.target.value);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            closeScope(e.currentTarget.value);
-                          } else if (e.key === "Escape") {
-                            dropScope.current = true;
-                            closeScope(null);
-                          }
-                        }}
-                      />
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
+                      Connect &amp; Expose
+                    </Button>
+                  </div>
+                  {expose.error && <p className="text-xs text-red-600">{expose.error}</p>}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label className="mb-1.5 text-gray-700">Scope</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {scope.map((t) => (
+                        <span
+                          key={t}
+                          className="mono inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[var(--hover-bg)] px-2.5 text-gray-700"
+                        >
+                          {t}{" "}
+                          <button
+                            type="button"
+                            className="text-gray-400 hover:text-red-500"
+                            aria-label="remove"
+                            onClick={() => setScope(scope.filter((x) => x !== t))}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      {adding ? (
+                        <span className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400">
+                          <input
+                            autoFocus
+                            aria-label="table"
+                            className="w-56 bg-transparent text-gray-700 outline-none"
+                            placeholder="SCHEMA or SCHEMA.TABLE"
+                            value={scopeDraft}
+                            onChange={(e) => setScopeDraft(e.target.value)}
+                            onBlur={(e) => {
+                              if (!dropScope.current) closeScope(e.target.value);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                closeScope(e.currentTarget.value);
+                              } else if (e.key === "Escape") {
+                                dropScope.current = true;
+                                closeScope(null);
+                              }
+                            }}
+                          />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            dropScope.current = false;
+                            setAdding(true);
+                          }}
+                          className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400"
+                        >
+                          + table
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 text-gray-700">Dissection Options</Label>
+                    <label className="flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
+                      <Checkbox checked={pii} onCheckedChange={setPii} className="mt-0.5" />{" "}
+                      <span>
+                        PII detection{" "}
+                        <span className="text-xs text-gray-600">
+                          · tag columns and mask sample values before they reach a model
+                        </span>
+                      </span>
+                    </label>
+                    <label className="mt-1.5 flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
+                      <Checkbox checked={probing} onCheckedChange={setProbing} className="mt-0.5" />{" "}
+                      <span>
+                        Distinct-value probing{" "}
+                        <span className="text-xs text-gray-600">
+                          · sample categorical columns for better term names
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      disabled={test.busy}
                       onClick={() => {
-                        dropScope.current = false;
-                        setAdding(true);
+                        setResult(null);
+                        void test.run(async () => setResult(await actions.testConnection(input)));
                       }}
-                      className="mono inline-flex h-[26px] items-center rounded-full border border-dashed border-gray-300 px-2.5 text-gray-400"
                     >
-                      + table
-                    </button>
+                      Test Connection
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="ibl-button-primary"
+                      disabled={connect.busy}
+                      onClick={() =>
+                        void connect.run(async () => {
+                          await actions.connectSystem(input);
+                          router.push("/map?dissect=1");
+                        })
+                      }
+                    >
+                      Connect &amp; Dissect
+                    </Button>
+                  </div>
+                  {test.busy && <p className="text-xs text-gray-600">Testing credentials…</p>}
+                  {test.error && <p className="text-xs text-red-600">{test.error}</p>}
+                  {result?.ok && (
+                    <p className="text-xs text-gray-600">
+                      <span className="font-medium text-emerald-600">✓ Connected</span> ·{" "}
+                      {result.message} · {result.ms} ms · use a read-only login
+                    </p>
                   )}
-                </div>
-              </div>
-              <div>
-                <Label className="mb-1.5 text-gray-700">Dissection Options</Label>
-                <label className="flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
-                  <Checkbox checked={pii} onCheckedChange={setPii} className="mt-0.5" />{" "}
-                  <span>
-                    PII detection{" "}
-                    <span className="text-xs text-gray-600">
-                      · tag columns and mask sample values before they reach a model
-                    </span>
-                  </span>
-                </label>
-                <label className="mt-1.5 flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
-                  <Checkbox checked={probing} onCheckedChange={setProbing} className="mt-0.5" />{" "}
-                  <span>
-                    Distinct-value probing{" "}
-                    <span className="text-xs text-gray-600">
-                      · sample categorical columns for better term names
-                    </span>
-                  </span>
-                </label>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  disabled={test.busy}
-                  onClick={() => {
-                    setResult(null);
-                    void test.run(async () => setResult(await actions.testConnection(input)));
-                  }}
-                >
-                  Test Connection
-                </Button>
-                <Button
-                  size="lg"
-                  className="ibl-button-primary"
-                  disabled={connect.busy}
-                  onClick={() =>
-                    void connect.run(async () => {
-                      await actions.connectSystem(input);
-                      router.push("/map?dissect=1");
-                    })
-                  }
-                >
-                  Connect &amp; Dissect
-                </Button>
-              </div>
-              {test.busy && <p className="text-xs text-gray-600">Testing credentials…</p>}
-              {test.error && <p className="text-xs text-red-600">{test.error}</p>}
-              {result?.ok && (
-                <p className="text-xs text-gray-600">
-                  <span className="font-medium text-emerald-600">✓ Connected</span> ·{" "}
-                  {result.message} · {result.ms} ms · use a read-only login
-                </p>
+                  {result && !result.ok && <p className="text-xs text-red-600">{result.message}</p>}
+                  {connect.error && <p className="text-xs text-red-600">{connect.error}</p>}
+                </>
               )}
-              {result && !result.ok && <p className="text-xs text-red-600">{result.message}</p>}
-              {connect.error && <p className="text-xs text-red-600">{connect.error}</p>}
             </TabsContent>
 
             <TabsContent value="api" className="space-y-3.5">

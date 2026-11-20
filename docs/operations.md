@@ -74,9 +74,15 @@ there and not at the top of `compose.yaml`, which the console does not read.
 | `OPENAI_API_BASE_URL`    | `https://api.openai.com/v1`     | Where the model calls go: OpenAI, or a gateway that speaks its API.                                     |
 | `OPENAI_MODEL`           | `gpt-4.1`                       | The chat model.                                                                                         |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large`        | The embedding model.                                                                                    |
+| `ONTOLOGY_LOCAL_ROOT`    | See below                       | The one folder a Filesystem source may read. Nothing outside it is listed or read.                      |
 
 Without `ONTOLOGY_HOST` the console answers at `https://localhost`, from the server itself only,
 with a certificate of Caddy's own that browsers warn about.
+
+`ONTOLOGY_LOCAL_ROOT` defaults to `/home/ontology` when the console runs from source, and the
+files must be readable by the `ontology` user. In Docker it defaults to `/opt/iblai-ontology/files`,
+mounted read-only into the console at the same path; Docker makes the folder, empty, if it is not
+there, and its files must be readable by uid 1000, the image's `node` account.
 
 After a change, both read the file again:
 
@@ -313,6 +319,9 @@ What differs from the rest of this page is as listed above, but for the upgrade:
 `sudo git -C /opt/iblai-ontology/repo pull`, then blocks 3 and 4 of that guide again. Leave
 `docker compose pull` out on this route: it asks ibl.ai's registry for that name. For another
 ibl.ai deployment, give `docker build` that deployment's addresses as `--build-arg`, as above.
+
+On a machine of your own ([install_local.md](install_local.md)), the upgrade is the same lines,
+with `--scale proxy=0` on `docker compose up -d`.
 
 ### Or let the script do it
 

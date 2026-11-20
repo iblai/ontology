@@ -83,8 +83,18 @@ describe("apiAddress", () => {
 
   it.each(loopback)("refuses %s on this machine in production", async (base) => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ONTOLOGY_HOST", "ontology.example.edu");
     await expect(apiAddress(base)).rejects.toThrow(/this machine or a link-local/);
   });
+
+  it.each(loopback)(
+    "takes %s in production on a server that answers on localhost",
+    async (base) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("ONTOLOGY_HOST", "localhost");
+      expect(await apiAddress(base)).toMatchObject({ private: false, local: true });
+    },
+  );
 
   it.each([
     "https://169.254.169.254/",

@@ -5,6 +5,7 @@ import type {
   HostApiEndpoint,
   HostApiInput,
   HostAuth,
+  HostLocalInput,
   HostServerDraft,
   HostSystemInput,
 } from "@/lib/host/types";
@@ -69,6 +70,10 @@ function labelOf(body: Body): string {
     throw bad("label", "is one line of 60 characters at most");
   }
   return label;
+}
+
+export function localInput(body: Body): HostLocalInput {
+  return { name: text(body, "name").trim(), url: text(body, "url").trim() };
 }
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];

@@ -11,7 +11,12 @@ What ends up on the server:
   own images, pulled from its registry, and Caddy gets the HTTPS certificate.
 
 To build ibl.ai/ontology from source and run it with systemd instead, follow
-[install.md](install.md). Use one or the other on a server, never both.
+[install.md](install.md). Use one or the other on a server, never both. On a machine of your own,
+with no host name, follow [install_local.md](install_local.md).
+
+A Filesystem source reads only inside `ONTOLOGY_LOCAL_ROOT`, mounted read-only into the container:
+`/opt/iblai-ontology/files` unless `.env` names another folder (Docker makes it, empty, if it is
+not there). The files must be readable by uid 1000, the image's `node` account.
 
 ## Before you start
 

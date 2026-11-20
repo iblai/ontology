@@ -54,3 +54,11 @@ export function prebuiltRows(toolsets: HostToolset[], systems: HostSystem[]): Pr
       return { toolset: t.name, label };
     });
 }
+
+/** The URL under another scheme: what follows the scheme stays, except to or from `local://`. */
+export function withScheme(url: string, scheme: string): string {
+  const old = /^[a-z][a-z0-9+.-]*:\/\//i.exec(url)?.[0] ?? "";
+  if (old === scheme) return url;
+  if (old === "local://" || scheme === "local://") return scheme;
+  return scheme + url.slice(old.length);
+}

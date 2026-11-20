@@ -2,13 +2,14 @@
 
 The console has two halves: its pages, and its server half (the route handlers under
 `/api/host/*`, the MCP gateway, the Toolbox processes and the files under `$ONTOLOGY_HOME`). One
-codebase runs them three ways:
+codebase runs them four ways:
 
 | Shape                      | Setting                                          | Behaviour                                                                                                                                           |
 | -------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The client's server        | `ONTOLOGY_PLATFORM`, with the engine in `AO_URL` | the whole console, built from source on the server, beside NVIDIA's engine and Caddy in Docker ([install.md](install.md)); serves that one platform |
 | A console hosted elsewhere | `NEXT_PUBLIC_ONTOLOGY_RELAY=1` at build          | serves pages only; every `/api/host/*` call is forwarded to the platform's server the browser names in the `x-ontology-server` header               |
 | One host run by hand       | none, or `AO_URL` with `ONTOLOGY_PLATFORM`       | pages and server half as one process: a developer's machine (`pnpm dev`), or one host inside the institution's network behind a TLS proxy           |
+| Your own machine           | `ONTOLOGY_PLATFORM`, no `ONTOLOGY_HOST`          | the client's server without Caddy (`--scale proxy=0`), at `http://localhost:3000` on that machine only ([install_local.md](install_local.md))       |
 
 By default a platform's server serves the whole console at `https://<host>/`. The console is built
 there from source and run by systemd, and NVIDIA's engine and Caddy run in Docker
@@ -264,6 +265,9 @@ platforms can each have a server named `advising`.
   certificate. One host on a VPN joins no public DNS; its proxy serves an internal-CA certificate.
 - The proxy sets `X-Forwarded-Proto: https`. The gateway refuses a credential that arrived over
   plain HTTP from anywhere but loopback.
+- A server whose `ONTOLOGY_HOST` is `localhost` answers on its own machine only: it takes an HTTP
+  API on that machine, which a server with a public host name refuses, and any
+  `http://localhost:<port>` origin.
 - Each `$ONTOLOGY_HOME/platforms/<platform>/env` holds database passwords and API keys, mode 0600,
   owned by the user the server half runs as. The engine can keep its own connection credentials in
   Vault if you already run one. Database passwords stay on the platform's server; a console hosted

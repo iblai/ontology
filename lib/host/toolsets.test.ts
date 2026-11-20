@@ -148,6 +148,35 @@ describe("catalogFrom", () => {
     ]);
   });
 
+  it("offers a filesystem last, as a toolset with no document, and leaves a clash out", () => {
+    const taken: ToolboxDoc = { kind: "tool", name: "notes_read_file", type: "postgres-sql" };
+    const made = catalogFrom({
+      reading: fixtureReading(),
+      apis: [slate],
+      actions: [...actions, taken],
+      env: ["SIS_DB_PASSWORD", "CRM_DB_PASSWORD"],
+      locals: [
+        { name: "docs", path: "/srv/docs" },
+        { name: "notes", path: "/srv/notes" },
+      ],
+    });
+    expect(made.toolsets.at(-1)).toEqual({
+      name: "docs-files",
+      summary: "filesystem · /srv/docs",
+      tools: [
+        { name: "docs_list_files", sig: "docs_list_files(path?)", note: "→ files" },
+        { name: "docs_read_file", sig: "docs_read_file(path, offset?, limit?)", note: "→ text" },
+      ],
+      defaultOn: true,
+      kind: "files",
+    });
+    expect(made.docs.some((d) => d.name === "docs-files")).toBe(false);
+    expect(made.toolsets.some((t) => t.name === "notes-files")).toBe(false);
+    expect(made.skipped).toContain(
+      "The filesystem notes was left out: another tool is named notes_read_file.",
+    );
+  });
+
   it("names and signs a system's tools as the mock does", () => {
     const sis = catalog().toolsets.find((t) => t.name === "sis")!;
     expect(sis.summary).toBe("Student · Enrollment · Section · metrics");

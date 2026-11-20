@@ -3,6 +3,7 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { HostError } from "./errors";
 import { assertSlug, homePath, readText, writeAtomic } from "./files";
+import { filesTools, isFilesToolset } from "./local";
 import { record, stats } from "./log";
 import { currentPlatform } from "./platform";
 import { SEMANTIC_TOOLS, SEMANTIC_TOOLSET } from "./semantic";
@@ -28,8 +29,9 @@ import type {
 /** What the gateway needs on every call. */
 export type Serving = {
   draft: HostServerDraft;
-  members: Record<string, string[]>; // toolset → tool names, from tools.yaml
+  members: Record<string, string[]>; // toolset → tool names: tools.yaml's and the gateway's own
   writes: string[]; // toolsets that hold a tool that writes
+  files: string[]; // the filesystems' toolsets, which the gateway answers itself
 };
 
 /** flags.json: what the builder saved, the current revision, and whether it is deployed. */
@@ -79,7 +81,7 @@ export async function previewServer(slug: string, draft: HostServerDraft): Promi
   validateDocs(docs);
   const next = ((await revisionFiles(slug))[0]?.n ?? 0) + 1;
   const { yaml } = render(docs, slug, next);
-  return { yaml, ...count(withSemantic(members(docs), draft)) };
+  return { yaml, ...count(withOwn(members(docs), draft)) };
 }
 
 /**
@@ -136,7 +138,7 @@ export async function saveServer(
   // A deployed server's runtime reloads tools.yaml on its own, so any save of it is a deploy.
   if (start || prev?.enabled) {
     try {
-      await deploy(slug, flags, config.mark, count(withSemantic(members(docs), draft)));
+      await deploy(slug, flags, config.mark, count(withOwn(members(docs), draft)));
     } catch (error) {
       if (!prev?.enabled) {
         await stop(slug); // the draft stays saved; the server stays undeployed
@@ -177,7 +179,7 @@ export async function rollbackServer(slug: string): Promise<HostServerDetail> {
   await writeFlags(slug, back);
   if (flags.enabled) {
     try {
-      const counted = count(withSemantic(members(parseConfig(yaml)), back.draft));
+      const counted = count(withOwn(members(parseConfig(yaml)), back.draft));
       await deploy(slug, back, MARK + target.id, counted);
     } catch (error) {
       if (before !== null) await writeAtomic(path(slug, "tools.yaml"), before);
@@ -202,8 +204,13 @@ export async function serving(slug: string): Promise<Serving | null> {
     hit = { key, members: members(docs), writes: writingToolsets(docs) };
     parsed.set(file, hit);
   }
-  const served = withSemantic(hit.members, flags.draft);
-  return { draft: flags.draft, members: served, writes: hit.writes };
+  const own = ownMembers(hit.members, flags.draft);
+  return {
+    draft: flags.draft,
+    members: { ...hit.members, ...own },
+    writes: hit.writes,
+    files: Object.keys(own).filter(isFilesToolset),
+  };
 }
 
 /** flags.json, or null when the server was never saved. */
@@ -250,7 +257,7 @@ async function summary(slug: string): Promise<HostServer | null> {
     revision: flags.revision,
     enabled: flags.enabled,
     running: now.running,
-    ...count(withSemantic(members(docs), flags.draft)),
+    ...count(withOwn(members(docs), flags.draft)),
     bytes: text ? Buffer.byteLength(text) : 0,
     port: now.running ? now.port : null,
     deployedAt: flags.deployedAt,
@@ -283,7 +290,7 @@ async function describe(slug: string, revision: RevisionFile): Promise<HostRevis
     n: revision.n,
     id: revision.id,
     at: info.mtime.toISOString(),
-    ...count(withSemantic(members(text ? parseConfig(text) : []), draft)),
+    ...count(withOwn(members(text ? parseConfig(text) : []), draft)),
     bytes: Buffer.byteLength(text ?? ""),
   };
 }
@@ -292,11 +299,23 @@ async function writeFlags(slug: string, flags: Flags): Promise<void> {
   await writeAtomic(path(slug, "flags.json"), `${JSON.stringify(flags, null, 2)}\n`);
 }
 
-// The semantic toolset is served by the gateway and has no document in tools.yaml.
-function withSemantic(found: Members, draft: HostServerDraft | null): Members {
-  if (!draft?.toolsets.includes(SEMANTIC_TOOLSET)) return found;
-  return { ...found, [SEMANTIC_TOOLSET]: SEMANTIC_TOOLS.map((tool) => tool.name) };
+// The gateway's own toolsets a draft names, which have no document in tools.yaml: semantic, and
+// each filesystem's. A document named like a filesystem's toolset wins.
+function ownMembers(found: Members, draft: HostServerDraft | null): Members {
+  const own: Members = {};
+  for (const toolset of draft?.toolsets ?? []) {
+    if (toolset === SEMANTIC_TOOLSET) own[toolset] = SEMANTIC_TOOLS.map((tool) => tool.name);
+    else if (isFilesToolset(toolset) && !(toolset in found)) {
+      own[toolset] = filesTools(toolset).map((tool) => tool.name);
+    }
+  }
+  return own;
 }
+
+const withOwn = (found: Members, draft: HostServerDraft | null): Members => ({
+  ...found,
+  ...ownMembers(found, draft),
+});
 
 function count(found: Members): { tools: number; toolsets: number } {
   return {

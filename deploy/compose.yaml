@@ -13,7 +13,9 @@
 # pulled from its registry on the first start.
 #
 # Change a setting here, or set the same name in a .env beside this file or in the shell.
-# ONTOLOGY_PLATFORM is required; ONTOLOGY_HOST is the name this server answers at.
+# ONTOLOGY_PLATFORM is required; ONTOLOGY_HOST is the name this server answers at;
+# ONTOLOGY_LOCAL_ROOT is the one folder a Filesystem source may read.
+# On a machine of your own, with no host name, leave Caddy out: docker compose up -d --scale proxy=0
 # Nothing secret goes in this file: the first start writes the secrets into the `secrets` volume.
 # The engine's admin password: docker compose exec postgres cat /secrets/admin-password
 name: iblai-ontology-console
@@ -21,6 +23,7 @@ name: iblai-ontology-console
 x-settings:
   ONTOLOGY_PLATFORM: &platform "${ONTOLOGY_PLATFORM:?set it to the key of the ibl.ai platform this server serves, at the top of compose.yaml or in a .env beside it}"
   ONTOLOGY_HOST: &host "${ONTOLOGY_HOST:-localhost}" # localhost gets a certificate from Caddy's own authority
+  ONTOLOGY_LOCAL_ROOT: &local-root "${ONTOLOGY_LOCAL_ROOT:-/opt/iblai-ontology/files}" # the one folder a Filesystem source may read
   ONTOLOGY_DM_URL: &dm-url "${ONTOLOGY_DM_URL:-https://api.iblai.app/dm}"
   OPENAI_API_KEY: &openai-key "${OPENAI_API_KEY:-}" # empty: no inferred joins, no answers
   OPENAI_API_BASE_URL: &openai-base "${OPENAI_API_BASE_URL:-https://api.openai.com/v1}"
@@ -239,6 +242,8 @@ services:
       HOSTNAME: 127.0.0.1
       PORT: "3000"
       ONTOLOGY_PLATFORM: *platform
+      ONTOLOGY_HOST: *host
+      ONTOLOGY_LOCAL_ROOT: *local-root
       ONTOLOGY_DM_URL: *dm-url
       AO_URL: http://127.0.0.1:3100
       AO_ORIGIN: http://localhost:3100
@@ -252,6 +257,12 @@ services:
     volumes:
       - ontology_data:/data
       - secrets:/secrets:ro
+      - type: bind # read-only, at the same path inside
+        source: *local-root
+        target: *local-root
+        read_only: true
+        bind:
+          create_host_path: true # a folder that is not there yet is made, empty
     healthcheck:
       # The image has no curl; health answers without a sign-in.
       test:

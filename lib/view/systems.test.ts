@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HostSystem, HostToolset } from "@/lib/host/types";
 import { engineKind } from "./catalog";
-import { apiRow, prebuiltRows, systemRow } from "./systems";
+import { apiRow, prebuiltRows, systemRow, withScheme } from "./systems";
 
 const sis: HostSystem = {
   name: "sis",
@@ -64,5 +64,23 @@ describe("a system's label", () => {
       toolset: "sis-raw",
       label: "Student records · postgresql · execute_sql, list_tables",
     });
+  });
+});
+
+describe("withScheme", () => {
+  it("swaps a database scheme and keeps what was typed after it", () => {
+    expect(withScheme("mysql://u:p@h/db", "postgresql://")).toBe("postgresql://u:p@h/db");
+    expect(withScheme("", "trino://")).toBe("trino://");
+    expect(withScheme("u@h/db", "mysql://")).toBe("mysql://u@h/db");
+  });
+
+  it("keeps nothing to or from local://", () => {
+    expect(withScheme("mysql://u:p@h/db", "local://")).toBe("local://");
+    expect(withScheme("local:///srv/data", "postgresql://")).toBe("postgresql://");
+  });
+
+  it("leaves a URL already under the scheme as it is", () => {
+    expect(withScheme("local:///srv/data", "local://")).toBe("local:///srv/data");
+    expect(withScheme("mysql://u@h/db", "mysql://")).toBe("mysql://u@h/db");
   });
 });

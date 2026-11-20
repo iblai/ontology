@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { QueryState } from "@/components/query-state";
-import { useActions, useAgentOptions, useServers } from "@/lib/data";
+import { servedLocally, useActions, useAgentOptions, useServers } from "@/lib/data";
 import type { AgentOption, ServerRow } from "@/lib/view/types";
 
 const select =
@@ -36,12 +36,13 @@ export function AttachDialog({
             Attach a Server to an Agent
           </DialogTitle>
           <DialogDescription className="text-[13px] text-gray-600">
-            The agent gets its own ibl.ai API key, limited to the toolsets you tick, and the server
-            is registered for it.
+            {servedLocally()
+              ? "This server answers on this machine only, so agents on ibl.ai cannot call it. Use an MCP client on this machine, with a token from Tokens & Origins."
+              : "The agent gets its own ibl.ai API key, limited to the toolsets you tick, and the server is registered for it."}
           </DialogDescription>
         </DialogHeader>
         {/* mounted only while open, so the reads wait for it and each opening starts fresh */}
-        <AttachForm slug={slug} onDone={() => onOpenChange(false)} />
+        {!servedLocally() && <AttachForm slug={slug} onDone={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   );

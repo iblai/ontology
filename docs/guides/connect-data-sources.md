@@ -97,7 +97,7 @@ Watch: [Connect the data source, create an MCP, and connect to an agent in 3 min
 
 1. **Systems → HTTP API** tab. Enter the **Base URL**. The host refuses an address it may not
    call, in the rule's own words. An address on the host's own machine is taken outside production
-   only.
+   only, or on a server that answers on its own machine only (`ONTOLOGY_HOST` is `localhost`).
 2. If the API has an OpenAPI document, enter its URL and press **Fetch Spec**. The host fetches it
    under the same address rule as the base URL, with the auth header when the document is on the
    API's own address, and lists its operations as endpoints.
@@ -114,6 +114,42 @@ Watch: [Connect the data source, create an MCP, and connect to an agent in 3 min
 Because APIs do not pass through the engine, their responses are not object types. If an endpoint
 returns something the ontology already models (an applicant, a course), say so in the tool's
 description so agents connect the two.
+
+## Adding a filesystem
+
+A filesystem is a folder, or one file, on the server's own disk, addressed
+`local:///absolute/path`. It is not dissected and not drawn on the Map: the gateway serves it
+itself, as two tools.
+
+1. **Systems**, then click **Filesystem** in the catalog. The form on the right shows `local://`
+   and a file picker.
+2. Pick a folder or a file.
+3. **Connect & Expose**.
+
+Each filesystem becomes one toolset, `<name>-files`, ticked by default when a server is built. The
+name is lowercase letters, digits and `-`, starting with a letter, 53 characters at most. A role
+that reaches every read toolset reaches it too. Its two tools:
+
+- `<name>_list_files(path?)`: one folder's entries, with name, size, modified time, and whether
+  each is a folder or a file. 1,000 at most, with a `truncated` flag.
+- `<name>_read_file(path, offset?, limit?)`: up to `limit` bytes of text from `offset`, 64 KiB by
+  default and 256 KiB at most, answered with `size` and `next`.
+
+The rules:
+
+- Nothing outside `ONTOLOGY_LOCAL_ROOT` is listed or read. Unset, it is the home folder of the
+  account the server runs as: `/home/ontology` on a source install ([install.md](../install.md)),
+  `/opt/iblai-ontology/files` in Docker, mounted read-only (files readable by uid 1000), and your
+  own home folder under `pnpm dev` or `pnpm start`. `/` is refused as a root.
+- A tool's path cannot leave its own filesystem: `..`, an absolute path and a link that leads out
+  are refused.
+- Symlinks are not followed and special files are skipped.
+- A name that starts with a dot (`.env`, `.ssh`, `.git`) is never listed or read.
+- The server's own folder is refused.
+- Only a server that serves one platform (`ONTOLOGY_PLATFORM` set) takes filesystems.
+
+Text only: a file with a NUL byte is refused as "not a text file", so PDF, Office files and images
+are not read. There is no recursive listing, no search inside files and no SQL over files.
 
 ## Prebuilt toolsets
 

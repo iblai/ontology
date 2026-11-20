@@ -7,7 +7,13 @@ import { resolveCaller } from "@/lib/host/dm";
 import { HostError } from "@/lib/host/errors";
 import { assertSlug } from "@/lib/host/files";
 import { recordRefusal } from "@/lib/host/log";
-import { checkRate, handleMessage, hostAllowed, type RpcContext } from "@/lib/host/mcp";
+import {
+  checkRate,
+  handleMessage,
+  hostAllowed,
+  originAllowed,
+  type RpcContext,
+} from "@/lib/host/mcp";
 import { assertServed, inPlatform } from "@/lib/host/platform";
 import { serving, type Serving } from "@/lib/host/servers";
 import { isPlatformKey } from "@/lib/platform";
@@ -147,7 +153,7 @@ async function admit(request: NextRequest, raw: string): Promise<Gate | Response
   const origin = request.headers.get("origin");
   const cors: HeaderMap = {};
   if (origin) {
-    if (!served.draft.origins.some((o) => o.replace(/\/+$/, "") === origin)) {
+    if (!originAllowed(origin, served.draft.origins)) {
       await recordRefusal(slug, `rejected origin ${origin} (not in --allowed-origins)`);
       return answer({ error: `origin ${origin} is not allowed on ${slug}` }, 403);
     }

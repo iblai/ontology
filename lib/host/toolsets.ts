@@ -1,10 +1,12 @@
 // What the host can offer a server: every source, tool and toolset, generated from the engine's
-// certified terms, the connected systems, the custom APIs and the hand-written actions.
+// certified terms, the connected systems, the custom APIs, the hand-written actions and the
+// filesystems.
 
 import type { AoColumnAttribute, AoConnectionConfig } from "@/lib/ao-types";
 import { apiDocs, listApis, type StoredApi } from "./apis";
 import { HostError } from "./errors";
 import { envName, homePath, readEnv, readText, slugOf } from "./files";
+import { filesNotes, filesToolset, listLocals, type StoredLocal } from "./local";
 import { readEngine, type Reading, type ReadTerm } from "./reading";
 import { SEMANTIC_NOTES, SEMANTIC_TOOLSET } from "./semantic";
 import {
@@ -34,6 +36,7 @@ export type CatalogInput = {
   apis: StoredApi[];
   actions: ToolboxDoc[]; // the documents of actions.yaml, if there is one
   env: string[]; // secret names present in the env file
+  locals?: StoredLocal[]; // the filesystems of locals.yaml
 };
 
 type Served = {
@@ -52,7 +55,7 @@ type Located = { id: string; name: string; schema: string | null; system: string
 const SEARCH_LIMIT = 20;
 
 /** Pure: the catalog for one reading of the engine and the host's own files. */
-export function catalogFrom({ reading, apis, actions, env }: CatalogInput): Catalog {
+export function catalogFrom({ reading, apis, actions, env, locals = [] }: CatalogInput): Catalog {
   const docs: ToolboxDoc[] = [];
   const toolsets: HostToolset[] = [];
   const skipped: string[] = [];
@@ -147,7 +150,8 @@ export function catalogFrom({ reading, apis, actions, env }: CatalogInput): Cata
     }
   }
 
-  // 4. Toolsets: one per served system, one per tag, the raw ones, the APIs', semantic, actions.
+  // 4. Toolsets: one per served system, one per tag, the APIs', semantic, actions, the raw ones,
+  // the filesystems'.
   for (const [system, { source }] of served) {
     const own = made.filter((m) => m.system === system);
     if (own.length === 0) {
@@ -242,6 +246,23 @@ export function catalogFrom({ reading, apis, actions, env }: CatalogInput): Cata
     );
   }
 
+  // A filesystem's two tools are the gateway's own: a toolset with no document, added last so a
+  // toolset that has one keeps the name.
+  for (const local of locals) {
+    const name = filesToolset(local.name);
+    const tools = filesNotes(name);
+    const clash = tools.find((tool) => taken.has(tool.name));
+    if (clash) {
+      skipped.push(
+        `The filesystem ${local.name} was left out: another tool is named ${clash.name}.`,
+      );
+      continue;
+    }
+    for (const tool of tools) taken.add(tool.name);
+    const summary = `filesystem · ${local.path}`;
+    addToolset({ name, summary, tools, defaultOn: true, kind: "files" }, null);
+  }
+
   const writing = new Set(writingToolsets(docs));
   for (const toolset of toolsets) {
     if (writing.has(toolset.name) && toolset.kind !== "raw") toolset.risk = "writes";
@@ -249,26 +270,29 @@ export function catalogFrom({ reading, apis, actions, env }: CatalogInput): Cata
   return { docs, toolsets, skipped };
 }
 
-/** The catalog as of now: reads the engine, apis.yaml, actions.yaml and the env file's names. */
+/** The catalog as of now: the engine, apis.yaml, actions.yaml, locals.yaml, the env file's names. */
 export async function loadCatalog(): Promise<Catalog> {
-  const [reading, apis, actions, env] = await Promise.all([
+  const [reading, apis, actions, env, locals] = await Promise.all([
     readEngine(),
     listApis(),
     readText(homePath("actions.yaml")),
     readEnv(),
+    listLocals(),
   ]);
   return catalogFrom({
     reading,
     apis,
     actions: actions === null ? [] : parseConfig(actions),
     env: Object.keys(env),
+    locals,
   });
 }
 
 /**
  * The documents one server gets: the draft's toolsets that the runtime serves, their tools and
- * the sources those need, and one auth service per OIDC option. The semantic toolset is served
- * by the gateway and adds no document. Throws HostError 400 naming a toolset that does not exist.
+ * the sources those need, and one auth service per OIDC option. The gateway's own toolsets (the
+ * semantic one, a filesystem's) add no document. Throws HostError 400 naming a toolset that does
+ * not exist.
  */
 export function serverDocs(catalog: Catalog, draft: HostServerDraft): ToolboxDoc[] {
   const known = new Set(catalog.toolsets.map((t) => t.name));

@@ -26,8 +26,11 @@ import type {
   HostApi,
   HostApiInput,
   HostEvent,
+  HostFolder,
   HostGraph,
   HostHealth,
+  HostLocal,
+  HostLocalInput,
   HostPreview,
   HostServer,
   HostServerActivity,
@@ -112,6 +115,7 @@ export const hostApi = createApi({
   tagTypes: [
     "Systems",
     "Apis",
+    "Locals",
     "Graph",
     "Toolsets",
     "Servers",
@@ -137,6 +141,16 @@ export const hostApi = createApi({
     addApi: b.mutation<HostApi, HostApiInput>({
       query: (body) => ({ url: "/apis", method: "POST", body }),
       invalidatesTags: ["Apis", "Toolsets"],
+    }),
+    getLocals: b.query<HostLocal[], void>({ query: () => "/locals", providesTags: ["Locals"] }),
+    addLocal: b.mutation<HostLocal, HostLocalInput>({
+      query: (body) => ({ url: "/locals", method: "POST", body }),
+      invalidatesTags: ["Locals", "Toolsets"],
+    }),
+    // The folder's path; "" is the root.
+    browseLocal: b.query<HostFolder, string>({
+      query: (path) => `/locals/browse${path ? `?path=${id(path)}` : ""}`,
+      keepUnusedDataFor: 0,
     }),
     fetchSpec: b.mutation<HostSpec, { url: string; baseUrl: string; authHeader: string }>({
       query: (body) => ({ url: "/apis/spec", method: "POST", body }),

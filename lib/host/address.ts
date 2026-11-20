@@ -4,6 +4,7 @@
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { localOnly } from "./env";
 import { HostError } from "./errors";
 
 // A host and a path: nothing the runtime's file would read as its own (`$`, braces), no sign-in.
@@ -82,7 +83,8 @@ export async function isThisMachine(host: string): Promise<boolean> {
 
 /**
  * A custom API's base address by the old product's rule, with this machine allowed outside
- * production. Returns it normalised, and whether it sits on a private network or this machine
+ * production and on a server that answers on its own machine only (ONTOLOGY_HOST=localhost).
+ * Returns it normalised, and whether it sits on a private network or this machine
  * (the runtime's http source must then be told to allow it).
  * Throws HostError 400 with the rule's own words.
  */
@@ -116,7 +118,7 @@ export async function apiAddress(
       throw new HostError(400, `${host} does not resolve from this server (${why}).`);
     }
   }
-  const production = process.env.NODE_ENV === "production";
+  const production = process.env.NODE_ENV === "production" && !localOnly();
   const own = ips
     .filter((ip) => placeOf(ip) === "own" || (production && placeOf(ip) === "loopback"))
     .sort();

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Caller } from "./dm";
 import { HostError } from "./errors";
 import type { Scope } from "./grants";
+import { callLocal } from "./local";
 import {
   PROTOCOL_VERSION,
   RPC,
@@ -11,14 +12,30 @@ import {
   hostAllowed,
   lentToolsets,
   mask,
+  originAllowed,
   type RpcContext,
 } from "./mcp";
 import { semanticReady } from "./semantic";
 import type { Serving } from "./servers";
+import { callTool, ensureRunning } from "./toolbox";
 
 vi.mock("./semantic", async (actual) => ({
   ...(await actual<typeof import("./semantic")>()),
   semanticReady: vi.fn<typeof import("./semantic").semanticReady>(),
+}));
+vi.mock("./local", async (actual) => ({
+  ...(await actual<typeof import("./local")>()),
+  callLocal: vi.fn<typeof import("./local").callLocal>(async () => ({
+    content: [{ type: "text", text: "{}" }],
+  })),
+}));
+vi.mock("./toolbox", () => ({
+  ensureRunning: vi.fn<typeof import("./toolbox").ensureRunning>(),
+  listTools: vi.fn<typeof import("./toolbox").listTools>(async () => []),
+  callTool: vi.fn<typeof import("./toolbox").callTool>(),
+}));
+vi.mock("./log", () => ({
+  record: vi.fn<typeof import("./log").record>(async () => undefined),
 }));
 vi.mock("./files", async (actual) => ({
   ...(await actual<typeof import("./files")>()),
@@ -34,6 +51,7 @@ const serving: Serving = {
   },
   members: { sis: ["list_students"], "sis-raw": ["sis_execute_sql", "sis_list_tables"] },
   writes: ["sis-raw"],
+  files: [],
 };
 
 const scope = (held: Partial<Scope>): Scope => ({
@@ -189,11 +207,68 @@ describe("hostAllowed", () => {
   });
 });
 
+describe("originAllowed", () => {
+  it("takes an origin on the list, with or without its last slash", () => {
+    expect(originAllowed("https://os.ibl.ai", ["https://os.ibl.ai/"])).toBe(true);
+    expect(originAllowed("https://evil.dev", ["https://os.ibl.ai"])).toBe(false);
+  });
+
+  it.each(["http://localhost:6274", "http://127.0.0.1:3000", "http://[::1]:8080"])(
+    "takes %s, a page served from this machine, on no list",
+    (origin) => {
+      expect(originAllowed(origin, [])).toBe(true);
+    },
+  );
+
+  it.each(["https://localhost.evil.dev", "http://10.0.0.5:3000", "null", ""])(
+    "refuses %s on no list",
+    (origin) => {
+      expect(originAllowed(origin, [])).toBe(false);
+    },
+  );
+});
+
+describe("a filesystem’s toolset", () => {
+  const withFiles: Serving = {
+    draft: { toolsets: ["sis", "docs-files"], auth: { platform: true }, origins: [], hosts: [] },
+    members: { sis: ["list_students"], "docs-files": ["docs_list_files", "docs_read_file"] },
+    writes: [],
+    files: ["docs-files"],
+  };
+  const ask = (held: Partial<Scope>, message: object) =>
+    handleMessage(
+      { ...ctx, serving: withFiles, caller: { ...caller, scope: scope(held) } },
+      message,
+    );
+  const listed = async (held: Partial<Scope>) => {
+    const reply = await ask(held, { id: 1, method: "tools/list" });
+    return (reply as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
+  };
+
+  it("lists its two tools without the runtime, and one of them held by name", async () => {
+    expect(await listed({ toolsets: ["docs-files"] })).toEqual([
+      "docs_list_files",
+      "docs_read_file",
+    ]);
+    expect(await listed({ tools: ["docs_read_file"] })).toEqual(["docs_read_file"]);
+    expect(ensureRunning).not.toHaveBeenCalled();
+  });
+
+  it("answers a call itself and never asks the runtime", async () => {
+    const call = { name: "docs_read_file", arguments: { path: "a.txt" } };
+    const reply = await ask({ allToolsets: true }, { id: 2, method: "tools/call", params: call });
+    expect(callLocal).toHaveBeenCalledWith("docs-files", "docs_read_file", { path: "a.txt" });
+    expect(callTool).not.toHaveBeenCalled();
+    expect(reply).toMatchObject({ id: 2, result: { content: [{ type: "text", text: "{}" }] } });
+  });
+});
+
 describe("tools/list", () => {
   const own: Serving = {
     draft: { toolsets: ["semantic"], auth: { platform: true }, origins: [], hosts: [] },
     members: {},
     writes: [],
+    files: [],
   };
   const names = async () => {
     const reply = await handleMessage({ ...ctx, serving: own }, { id: 1, method: "tools/list" });

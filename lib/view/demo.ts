@@ -1,7 +1,7 @@
 // Demo mode (NEXT_PUBLIC_DEMO=1): what the mocked build rendered, in the view shapes. The mock
 // gives the data; the literals the mocked pages held are here.
 
-import type { HostApiEndpoint, HostSystemTest } from "@/lib/host/types";
+import type { HostApiEndpoint, HostFolder, HostSystemTest } from "@/lib/host/types";
 import * as mock from "@/lib/mock";
 import { mcpPath } from "@/lib/platform";
 import type {
@@ -72,6 +72,19 @@ export const demoSystems: SystemsView = {
     { toolset: "bigquery-raw", label: "bigquery · execute_sql, get_table_info" },
     { toolset: "mysql-raw", label: "mysql · execute_sql, list_tables" },
   ],
+  files: [],
+};
+
+/** The folder the Filesystem picker shows. */
+export const demoFolder: HostFolder = {
+  root: "/srv/data",
+  path: "/srv/data",
+  parent: null,
+  entries: [
+    { name: "handbook", dir: true, size: 0, modified: "2026-01-01T00:00:00Z" },
+    { name: "catalog.csv", dir: false, size: 48213, modified: "2026-01-01T00:00:00Z" },
+  ],
+  truncated: false,
 };
 
 export const demoTest: HostSystemTest = {
