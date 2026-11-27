@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0](https://github.com/iblai/ontology/compare/v1.1.2...v1.2.0) (2026-11-27)
+
+### Features
+
+* add 23 ready-made API systems with OAuth and logos, fold the connected list, fix pnpm audit ([2ac2808](https://github.com/iblai/ontology/commit/2ac2808958d21cf5fc3f547663d1d4a4fd98e995))
+
 ## [1.1.2](https://github.com/iblai/ontology/compare/v1.1.1...v1.1.2) (2026-11-20)
 
 ### Chores
