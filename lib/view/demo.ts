@@ -356,6 +356,13 @@ export function demoServer(slug: string): ServerView | null {
   return s ? { ...s, yaml: mock.toolsYaml } : null;
 }
 
+/** Why the demo, which creates no server, refuses to deploy one; null for one of its samples. */
+export function demoDeployRefusal(slug: string): string | null {
+  if (demoServer(slug)) return null;
+  const samples = demoServers.map((s) => s.slug).join(", ");
+  return `The demo creates no servers. Deploy one of its samples: ${samples}.`;
+}
+
 export const demoServerActivity: ServerActivityView = {
   calls: mock.agentToolCalls.map((c) => ({
     ...c,

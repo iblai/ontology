@@ -2,7 +2,6 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,11 +30,24 @@ export default function ServerPage({ params }: { params: Promise<{ slug: string 
   const server = useServer(slug);
   return (
     <QueryState query={server}>
-      {(srv) => {
-        if (!srv) notFound();
-        return <Server srv={srv} />;
-      }}
+      {(srv) => (srv ? <Server srv={srv} /> : <Missing slug={slug} />)}
     </QueryState>
+  );
+}
+
+// Not notFound(): Next's own 404 follows the OS colour scheme, and in dark mode it is white on this card.
+function Missing({ slug }: { slug: string }) {
+  return (
+    <PageHeader
+      eyebrow="Gateway"
+      title={`No server named ${slug}`}
+      description="It may have been deleted, or the address may be mistyped."
+      actions={
+        <Button size="lg" variant="outline" render={<Link href="/mcp" />}>
+          All MCP servers
+        </Button>
+      }
+    />
   );
 }
 

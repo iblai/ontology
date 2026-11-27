@@ -731,7 +731,10 @@ const demoActions: Actions = {
   saveTerm: done,
   certifyProperty: done,
   certifyMetric: done,
-  saveServer: done,
+  saveServer: async (slug, _draft, deploy) => {
+    const refusal = deploy && demo.demoDeployRefusal(slug);
+    if (refusal) throw new Error(refusal);
+  },
   rollbackServer: done,
   issueToken: async (slug, label) => ({
     name: `ontology-${slug}-${label}`,
