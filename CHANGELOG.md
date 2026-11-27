@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1](https://github.com/iblai/ontology/compare/v1.2.0...v1.2.1) (2026-11-27)
+
+### Bug Fixes
+
+* name a missing MCP server instead of an invisible 404, refuse demo deploys of new servers ([322e888](https://github.com/iblai/ontology/commit/322e88809d8fb69769e272fb1498202fb968f270))
+
 ## [1.2.0](https://github.com/iblai/ontology/compare/v1.1.2...v1.2.0) (2026-11-27)
 
 ### Features
