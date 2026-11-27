@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/iblai/ontology/compare/v1.2.1...v1.3.0) (2026-11-27)
+
+### Features
+
+* add Google/Microsoft setup steps and guide, save demo servers, require a demo OAuth client ([d9c030c](https://github.com/iblai/ontology/commit/d9c030c40531227bafaf9b66e733d680b353eb1b))
+* add Google/Microsoft setup steps and guides, save demo servers, require a demo OAuth client ([78b0bb2](https://github.com/iblai/ontology/commit/78b0bb22873880c00d61709ad6200b6acd39980b))
+
 ## [1.2.1](https://github.com/iblai/ontology/compare/v1.2.0...v1.2.1) (2026-11-27)
 
 ### Bug Fixes
