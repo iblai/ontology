@@ -9,6 +9,7 @@ import { validateDocs } from "@/lib/host/toolbox-config";
 import type { HostApiInput } from "@/lib/host/types";
 import { catalog } from "@/lib/view/catalog";
 import { library, load } from "./index";
+import { scopeLine, setup } from "./setup";
 import { toolName, type ReadyApi } from "./types";
 
 vi.mock("@/lib/host/address", () => ({
@@ -106,4 +107,35 @@ describe("the tiles’ logos", () => {
       expect(refs.map((m) => m[1]).filter((ref) => !ref.startsWith("#"))).toEqual([]);
     },
   );
+});
+
+describe("the setup steps behind the form’s ?", () => {
+  // Written by hand, so each name must still be one the tile's own hint gives.
+  it.each(library.map((tile) => tile.id))(
+    "%s has them exactly when it signs in with Google or Microsoft",
+    async (id) => {
+      const ready = await load[id]();
+      const oauth = "oauth" in ready.auth ? ready.auth.oauth : null;
+      const vendor =
+        oauth?.tokenUrl === "https://oauth2.googleapis.com/token"
+          ? "google"
+          : oauth?.tokenExample?.includes("login.microsoftonline.com")
+            ? "microsoft"
+            : undefined;
+      const s = setup[id];
+      expect(s?.vendor).toBe(vendor);
+      if (!s) return;
+      const named = s.vendor === "google" ? [s.api, ...s.scopes] : [...s.permissions, ...s.writes];
+      expect(named.filter((name) => !ready.hint.includes(name))).toEqual([]);
+    },
+  );
+
+  it("gives the Playground every scope as a full address", () => {
+    const admin = setup["google-admin"];
+    const line = admin.vendor === "google" ? scopeLine(admin.scopes) : "";
+    expect(line.split(" ")).toHaveLength(10);
+    expect(
+      line.split(" ").every((s) => s.startsWith("https://www.googleapis.com/auth/admin.")),
+    ).toBe(true);
+  });
 });

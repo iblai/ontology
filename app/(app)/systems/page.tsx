@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, PageHeader, Pill, Tag } from "@/components/shell/page-header";
 import { FilePicker } from "@/components/file-picker";
 import { QueryState } from "@/components/query-state";
+import { SetupHelp } from "@/components/setup-steps";
 import { catalog, useActions, useSystems, type CatalogKind } from "@/lib/data";
 import type {
   HostApiEndpoint,
@@ -107,13 +108,14 @@ const keyOf = (ep: HostApiEndpoint) => `${ep.method} ${ep.path}`;
 type Row = { ep: HostApiEndpoint; on: boolean; own?: boolean };
 const DEMO_ROWS: Row[] = DEMO_ENDPOINTS.map((e) => ({ ep: endpointOf(e)!, on: true }));
 
+// The demo fills every OAuth sign-in with a test client.
 const NO_OAUTH: HostApiOAuthInput = {
   grant: "client_credentials",
   tokenUrl: "",
-  clientId: "",
+  clientId: demo ? "test-id" : "",
   clientAuth: "basic",
   scope: "",
-  clientSecret: "",
+  clientSecret: demo ? "test-secret" : "",
   refreshToken: "",
 };
 
@@ -229,6 +231,7 @@ export default function SystemsPage() {
   // The ready-made API the form was filled from, for its example address and its hint.
   const [ready, setReady] = useState<ReadyApi | null>(null);
   const tokenExample = ready && "oauth" in ready.auth ? ready.auth.oauth.tokenExample : undefined;
+  const authLabel = useRef<HTMLSpanElement>(null);
   const [rows, setRows] = useState<Row[]>(demo ? DEMO_ROWS : []);
   const [manual, setManual] = useState("");
   const [manualBad, setManualBad] = useState(false);
@@ -733,9 +736,14 @@ export default function SystemsPage() {
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <Label className="text-gray-700">
-                    {oauthOn ? "Upstream Auth" : "Upstream Auth Header"}
-                  </Label>
+                  <span ref={authLabel} className="flex items-center gap-1.5">
+                    <Label className="text-gray-700">
+                      {oauthOn ? "Upstream Auth" : "Upstream Auth Header"}
+                    </Label>
+                    {ready && oauthOn && (
+                      <SetupHelp id={ready.id} name={ready.name} anchor={authLabel} />
+                    )}
+                  </span>
                   <span className="flex gap-3 text-xs text-gray-500">
                     {(["Header", "OAuth 2.0"] as const).map((way) => (
                       <button

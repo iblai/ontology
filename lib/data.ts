@@ -3,11 +3,12 @@
 // The one place a page gets its data and its actions.
 //
 // Demo mode (NEXT_PUBLIC_DEMO=1) answers from lib/mock.ts and the mocked pages' own literals,
-// so every page renders exactly what the mocked build rendered and nothing is written.
+// so every page renders exactly what the mocked build rendered; it writes only the servers it
+// saves, to this browser.
 // Live mode reads ibl.ai (lib/ibl-flows.ts), the engine and the host (lib/host-api.ts) and
 // never reads the mock. The mode is chosen once, at module level, so no hook is conditional.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useDispatch } from "react-redux";
 import { skipToken } from "@reduxjs/toolkit/query/react";
 import { authorization, hostApi, hostHeaders } from "@/lib/host-api";
@@ -401,7 +402,6 @@ const demoReads = {
   pipeline: ready(demo.demoPipeline),
   ontology: ready(demo.demoOntology),
   toolsets: ready(demo.demoToolsets),
-  servers: ready(demo.demoServers),
   activity: ready(demo.demoServerActivity),
   preview: ready(demo.demoYaml),
   keys: ready(demo.demoKeys),
@@ -424,8 +424,49 @@ function useDemoObjectType(id: string | null): Query<ObjectTypeView> {
   }, [id]);
 }
 
+// The servers the demo saved, in this browser; its samples stay as they are.
+const SAVED_KEY = "ontology.demo-servers";
+const noSubscribe = () => () => {};
+const quiet = ready(demo.quietActivity);
+
+function useSaved(): Record<string, demo.DemoSaved> {
+  const raw = useSyncExternalStore(
+    noSubscribe,
+    () => localStorage.getItem(SAVED_KEY),
+    () => null,
+  );
+  return useMemo(() => (raw ? (JSON.parse(raw) as Record<string, demo.DemoSaved>) : {}), [raw]);
+}
+
+function useDemoServers(): Query<ServerRow[]> {
+  const saved = useSaved();
+  return useMemo(() => {
+    const added = Object.entries(saved).map(([slug, s]) => demo.savedServer(slug, s));
+    return ready([...demo.demoServers, ...added]);
+  }, [saved]);
+}
+
 function useDemoServer(slug: string): Query<ServerView | null> {
-  return useMemo(() => ready(demo.demoServer(slug)), [slug]);
+  const saved = useSaved()[slug];
+  return useMemo(
+    () => ready(demo.demoServer(slug) ?? (saved ? demo.savedServer(slug, saved) : null)),
+    [slug, saved],
+  );
+}
+
+function useDemoServerActivity(slug: string): Query<ServerActivityView> {
+  return demo.demoServer(slug) ? demoReads.activity : quiet;
+}
+
+function useDemoCounts(): CountsView {
+  const saved = useSaved();
+  return useMemo(() => {
+    const added = Object.entries(saved)
+      .map(([slug, s]) => demo.savedServer(slug, s))
+      .filter((s) => s.enabled)
+      .reduce((n, s) => n + s.tools, 0);
+    return { ...demo.demoCounts, gateway: (demo.demoCounts.gateway ?? 0) + added };
+  }, [saved]);
 }
 
 /* ---------- reads ---------- */
@@ -469,9 +510,7 @@ export const useToolsets: () => Query<ToolsetView[]> = demoMode
   : useLiveToolsets;
 
 /** Every server on this host. */
-export const useServers: () => Query<ServerRow[]> = demoMode
-  ? () => demoReads.servers
-  : useLiveServers;
+export const useServers: () => Query<ServerRow[]> = demoMode ? useDemoServers : useLiveServers;
 
 /** One server; `data` is null when there is no server by that slug. */
 export const useServer: (slug: string) => Query<ServerView | null> = demoMode
@@ -480,7 +519,7 @@ export const useServer: (slug: string) => Query<ServerView | null> = demoMode
 
 /** A server's calls, runtime log and sparklines. */
 export const useServerActivity: (slug: string) => Query<ServerActivityView> = demoMode
-  ? () => demoReads.activity
+  ? useDemoServerActivity
   : useLiveServerActivity;
 
 /** The config file a draft would write, as text. Follows the draft, debounced. */
@@ -511,13 +550,13 @@ export const useRoles: () => Query<RoleRow[]> = demoMode ? () => demoReads.roles
 export const useEngine: () => Query<EngineView> = demoMode ? () => demoReads.engine : useLiveEngine;
 
 /** The sidebar's badges. */
-export const useCounts: () => CountsView = demoMode ? () => demo.demoCounts : useLiveCounts;
+export const useCounts: () => CountsView = demoMode ? useDemoCounts : useLiveCounts;
 
 /* ---------- actions ---------- */
 
 // Every action rejects with an Error whose message is the server's own words, and on success
 // makes the reads it changed fetch again. In demo mode each resolves with what the mocked page
-// showed and changes nothing.
+// showed and changes nothing, but a server saved under a new name is kept in this browser.
 export type Actions = {
   /** Asks the engine to try the login. */
   testConnection(input: HostSystemInput): Promise<HostSystemTest>;
@@ -724,16 +763,24 @@ const demoActions: Actions = {
   },
   connectSystem: done,
   fetchSpec: async () => ({ title: "", endpoints: demo.demoSpec }),
-  addApi: done,
+  addApi: async (input) => {
+    const refusal = demo.demoApiRefusal(input);
+    if (refusal) throw new Error(refusal);
+  },
   connectLocal: done,
   compile: done,
   certifyTerm: done,
   saveTerm: done,
   certifyProperty: done,
   certifyMetric: done,
-  saveServer: async (slug, _draft, deploy) => {
-    const refusal = deploy && demo.demoDeployRefusal(slug);
-    if (refusal) throw new Error(refusal);
+  saveServer: async (slug, draft, deploy) => {
+    if (demo.demoServer(slug)) return;
+    const saved = JSON.parse(localStorage.getItem(SAVED_KEY) ?? "{}") as Record<
+      string,
+      demo.DemoSaved
+    >;
+    saved[slug] = demo.demoSave(saved[slug], draft, deploy, new Date().toISOString());
+    localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
   },
   rollbackServer: done,
   issueToken: async (slug, label) => ({

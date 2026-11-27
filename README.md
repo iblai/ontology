@@ -739,6 +739,7 @@ We welcome contributions! Open an issue or a pull request. Before you push, run 
 - [Operations](docs/operations.md) — looking after that server: settings, a model, upgrades, backups, the image, failures
 - [Walkthrough](docs/console.md) — every page with screenshots, and what each control does
 - [Connect data sources](docs/guides/connect-data-sources.md) — SQL and HTTP API connections: read-only logins, scope, PII, what Connect & Dissect does, troubleshooting
+- [Connect Gmail and Google Workspace](docs/guides/connect-google-workspace.md) — step by step, from the app in Google Cloud to an agent reading one mailbox
 - [Permissions](docs/guides/permissions.md) — policies and toolsets, sign-in methods, row-level restriction, PII, writes, origins, audit
 - [Connect agents](docs/guides/connect-agents.md) — ibl.ai agents, Claude Desktop and Claude Code, Codex, Cursor, Python, cURL
 - [Authentication](docs/auth.md) — ibl.ai SSO: the session as iblai/os implements it, how it is wired here, configuration, demo mode

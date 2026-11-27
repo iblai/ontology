@@ -213,7 +213,8 @@ that matters.
 A list returns its first page only: the systems offer `filter`, `top` and `select` where Microsoft
 documents them, and no next-page token.
 
-**Google**, set up once:
+**Google**, set up once (step by step, with every click:
+[Connect Gmail and Google Workspace](connect-google-workspace.md)):
 
 1. Create or choose a Google Cloud project and enable the API of each system you use: Gmail API,
    Google Drive API, Google Calendar API, Google Classroom API, Google Sheets API, Admin SDK API.

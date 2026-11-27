@@ -1,7 +1,13 @@
 // Demo mode (NEXT_PUBLIC_DEMO=1): what the mocked build rendered, in the view shapes. The mock
 // gives the data; the literals the mocked pages held are here.
 
-import type { HostApiEndpoint, HostFolder, HostSystemTest } from "@/lib/host/types";
+import type {
+  HostApiEndpoint,
+  HostApiInput,
+  HostFolder,
+  HostServerDraft,
+  HostSystemTest,
+} from "@/lib/host/types";
 import * as mock from "@/lib/mock";
 import { mcpPath } from "@/lib/platform";
 import type {
@@ -29,6 +35,7 @@ import type {
 } from "@/lib/view/types";
 import { demoColumn } from "./columns";
 import { linkName } from "./ontology";
+import { ago } from "./time";
 
 const st = (certified: boolean): Status => (certified ? "certified" : "suggested");
 
@@ -101,6 +108,14 @@ export const demoSpec: HostApiEndpoint[] = ["contacts", "deals", "companies"].ma
   description: "",
   query: [],
 }));
+
+/** Why the demo refuses an OAuth API, in the host's words: no client; null for one with it. */
+export function demoApiRefusal(input: HostApiInput): string | null {
+  if (!input.oauth) return null;
+  if (!input.oauth.clientId.trim()) return "OAuth needs a client ID.";
+  if (!input.oauth.clientSecret.trim()) return "OAuth needs the client secret.";
+  return null;
+}
 
 /* ---------- map ---------- */
 
@@ -356,12 +371,59 @@ export function demoServer(slug: string): ServerView | null {
   return s ? { ...s, yaml: mock.toolsYaml } : null;
 }
 
-/** Why the demo, which creates no server, refuses to deploy one; null for one of its samples. */
-export function demoDeployRefusal(slug: string): string | null {
-  if (demoServer(slug)) return null;
-  const samples = demoServers.map((s) => s.slug).join(", ");
-  return `The demo creates no servers. Deploy one of its samples: ${samples}.`;
+/** A server the demo saved in this browser: its draft, its saves, and when it last deployed. */
+export type DemoSaved = {
+  draft: HostServerDraft;
+  revision: number;
+  enabled: boolean;
+  deployedAt: string | null;
+};
+
+/** What a save leaves: one more revision, enabled from the first deploy on. */
+export function demoSave(
+  before: DemoSaved | undefined,
+  draft: HostServerDraft,
+  deploy: boolean,
+  now: string,
+): DemoSaved {
+  return {
+    draft,
+    revision: (before?.revision ?? 0) + 1,
+    enabled: deploy || !!before?.enabled,
+    deployedAt: deploy ? now : (before?.deployedAt ?? null),
+  };
 }
+
+/** A saved server as the pages show it: its toolsets' tools, and no calls or agents yet. */
+export function savedServer(slug: string, s: DemoSaved, now = Date.now()): ServerView {
+  const sets = demoToolsets.filter((t) => s.draft.toolsets.includes(t.name));
+  return {
+    slug,
+    url: demoEndpoint(slug),
+    revision: s.revision,
+    enabled: s.enabled,
+    toolsets: sets.length,
+    tools: sets.reduce((n, t) => n + t.tools.length, 0),
+    calls24h: 0,
+    agents: 0,
+    top: "—",
+    deployedAgo: ago(s.deployedAt, now),
+    toolsetNames: s.draft.toolsets,
+    origins: s.draft.origins,
+    hosts: s.draft.hosts,
+    auth: s.draft.auth,
+    bytes: mock.toolsYaml.length,
+    port: null,
+    yaml: mock.toolsYaml,
+  };
+}
+
+/** A saved server's activity: nothing called yet. */
+export const quietActivity: ServerActivityView = {
+  calls: [],
+  log: [],
+  spark: { calls: mock.sparklines.calls.map(() => 0), top: mock.sparklines.top.map(() => 0) },
+};
 
 export const demoServerActivity: ServerActivityView = {
   calls: mock.agentToolCalls.map((c) => ({
