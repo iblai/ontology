@@ -1,0 +1,108 @@
+{
+  "id": "clio",
+  "name": "Clio Manage",
+  "abbr": "Cm",
+  "color": "#0070E0",
+  "baseUrl": "https://app.clio.com/api/v4",
+  "example": "https://app.clio.com/api/v4",
+  "hint": "An application’s key and secret from the Clio developer portal, and a refresh token; outside the US use your region’s host (eu, ca or au.app.clio.com).",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "/oauth/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://docs.developers.clio.com/openapi.json"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /matters.json",
+      "name": "list_matters",
+      "says": "Lists matters. Clio returns only id and etag unless fields names more, e.g. id,display_number,description,status,client{name}.",
+      "query": ["query", "status", "client_id", "limit", "fields"]
+    },
+    {
+      "op": "GET /matters/{id}.json",
+      "name": "get_matter",
+      "says": "Returns one matter. Clio returns only id and etag unless fields names more.",
+      "query": ["fields"]
+    },
+    {
+      "op": "GET /contacts.json",
+      "name": "list_contacts",
+      "says": "Lists contacts: the people and companies linked to matters. Clio returns only id and etag unless fields names more, e.g. id,name,type,primary_email_address.",
+      "query": ["query", "type", "limit", "fields"]
+    },
+    {
+      "op": "GET /contacts/{id}.json",
+      "name": "get_contact",
+      "says": "Returns one contact. Clio returns only id and etag unless fields names more.",
+      "query": ["fields"]
+    },
+    {
+      "op": "GET /activities.json",
+      "name": "list_activities",
+      "says": "Lists time entries and expenses, for one matter or all. Clio returns only id and etag unless fields names more, e.g. id,type,date,quantity,total,note.",
+      "query": ["matter_id", "type", "limit", "fields"]
+    },
+    {
+      "op": "GET /documents.json",
+      "name": "list_documents",
+      "says": "Lists documents’ metadata. Clio returns only id and etag unless fields names more, e.g. id,name,created_at,matter{display_number}.",
+      "query": ["matter_id", "query", "limit", "fields"]
+    },
+    {
+      "op": "GET /tasks.json",
+      "name": "list_tasks",
+      "says": "Lists tasks. Clio returns only id and etag unless fields names more, e.g. id,name,due_at,status,assignee{name}.",
+      "query": ["matter_id", "complete", "limit", "fields"]
+    },
+    {
+      "op": "GET /calendar_entries.json",
+      "name": "list_calendar_entries",
+      "says": "Lists calendar entries. Clio returns only id and etag unless fields names more, e.g. id,summary,start_at,end_at.",
+      "query": ["matter_id", "from", "to", "limit", "fields"]
+    },
+    {
+      "op": "GET /notes.json",
+      "name": "list_notes",
+      "says": "Lists notes on a matter or a contact; type is Matter or Contact. Clio returns only id and etag unless fields names more, e.g. id,subject,detail,date.",
+      "query": ["type", "matter_id", "contact_id", "query", "limit", "fields"]
+    },
+    {
+      "op": "GET /communications.json",
+      "name": "list_communications",
+      "says": "Lists logged emails and phone calls. Clio returns only id and etag unless fields names more, e.g. id,subject,body,type,date.",
+      "query": ["matter_id", "contact_id", "limit", "fields"]
+    },
+    {
+      "op": "GET /users/who_am_i.json",
+      "name": "who_am_i",
+      "says": "Returns the user this sign-in acts as. Clio returns only id and etag unless fields names more.",
+      "query": ["fields"]
+    },
+    {
+      "op": "POST /activities.json",
+      "name": "create_activity",
+      "says": "Creates a time or expense entry. Body: {\"data\": {\"type\": \"TimeEntry\", \"date\", \"quantity\" (seconds), \"note\", \"matter\": {\"id\"}}}.",
+      "query": []
+    },
+    {
+      "op": "POST /tasks.json",
+      "name": "create_task",
+      "says": "Creates a task. Body: {\"data\": {\"name\", \"description\", \"due_at\", \"priority\", \"assignee\": {\"id\", \"type\": \"User\"}, \"matter\": {\"id\"}}}.",
+      "query": []
+    },
+    {
+      "op": "POST /notes.json",
+      "name": "create_note",
+      "says": "Adds a note to a matter or a contact. Body: {\"data\": {\"type\": \"Matter\", \"subject\", \"detail\", \"matter\": {\"id\"}}}.",
+      "query": []
+    }
+  ]
+}

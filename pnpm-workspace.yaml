@@ -58,3 +58,20 @@ publicHoistPattern:
 # Node 25+ exposes a `localStorage` global whose getter throws without --localstorage-file;
 # the SDK's browser-storage guards need it undefined during SSR (every script, not just dev).
 nodeOptions: --no-experimental-webstorage
+overrides:
+  # Security floors for exact pins upstream; drop each once its pinner moves past it.
+  axios@1: ^1.20.0 # @iblai/web-utils 2.24.2 pins 1.13.6
+  dompurify@3: ^3.4.17 # @iblai/web-containers 1.73.1 pins 3.3.3
+  "@tiptap/core@3": ^3.30.5 # @iblai/web-containers 1.73.1 pins 3.20.4
+  prismjs@1: ^1.30.0 # refractor 3 asks ~1.27.0
+  "@modelcontextprotocol/sdk@1": ^1.32.0 # @iblai/web-utils 2.24.2 and @iblai/mcp 1.45.1 pin 1.27.1
+  "@hono/node-server@1": ^2.1.6 # @modelcontextprotocol/sdk accepts ^1.19.9 || ^2.0.5; lock had 1.19.19
+  katex@0: ^0.18.2 # @iblai/web-containers 1.73.1 pins 0.16.44
+  minimatch@10: ^11.0.1 # shadcn's ts-morph and the SDK's build plugins; lock had 10.2.6
+  zod@4: ^4.6.6 # @iblai/mcp 1.45.1 asks 4.3.6
+  basic-ftp@5: ^6.2.4 # get-uri 8.0.1 (release-it > proxy-agent) asks ^5.3.1
+# zod 3 (GHSA-mrhx-c7xc-m3w5) is fixed only in zod 4.6.6, and the SDK still asks for zod 3;
+# the zod 4 copy is floored above. Ignored until the SDK moves to zod 4.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mrhx-c7xc-m3w5

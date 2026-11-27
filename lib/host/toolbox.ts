@@ -11,8 +11,9 @@ import { dirname } from "node:path";
 import { mcpPath } from "@/lib/platform";
 import { toolboxBin } from "./env";
 import { HostError } from "./errors";
-import { homePath, readEnv, readText, writeAtomic } from "./files";
+import { homePath, readEnv, readText, runtimeEnv, writeAtomic } from "./files";
 import { mask } from "./mcp";
+import { liveTokens } from "./oauth";
 import { currentPlatform } from "./platform";
 import { readFlags, serving } from "./servers";
 import { MARK, parseConfig } from "./toolbox-config";
@@ -95,7 +96,7 @@ export async function ensureRunning(slug: string): Promise<number> {
 export async function launchChanged(slug: string): Promise<boolean> {
   const [file, flags] = await Promise.all([readPid(slug), readFlags(slug)]);
   if (!file || !flags) return true;
-  return file.launch !== launchStamp(flags.draft, await readEnv());
+  return file.launch !== launchStamp(flags.draft, runtimeEnv(await readEnv()));
 }
 
 /**
@@ -163,7 +164,8 @@ export async function logTail(slug: string, lines: number): Promise<string[]> {
     const length = Math.min(size, 65_536);
     const buffer = Buffer.alloc(length);
     await handle.read(buffer, 0, length, size - length);
-    const text = mask(buffer.toString("utf8"), Object.values(await readEnv()));
+    const secrets = [...Object.values(await readEnv()), ...liveTokens()];
+    const text = mask(buffer.toString("utf8"), secrets);
     return text
       .split("\n")
       .filter((line) => line.trim() !== "")
@@ -203,7 +205,7 @@ async function launch(slug: string): Promise<ProcessStatus> {
     throw new HostError(404, `There is no saved server “${slug}”.`);
   }
   await stop(slug); // a hung or dead runtime leaves its pid file behind
-  const env = await readEnv();
+  const env = runtimeEnv(await readEnv());
   const bin = toolboxBin();
   const port = await freePort();
   const { origins, hosts } = flags.draft;

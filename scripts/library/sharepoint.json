@@ -1,0 +1,116 @@
+{
+  "id": "sharepoint",
+  "name": "Microsoft SharePoint",
+  "abbr": "SPO",
+  "color": "#038387",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Sites.Read.All, and Sites.ReadWrite.All to add and edit list items; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Sites.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Files.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Search.yml"
+    }
+  ],
+  "ask": ["search_content"],
+  "pick": [
+    {
+      "op": "GET /sites",
+      "name": "search_sites",
+      "says": "Finds SharePoint sites by keywords in search; without search, lists every site. A site’s id is the site_id the other tools take.",
+      "query": ["$search", "$filter", "$select", "$top"]
+    },
+    {
+      "op": "GET /sites/{site_id}",
+      "name": "get_site",
+      "says": "Returns one site, by the id search_sites gives, or the root site when site_id is root.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /sites/{site_id}/sites",
+      "name": "list_subsites",
+      "says": "Lists the subsites of a site.",
+      "query": ["$filter", "$select", "$top"]
+    },
+    {
+      "op": "GET /sites/{site_id}/lists",
+      "name": "list_lists",
+      "says": "Lists a site’s lists; system lists stay hidden unless select includes system.",
+      "query": ["$filter", "$select", "$top"]
+    },
+    {
+      "op": "GET /sites/{site_id}/lists/{list_id}",
+      "name": "get_list",
+      "says": "Returns a list’s metadata, by its id or its title; expand=columns adds its columns.",
+      "query": ["$select", "$expand"]
+    },
+    {
+      "op": "GET /sites/{site_id}/lists/{list_id}/columns",
+      "name": "list_columns",
+      "says": "Lists a list’s columns; a column’s name, not its displayName, is its key in an item’s fields.",
+      "query": ["$filter", "$select", "$top"]
+    },
+    {
+      "op": "GET /sites/{site_id}/lists/{list_id}/items",
+      "name": "list_list_items",
+      "says": "Lists a list’s items; expand=fields adds their column values, fields(select=Title,Status) only some. filter takes fields/Status eq 'Open' (eq, ne, lt, gt, le, ge, startswith) on indexed columns only: Graph refuses any other column unless sent a Prefer: HonorNonIndexedQueriesWarningMayFailRandomly header, which this tool cannot send.",
+      "query": ["$expand", "$filter", "$select", "$top"]
+    },
+    {
+      "op": "GET /sites/{site_id}/lists/{list_id}/items/{listItem_id}",
+      "name": "get_list_item",
+      "says": "Returns one list item; expand=fields adds its column values.",
+      "query": ["$expand", "$select"]
+    },
+    {
+      "op": "GET /sites/{site_id}/drives",
+      "name": "list_libraries",
+      "says": "Lists a site’s document libraries; a library’s id is the drive_id the file tools take.",
+      "query": ["$select", "$top"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/root/children",
+      "name": "list_library_files",
+      "says": "Lists the files and folders at the top of a document library; a folder’s id is the driveItem_id list_folder_files takes.",
+      "query": ["$orderby", "$select", "$top"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/items/{driveItem_id}/children",
+      "name": "list_folder_files",
+      "says": "Lists the files and folders in a folder of a document library.",
+      "query": ["$orderby", "$select", "$top"]
+    },
+    {
+      "op": "POST /search/microsoft.graph.query",
+      "name": "search_content",
+      "says": "Searches SharePoint for files, list items, sites, lists or libraries (entityTypes driveItem, listItem, site, list, drive); queryString takes KQL (budget filetype:xlsx) and region, your data location code (NAM, EUR, …), is required. Body: {\"requests\": [{\"entityTypes\": [\"driveItem\"], \"query\": {\"queryString\"}, \"region\": \"NAM\", \"from\": 0, \"size\": 25}]}.",
+      "query": []
+    },
+    {
+      "op": "POST /sites/{site_id}/lists/{list_id}/items",
+      "name": "create_list_item",
+      "says": "Adds an item to a list. Body: {\"fields\": {\"Title\", …}}, each key a column’s name from list_columns.",
+      "query": []
+    },
+    {
+      "op": "PATCH /sites/{site_id}/lists/{list_id}/items/{listItem_id}/fields",
+      "name": "update_list_item",
+      "says": "Changes the given column values of a list item and leaves the rest alone. Body: {\"<column name>\": value, …}.",
+      "query": []
+    }
+  ]
+}

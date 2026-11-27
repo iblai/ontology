@@ -1,0 +1,312 @@
+{
+  "id": "oneroster",
+  "name": "OneRoster 1.2",
+  "abbr": "1R",
+  "color": "#00629B",
+  "baseUrl": "",
+  "example": "https://sis.school.edu/ims/oneroster",
+  "hint": "A client ID, secret and token address from your SIS or rostering hub, such as Infinite Campus, PowerSchool, ClassLink or Skyward.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://sis.school.edu/oauth2/token",
+      "clientAuth": "basic",
+      "scope": "https://purl.imsglobal.org/spec/or/v1p2/scope/roster.readonly https://purl.imsglobal.org/spec/or/v1p2/scope/gradebook.readonly"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://purl.imsglobal.org/spec/or/v1p2/schema/openapi/onerosterv1p2rostersservice_openapi3_v1p0.json",
+      "version": "1.2"
+    },
+    {
+      "url": "https://purl.imsglobal.org/spec/or/v1p2/schema/openapi/onerosterv1p2gradebookservice_openapi3_v1p0.json",
+      "version": "1.2"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_orgs",
+      "method": "GET",
+      "path": "/rostering/v1p2/orgs",
+      "description": "Lists the districts, schools and departments.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_schools",
+      "method": "GET",
+      "path": "/rostering/v1p2/schools",
+      "description": "Lists schools.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "get_school",
+      "method": "GET",
+      "path": "/rostering/v1p2/schools/{sourcedId}",
+      "description": "Returns one school.",
+      "query": [],
+      "notes": {
+        "sourcedId": "The unique identifier, GUID, for this school."
+      }
+    },
+    {
+      "name": "list_school_classes",
+      "method": "GET",
+      "path": "/rostering/v1p2/schools/{schoolSourcedId}/classes",
+      "description": "Lists a school’s classes.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "schoolSourcedId": "The unique identifier, GUID, for the specific school.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_school_students",
+      "method": "GET",
+      "path": "/rostering/v1p2/schools/{schoolSourcedId}/students",
+      "description": "Lists a school’s students.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "schoolSourcedId": "The unique identifier, GUID, for the specific school.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_users",
+      "method": "GET",
+      "path": "/rostering/v1p2/users",
+      "description": "Lists users of every role; filter narrows them, e.g. familyName='Lovelace'.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "get_user",
+      "method": "GET",
+      "path": "/rostering/v1p2/users/{sourcedId}",
+      "description": "Returns one user.",
+      "query": [],
+      "notes": {
+        "sourcedId": "The unique identifier, GUID, for this user."
+      }
+    },
+    {
+      "name": "list_students",
+      "method": "GET",
+      "path": "/rostering/v1p2/students",
+      "description": "Lists students.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_teachers",
+      "method": "GET",
+      "path": "/rostering/v1p2/teachers",
+      "description": "Lists teachers.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_classes",
+      "method": "GET",
+      "path": "/rostering/v1p2/classes",
+      "description": "Lists classes.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "get_class",
+      "method": "GET",
+      "path": "/rostering/v1p2/classes/{sourcedId}",
+      "description": "Returns one class.",
+      "query": [],
+      "notes": {
+        "sourcedId": "The unique identifier, GUID, for this class."
+      }
+    },
+    {
+      "name": "list_class_students",
+      "method": "GET",
+      "path": "/rostering/v1p2/classes/{classSourcedId}/students",
+      "description": "Lists a class’s students.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "classSourcedId": "The unique identifier, GUID, for the class.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_class_teachers",
+      "method": "GET",
+      "path": "/rostering/v1p2/classes/{classSourcedId}/teachers",
+      "description": "Lists a class’s teachers.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "classSourcedId": "The unique identifier, GUID, for the class.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_enrollments",
+      "method": "GET",
+      "path": "/rostering/v1p2/enrollments",
+      "description": "Lists enrollments: who is in which class, in which role.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_academic_sessions",
+      "method": "GET",
+      "path": "/rostering/v1p2/academicSessions",
+      "description": "Lists terms, semesters, grading periods and school years.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_courses",
+      "method": "GET",
+      "path": "/rostering/v1p2/courses",
+      "description": "Lists courses.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message. The sort order should follow the [UNICODE, 16] standard.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_class_line_items",
+      "method": "GET",
+      "path": "/gradebook/v1p2/classes/{classSourcedId}/lineItems",
+      "description": "Lists a class’s line items: its assignments and other graded work.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "classSourcedId": "The unique identifier, GUID, for the class.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_class_results",
+      "method": "GET",
+      "path": "/gradebook/v1p2/classes/{classSourcedId}/results",
+      "description": "Lists every result (score) in a class.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "classSourcedId": "The unique identifier, GUID, for the class.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "list_student_results",
+      "method": "GET",
+      "path": "/gradebook/v1p2/classes/{classSourcedId}/students/{studentSourcedId}/results",
+      "description": "Lists one student’s results in a class.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"],
+      "notes": {
+        "classSourcedId": "The unique identifier, GUID, for the class.",
+        "studentSourcedId": "The unique identifier, GUID, for the student.",
+        "limit": "To define the download segmentation value i.e. the maximum number of records to be contained in the response.",
+        "offset": "The number of the first record to be supplied in the segmented response message.",
+        "filter": "The filtering rules to be applied when identifying the records to be supplied in the response message.",
+        "sort": "Identifies the sort criteria to be used for the records in the response message. Use with the orderBy parameter. The sort order should follow the [UNICODE, 16] standard.",
+        "orderBy": "The form of ordering for response to the sorted request i.e. ascending (asc) or descending (desc). The sort order should follow the [UNICODE, 16] standard."
+      }
+    },
+    {
+      "name": "put_line_item",
+      "method": "PUT",
+      "path": "/gradebook/v1p2/lineItems/{sourcedId}",
+      "description": "Creates or replaces a line item; needs the gradebook.createput scope. Body: {\"lineItem\": {\"title\", \"class\": {\"sourcedId\"}, \"dueDate\", \"resultValueMin\", \"resultValueMax\"}}.",
+      "query": [],
+      "notes": {
+        "sourcedId": "The unique identifier, GUID, to be allocated to this new lineItem."
+      }
+    },
+    {
+      "name": "put_result",
+      "method": "PUT",
+      "path": "/gradebook/v1p2/results/{sourcedId}",
+      "description": "Creates or replaces a student’s result; needs the gradebook.createput scope. Body: {\"result\": {\"lineItem\": {\"sourcedId\"}, \"student\": {\"sourcedId\"}, \"score\", \"scoreStatus\", \"scoreDate\"}}.",
+      "query": [],
+      "notes": {
+        "sourcedId": "The unique identifier, GUID, to be allocated to this new result."
+      }
+    }
+  ]
+}

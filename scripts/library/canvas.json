@@ -1,0 +1,118 @@
+{
+  "id": "canvas",
+  "name": "Canvas LMS",
+  "abbr": "Cv",
+  "color": "#E72429",
+  "baseUrl": "",
+  "example": "https://school.instructure.com",
+  "hint": "An access token from your Canvas profile: Account, Settings, New access token.",
+  "auth": {
+    "header": "Authorization: Bearer "
+  },
+  "sources": [
+    {
+      "url": "https://instructure.instructure.com/doc/openapi/canvas.openapi.yaml"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /api/v1/courses",
+      "name": "list_courses",
+      "says": "Lists the courses the token’s user is enrolled in.",
+      "query": ["enrollment_type", "enrollment_state", "state", "include", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/courses/{id}",
+      "name": "get_course",
+      "says": "Returns one course.",
+      "query": ["include"]
+    },
+    {
+      "op": "GET /api/v1/courses/{course_id}/users",
+      "name": "list_course_users",
+      "says": "Lists the people in a course: students, teachers, TAs and observers.",
+      "query": ["search_term", "enrollment_type", "include", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/courses/{course_id}/enrollments",
+      "name": "list_enrollments",
+      "says": "Lists a course’s enrollments, with each one’s grades.",
+      "query": ["type", "state", "user_id", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/courses/{course_id}/assignments",
+      "name": "list_assignments",
+      "says": "Lists a course’s assignments with due dates and points.",
+      "query": ["search_term", "bucket", "order_by", "include", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/courses/{course_id}/assignments/{id}",
+      "name": "get_assignment",
+      "says": "Returns one assignment.",
+      "query": ["include"]
+    },
+    {
+      "op": "GET /api/v1/courses/{course_id}/assignments/{assignment_id}/submissions",
+      "name": "list_submissions",
+      "says": "Lists the submissions to one assignment, with scores and grades.",
+      "query": ["include", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/courses/{course_id}/students/submissions",
+      "name": "list_student_submissions",
+      "says": "Lists submissions across assignments, for chosen students or all of them.",
+      "query": [
+        "student_ids",
+        "assignment_ids",
+        "workflow_state",
+        "graded_since",
+        "include",
+        "per_page",
+        "page"
+      ]
+    },
+    {
+      "op": "GET /api/v1/users/{user_id}/missing_submissions",
+      "name": "list_missing_submissions",
+      "says": "Lists the past-due assignments a student has not submitted.",
+      "query": ["course_ids", "include", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/conversations",
+      "name": "list_conversations",
+      "says": "Lists the inbox conversations of the token’s user, newest first.",
+      "query": ["scope", "filter", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v1/users/{user_id}/profile",
+      "name": "get_user_profile",
+      "says": "Returns a user’s profile.",
+      "query": []
+    },
+    {
+      "op": "POST /api/v1/courses/{course_id}/assignments",
+      "name": "create_assignment",
+      "says": "Creates an assignment. Body: {\"assignment\": {\"name\", \"points_possible\", \"due_at\", \"submission_types\", \"published\"}}."
+    },
+    {
+      "op": "PUT /api/v1/courses/{course_id}/assignments/{id}",
+      "name": "update_assignment",
+      "says": "Edits an assignment. Body: {\"assignment\": {the fields to change}}."
+    },
+    {
+      "op": "PUT /api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+      "name": "grade_submission",
+      "says": "Grades or comments on a student’s submission; the student sees both. Body: {\"submission\": {\"posted_grade\"}, \"comment\": {\"text_comment\"}}."
+    },
+    {
+      "op": "POST /api/v1/courses/{course_id}/enrollments",
+      "name": "enroll_user",
+      "says": "Enrolls a user in a course. Body: {\"enrollment\": {\"user_id\", \"type\": \"StudentEnrollment\", \"enrollment_state\": \"active\"}}."
+    },
+    {
+      "op": "POST /api/v1/conversations",
+      "name": "send_message",
+      "says": "Sends an inbox message. Body: {\"recipients\": [user ids], \"subject\", \"body\"}."
+    }
+  ]
+}

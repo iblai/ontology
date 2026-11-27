@@ -2,12 +2,15 @@
 // product's mcp_server/handlers.py, toolsets.py and ratelimit.py.
 
 import pkg from "@/package.json";
+import { SIGNED_HEADER, listApis } from "./apis";
 import type { Caller } from "./dm";
 import { HostError } from "./errors";
 import { readEnv } from "./files";
 import type { Scope } from "./grants";
 import { callLocal, filesTools } from "./local";
 import { record } from "./log";
+import { forget, forgetsOf, liveTokens, tokenFor } from "./oauth";
+import { agentName } from "./openapi";
 import { SEMANTIC_TOOLS, SEMANTIC_TOOLSET, callSemantic, semanticReady } from "./semantic";
 import type { Serving } from "./servers";
 import { callTool, ensureRunning, listTools } from "./toolbox";
@@ -172,7 +175,8 @@ async function listFor(ctx: RpcContext): Promise<McpTool[]> {
   const tools = new Map<string, McpTool>();
   const add = (list: McpTool[], only?: string[]) => {
     for (const tool of list) {
-      if (!tools.has(tool.name) && (!only || only.includes(tool.name))) tools.set(tool.name, tool);
+      if (tools.has(tool.name) || (only && !only.includes(tool.name))) continue;
+      tools.set(tool.name, forAgent(tool, serving));
     }
   };
   // The runtime is started only for a toolset it serves.
@@ -223,7 +227,15 @@ async function callFor(ctx: RpcContext, params: Record<string, unknown>): Promis
       result = await callLocal(toolset, name, args);
     } else {
       await ensureRunning(slug);
-      result = await callTool(slug, toolset, name, args, forward);
+      const api = Object.hasOwn(serving.signed, name) ? serving.signed[name] : undefined;
+      const named = withDollars(args, dollarsOf(serving, name));
+      // The header is the gateway's to set: what a caller sent in its place is dropped.
+      const sent = api ? { ...named, [SIGNED_HEADER]: await bearerOf(api) } : named;
+      result = await callTool(slug, toolset, name, sent, forward);
+      // The API refused the token: the next call asks for a new one.
+      if (api && result.isError && result.content.some((part) => REFUSED.test(part.text))) {
+        forget(api);
+      }
     }
     return result;
   } catch (error) {
@@ -265,9 +277,62 @@ function reply(id: unknown, result: unknown, error?: RpcError) {
     : { ...answer, result };
 }
 
-// The env file's values, which a tool's answer or the runtime's words may echo.
+// The runtime's words for an API that answered 401.
+const REFUSED = /unexpected status code: 401\b/;
+
+// A tool as a caller sees it: without the header the gateway sets, and each $name without its $.
+function forAgent(tool: McpTool, serving: Serving): McpTool {
+  const signed = Object.hasOwn(serving.signed, tool.name);
+  const dollars = dollarsOf(serving, tool.name);
+  if (!signed && !dollars.length) return tool;
+  const kept = (name: string) => !(signed && name === SIGNED_HEADER);
+  const shown = (name: string) => (dollars.includes(name) ? agentName(name) : name);
+  const properties = Object.fromEntries(
+    Object.entries(tool.inputSchema.properties ?? {})
+      .filter(([name]) => kept(name))
+      .map(([name, value]) => [shown(name), value]),
+  );
+  const required = tool.inputSchema.required?.filter(kept).map(shown);
+  return {
+    ...tool,
+    inputSchema: { ...tool.inputSchema, properties, ...(required ? { required } : {}) },
+  };
+}
+
+// The tool's $ query names, as the server's tools.yaml declares them.
+const dollarsOf = (serving: Serving, tool: string) =>
+  Object.hasOwn(serving.dollars, tool) ? serving.dollars[tool] : [];
+
+// A caller's arguments with each $name given back its $.
+function withDollars(args: Record<string, unknown>, dollars: string[]): Record<string, unknown> {
+  const sent = { ...args };
+  for (const name of dollars) {
+    const shown = agentName(name);
+    if (!Object.hasOwn(sent, shown)) continue;
+    sent[name] = sent[shown];
+    delete sent[shown];
+  }
+  return sent;
+}
+
+// "Bearer <token>" for an OAuth API's tool. A plain Error: the agent reads why there is none.
+async function bearerOf(name: string): Promise<string> {
+  try {
+    // Counted before the API is read: a sign-in changed meanwhile leaves no token kept.
+    const since = forgetsOf(name);
+    const api = (await listApis()).find((kept) => kept.name === name);
+    if (!api?.oauth) {
+      throw new Error(`${name} no longer signs in with OAuth: save this server again.`);
+    }
+    return `Bearer ${await tokenFor({ name, baseUrl: api.baseUrl, oauth: api.oauth, since })}`;
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : String(error));
+  }
+}
+
+// The env file's values and the tokens kept, which an answer or the runtime's words may echo.
 async function secrets(): Promise<string[]> {
-  return Object.values(await readEnv());
+  return [...Object.values(await readEnv()), ...liveTokens()];
 }
 
 // Every string in an answer, masked.

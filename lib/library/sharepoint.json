@@ -1,0 +1,210 @@
+{
+  "id": "sharepoint",
+  "name": "Microsoft SharePoint",
+  "abbr": "SPO",
+  "color": "#038387",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Sites.Read.All, and Sites.ReadWrite.All to add and edit list items; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "ask": ["search_content"],
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Sites.yml",
+      "version": "v1.0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Files.yml",
+      "version": "v1.0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Search.yml",
+      "version": "v1.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "search_sites",
+      "method": "GET",
+      "path": "/sites",
+      "description": "Finds SharePoint sites by keywords in search; without search, lists every site. A site’s id is the site_id the other tools take.",
+      "query": ["$search", "$filter", "$select", "$top"],
+      "notes": {
+        "$search": "Search items by search phrases",
+        "$filter": "Filter items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "get_site",
+      "method": "GET",
+      "path": "/sites/{site_id}",
+      "description": "Returns one site, by the id search_sites gives, or the root site when site_id is root.",
+      "query": ["$select"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_subsites",
+      "method": "GET",
+      "path": "/sites/{site_id}/sites",
+      "description": "Lists the subsites of a site.",
+      "query": ["$filter", "$select", "$top"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "$filter": "Filter items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "list_lists",
+      "method": "GET",
+      "path": "/sites/{site_id}/lists",
+      "description": "Lists a site’s lists; system lists stay hidden unless select includes system.",
+      "query": ["$filter", "$select", "$top"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "$filter": "Filter items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "get_list",
+      "method": "GET",
+      "path": "/sites/{site_id}/lists/{list_id}",
+      "description": "Returns a list’s metadata, by its id or its title; expand=columns adds its columns.",
+      "query": ["$select", "$expand"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "list_id": "The unique identifier of list",
+        "$select": "Select properties to be returned",
+        "$expand": "Expand related entities"
+      }
+    },
+    {
+      "name": "list_columns",
+      "method": "GET",
+      "path": "/sites/{site_id}/lists/{list_id}/columns",
+      "description": "Lists a list’s columns; a column’s name, not its displayName, is its key in an item’s fields.",
+      "query": ["$filter", "$select", "$top"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "list_id": "The unique identifier of list",
+        "$filter": "Filter items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "list_list_items",
+      "method": "GET",
+      "path": "/sites/{site_id}/lists/{list_id}/items",
+      "description": "Lists a list’s items; expand=fields adds their column values, fields(select=Title,Status) only some. filter takes fields/Status eq 'Open' (eq, ne, lt, gt, le, ge, startswith) on indexed columns only: Graph refuses any other column unless sent a Prefer: HonorNonIndexedQueriesWarningMayFailRandomly header, which this tool cannot send.",
+      "query": ["$expand", "$filter", "$select", "$top"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "list_id": "The unique identifier of list",
+        "$expand": "Expand related entities",
+        "$filter": "Filter items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "get_list_item",
+      "method": "GET",
+      "path": "/sites/{site_id}/lists/{list_id}/items/{listItem_id}",
+      "description": "Returns one list item; expand=fields adds its column values.",
+      "query": ["$expand", "$select"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "list_id": "The unique identifier of list",
+        "listItem_id": "The unique identifier of listItem",
+        "$expand": "Expand related entities",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_libraries",
+      "method": "GET",
+      "path": "/sites/{site_id}/drives",
+      "description": "Lists a site’s document libraries; a library’s id is the drive_id the file tools take.",
+      "query": ["$select", "$top"],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "list_library_files",
+      "method": "GET",
+      "path": "/drives/{drive_id}/root/children",
+      "description": "Lists the files and folders at the top of a document library; a folder’s id is the driveItem_id list_folder_files takes.",
+      "query": ["$orderby", "$select", "$top"],
+      "notes": {
+        "drive_id": "The unique identifier of drive",
+        "$orderby": "Order items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "list_folder_files",
+      "method": "GET",
+      "path": "/drives/{drive_id}/items/{driveItem_id}/children",
+      "description": "Lists the files and folders in a folder of a document library.",
+      "query": ["$orderby", "$select", "$top"],
+      "notes": {
+        "drive_id": "The unique identifier of drive",
+        "driveItem_id": "The unique identifier of driveItem",
+        "$orderby": "Order items by property values",
+        "$select": "Select properties to be returned",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "search_content",
+      "method": "POST",
+      "path": "/search/microsoft.graph.query",
+      "description": "Searches SharePoint for files, list items, sites, lists or libraries (entityTypes driveItem, listItem, site, list, drive); queryString takes KQL (budget filetype:xlsx) and region, your data location code (NAM, EUR, …), is required. Body: {\"requests\": [{\"entityTypes\": [\"driveItem\"], \"query\": {\"queryString\"}, \"region\": \"NAM\", \"from\": 0, \"size\": 25}]}.",
+      "query": []
+    },
+    {
+      "name": "create_list_item",
+      "method": "POST",
+      "path": "/sites/{site_id}/lists/{list_id}/items",
+      "description": "Adds an item to a list. Body: {\"fields\": {\"Title\", …}}, each key a column’s name from list_columns.",
+      "query": [],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "list_id": "The unique identifier of list"
+      }
+    },
+    {
+      "name": "update_list_item",
+      "method": "PATCH",
+      "path": "/sites/{site_id}/lists/{list_id}/items/{listItem_id}/fields",
+      "description": "Changes the given column values of a list item and leaves the rest alone. Body: {\"<column name>\": value, …}.",
+      "query": [],
+      "notes": {
+        "site_id": "The unique identifier of site",
+        "list_id": "The unique identifier of list",
+        "listItem_id": "The unique identifier of listItem"
+      }
+    }
+  ]
+}

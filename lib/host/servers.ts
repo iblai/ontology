@@ -1,6 +1,7 @@
 // The servers on this host: their files under servers/<slug>/ and the steps of a save.
 
 import { readdir, rm, stat } from "node:fs/promises";
+import { dollarQueries, signedTools } from "./apis";
 import { HostError } from "./errors";
 import { assertSlug, homePath, readText, writeAtomic } from "./files";
 import { filesTools, isFilesToolset } from "./local";
@@ -32,6 +33,8 @@ export type Serving = {
   members: Record<string, string[]>; // toolset → tool names: tools.yaml's and the gateway's own
   writes: string[]; // toolsets that hold a tool that writes
   files: string[]; // the filesystems' toolsets, which the gateway answers itself
+  signed: Record<string, string>; // tool → the OAuth API whose token the gateway sets on it
+  dollars: Record<string, string[]>; // tool → its $ query names, which callers know without the $
 };
 
 /** flags.json: what the builder saved, the current revision, and whether it is deployed. */
@@ -54,7 +57,16 @@ const render = (docs: ToolboxDoc[], slug: string, n: number) =>
 const REVISION = /^(\d+)-([0-9a-f]{12})\.yaml$/;
 
 // Parsed tools.yaml per file path, kept until the file changes.
-const parsed = new Map<string, { key: string; members: Members; writes: string[] }>();
+const parsed = new Map<
+  string,
+  {
+    key: string;
+    members: Members;
+    writes: string[];
+    signed: Record<string, string>;
+    dollars: Record<string, string[]>;
+  }
+>();
 
 /** Every server with files on this host, by slug. */
 export async function listServers(): Promise<HostServer[]> {
@@ -201,7 +213,13 @@ export async function serving(slug: string): Promise<Serving | null> {
   let hit = parsed.get(file);
   if (hit?.key !== key) {
     const docs = parseConfig((await readText(file)) ?? "");
-    hit = { key, members: members(docs), writes: writingToolsets(docs) };
+    hit = {
+      key,
+      members: members(docs),
+      writes: writingToolsets(docs),
+      signed: signedTools(docs),
+      dollars: dollarQueries(docs),
+    };
     parsed.set(file, hit);
   }
   const own = ownMembers(hit.members, flags.draft);
@@ -210,6 +228,8 @@ export async function serving(slug: string): Promise<Serving | null> {
     members: { ...hit.members, ...own },
     writes: hit.writes,
     files: Object.keys(own).filter(isFilesToolset),
+    signed: hit.signed,
+    dollars: hit.dollars,
   };
 }
 

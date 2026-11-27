@@ -11,7 +11,14 @@ mkdirSync(out, { recursive: true });
 const shots = [
   { name: "01-dashboard", path: "/dashboard" },
   { name: "02-systems", path: "/systems" },
-  { name: "02b-systems-http-api", path: "/systems", click: 'role=tab[name="HTTP API"]' },
+  // A ready-made tile opens the HTTP API tab filled in; the filter keeps it in view.
+  {
+    name: "02b-systems-http-api",
+    path: "/systems",
+    click: 'role=button[name="APIs"]',
+    andThen: "role=button[name=/Canvas LMS/]",
+    wait: 800,
+  },
   { name: "03-map", path: "/map", wait: 14000 },
   { name: "04-ontology", path: "/ontology" },
   { name: "05-mcp-servers", path: "/mcp" },

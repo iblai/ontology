@@ -5,7 +5,7 @@
 //   POST /api/host/systems/test               HostSystemInput → HostSystemTest
 //   GET  /api/host/apis                       → HostApi[]
 //   POST /api/host/apis                       HostApiInput → HostApi
-//   POST /api/host/apis/spec                  { url, baseUrl?, authHeader? } → HostSpec
+//   POST /api/host/apis/spec                  HostSpecInput → HostSpec
 //   GET  /api/host/locals                     → HostLocal[]
 //   POST /api/host/locals                     HostLocalInput → HostLocal
 //   GET  /api/host/locals/browse?path=        → HostFolder
@@ -112,11 +112,24 @@ export type HostApiEndpoint = {
   notes?: Record<string, string>; // what a path or query parameter means, by its name
 };
 
+/** How the host signs in to an API for a token, in place of an auth header. */
+export type HostApiOAuth = {
+  grant: "client_credentials" | "refresh_token";
+  tokenUrl: string; // an address, or a path on the base URL's origin
+  clientId: string;
+  clientAuth: "basic" | "body"; // where the client ID and secret go
+  scope: string; // may be empty
+};
+
+/** The same with its secrets, as entered: "" keeps the one the host holds. */
+export type HostApiOAuthInput = HostApiOAuth & { clientSecret: string; refreshToken: string };
+
 export type HostApiInput = {
   name: string;
   baseUrl: string;
   authHeader: string; // "Authorization: Bearer <secret>" or "… ${NAME}"; may be empty
   endpoints: HostApiEndpoint[];
+  oauth?: HostApiOAuthInput; // with it, authHeader is empty
 };
 
 export type HostApi = {
@@ -125,12 +138,22 @@ export type HostApi = {
   authHeader: string; // with ${NAME} where the secret was
   endpoints: HostApiEndpoint[];
   tools: number;
+  oauth?: HostApiOAuth;
+};
+
+/** What Fetch Spec asks with: the document's address, and how the API signs in. */
+export type HostSpecInput = {
+  url: string;
+  baseUrl: string;
+  authHeader: string;
+  oauth?: HostApiOAuthInput;
 };
 
 export type HostSpec = {
   title: string;
   endpoints: HostApiEndpoint[];
   withoutAuth?: string; // why the request with the auth header failed, when it came without it
+  left?: { operations: number; parameters: number }; // what a tool cannot carry, left out
 };
 
 /* ---------- filesystems (local://) ---------- */

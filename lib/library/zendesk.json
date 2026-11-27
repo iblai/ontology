@@ -1,0 +1,166 @@
+{
+  "id": "zendesk",
+  "name": "Zendesk",
+  "abbr": "Zd",
+  "color": "#03363D",
+  "baseUrl": "",
+  "example": "https://acme.zendesk.com",
+  "hint": "An OAuth access token from Admin Center, under Apps and integrations, APIs.",
+  "auth": {
+    "header": "Authorization: Bearer "
+  },
+  "sources": [
+    {
+      "url": "https://developer.zendesk.com/zendesk/oas.yaml",
+      "version": "2.0.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_tickets",
+      "method": "GET",
+      "path": "/api/v2/tickets",
+      "description": "Lists tickets.",
+      "query": ["sort_by", "sort_order", "per_page", "page", "include"],
+      "notes": {
+        "sort_by": "Sort by",
+        "sort_order": "Sort order. Defaults to \"asc\"",
+        "per_page": "Number of records to return per page. Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.",
+        "page": "Pagination parameter. Supports both traditional offset and cursor-based pagination: - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before) These are mutually exclusive - use one format or the other, not both.",
+        "include": "Sideloads to include in the response. Accepts a comma-separated list of values. See [Sideloading](/documentation/api-basics/working-with-data/side_loading/#supported-endpoints)."
+      }
+    },
+    {
+      "name": "get_ticket",
+      "method": "GET",
+      "path": "/api/v2/tickets/{ticket_id}",
+      "description": "Returns one ticket.",
+      "query": ["include"],
+      "notes": {
+        "ticket_id": "The ID of the ticket",
+        "include": "Sideloads to include in the response. Accepts a comma-separated list of values. See [Sideloading](/documentation/api-basics/working-with-data/side_loading/#supported-endpoints)."
+      }
+    },
+    {
+      "name": "list_ticket_comments",
+      "method": "GET",
+      "path": "/api/v2/tickets/{ticket_id}/comments",
+      "description": "Lists a ticket’s comments: its conversation.",
+      "query": ["sort_order", "per_page", "page"],
+      "notes": {
+        "ticket_id": "The ID of the ticket",
+        "sort_order": "Sort order. Defaults to \"asc\"",
+        "per_page": "Number of records to return per page. Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.",
+        "page": "Cursor-based pagination parameters (JSON:API style). Supports nested parameters: - `page[size]` - Number of records per page (default varies by endpoint, typically 100) - `page[after]` - Cursor token to fetch records after this position - `page[before]` - Cursor token to fetch records before this po"
+      }
+    },
+    {
+      "name": "search",
+      "method": "GET",
+      "path": "/api/v2/search",
+      "description": "Searches tickets, users and organizations with Zendesk’s query syntax, e.g. type:ticket status:open.",
+      "query": ["query", "sort_by", "sort_order"],
+      "notes": {
+        "query": "The search query. See [Query basics](#query-basics) above. For details on the query syntax, see the [Zendesk Support search reference](https://support.zendesk.com/hc/en-us/articles/4408886879258)",
+        "sort_by": "One of `updated_at`, `created_at`, `priority`, `status`, or `ticket_type`. Defaults to sorting by relevance",
+        "sort_order": "One of `asc` or `desc`. Defaults to `desc`"
+      }
+    },
+    {
+      "name": "list_organization_tickets",
+      "method": "GET",
+      "path": "/api/v2/organizations/{organization_id}/tickets",
+      "description": "Lists an organization’s tickets.",
+      "query": [],
+      "notes": {
+        "organization_id": "The ID of an organization"
+      }
+    },
+    {
+      "name": "list_user_requested_tickets",
+      "method": "GET",
+      "path": "/api/v2/users/{user_id}/tickets/requested",
+      "description": "Lists the tickets a user requested.",
+      "query": ["sort_by", "sort_order", "per_page", "page"],
+      "notes": {
+        "user_id": "The id of the user",
+        "sort_by": "Sort by",
+        "sort_order": "Sort order. Defaults to \"asc\"",
+        "per_page": "Number of records to return per page. Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.",
+        "page": "Pagination parameter. Supports both traditional offset and cursor-based pagination: - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before) These are mutually exclusive - use one format or the other, not both."
+      }
+    },
+    {
+      "name": "search_users",
+      "method": "GET",
+      "path": "/api/v2/users/search",
+      "description": "Searches users by name, email or another property.",
+      "query": ["query", "per_page", "page"],
+      "notes": {
+        "query": "The `query` parameter supports the Zendesk search syntax for more advanced user searches. It can specify a partial or full value of any user property, including name, email address, notes, or phone. Example: `query=\"jdoe\"`. See the [Search API](/api-reference/ticketing/ticket-management/search/).",
+        "per_page": "Number of records to return per page. Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.",
+        "page": "Page number for offset-based pagination (non-negative integer)."
+      }
+    },
+    {
+      "name": "get_user",
+      "method": "GET",
+      "path": "/api/v2/users/{user_id}",
+      "description": "Returns one user.",
+      "query": [],
+      "notes": {
+        "user_id": "The id of the user"
+      }
+    },
+    {
+      "name": "list_organizations",
+      "method": "GET",
+      "path": "/api/v2/organizations",
+      "description": "Lists organizations.",
+      "query": ["per_page", "page"],
+      "notes": {
+        "per_page": "Number of records to return per page. Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.",
+        "page": "Pagination parameter. Supports both traditional offset and cursor-based pagination: - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before) These are mutually exclusive - use one format or the other, not both."
+      }
+    },
+    {
+      "name": "get_organization",
+      "method": "GET",
+      "path": "/api/v2/organizations/{organization_id}",
+      "description": "Returns one organization.",
+      "query": [],
+      "notes": {
+        "organization_id": "The ID of an organization"
+      }
+    },
+    {
+      "name": "list_view_tickets",
+      "method": "GET",
+      "path": "/api/v2/views/{view_id}/tickets",
+      "description": "Lists the tickets in a view.",
+      "query": ["sort_by", "sort_order"],
+      "notes": {
+        "view_id": "The ID of the view, or one of the string aliases `\"incoming\"`, `\"my\"`, or `\"my_groups\"`.",
+        "sort_by": "Sort or group the tickets by a column in the [View columns](#view-columns) table. The `subject` and `submitter` columns are not supported",
+        "sort_order": "One of \"asc\" or \"desc\". Defaults to \"asc\" for alphabetical and position sort, \"desc\" for all others"
+      }
+    },
+    {
+      "name": "create_ticket",
+      "method": "POST",
+      "path": "/api/v2/tickets",
+      "description": "Creates a ticket. Body: {\"ticket\": {\"subject\", \"comment\": {\"body\"}, \"requester_id\", \"priority\"}}.",
+      "query": []
+    },
+    {
+      "name": "update_ticket",
+      "method": "PUT",
+      "path": "/api/v2/tickets/{ticket_id}",
+      "description": "Updates a ticket; a comment with \"public\": true is seen by the requester. Body: {\"ticket\": {\"status\", \"comment\": {\"body\", \"public\"}}}.",
+      "query": [],
+      "notes": {
+        "ticket_id": "The ID of the ticket"
+      }
+    }
+  ]
+}

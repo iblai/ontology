@@ -1,0 +1,143 @@
+{
+  "id": "outlook",
+  "name": "Microsoft Outlook",
+  "abbr": "Ol",
+  "color": "#0078D4",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Mail.Read, Calendars.Read, Contacts.Read, and Mail.Send, Calendars.ReadWrite, Contacts.ReadWrite for the writes; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Mail.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Calendar.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/PersonalContacts.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Users.Actions.yml"
+    }
+  ],
+  "ask": ["get_schedule"],
+  "pick": [
+    {
+      "op": "GET /users/{user_id}/messages",
+      "name": "list_messages",
+      "says": "Lists the messages in a user’s mailbox, Deleted Items included, 10 at a time or up to 1,000 with top; the user is an ID or sign-in name, and bodies come in HTML. search takes words or KQL in double quotes, such as \"from:ada\"; orderby beside filter must sort by properties that come first in filter, in the same order.",
+      "query": ["$filter", "$search", "$orderby", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/messages/{message_id}",
+      "name": "get_message",
+      "says": "Returns one message, its body in HTML; select names the fields to return, such as subject,from,toRecipients,body.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/mailFolders/{mailFolder_id}/messages",
+      "name": "list_folder_messages",
+      "says": "Lists the messages in one mail folder, by its ID or a well-known name such as inbox, sentitems, drafts or archive; filter takes isRead eq false or receivedDateTime ge 2026-01-01.",
+      "query": ["$filter", "$orderby", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/mailFolders",
+      "name": "list_mail_folders",
+      "says": "Lists the mail folders at the top of a user’s mailbox with their unread and total counts; hidden folders and subfolders are left out.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/mailFolders/{mailFolder_id}/childFolders",
+      "name": "list_child_folders",
+      "says": "Lists the folders inside one mail folder, by its ID or a well-known name such as inbox, with their unread and total counts; hidden folders are left out.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/messages/{message_id}/attachments",
+      "name": "list_attachments",
+      "says": "Lists a message’s attachments with their names, types and sizes; a file’s content comes in contentBytes, base64-encoded.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/calendarView",
+      "name": "list_calendar_view",
+      "says": "Lists the events in a user’s default calendar between two times, each written as ISO 8601, with recurring events expanded into their occurrences. A time without an offset is read as UTC, and times come back in UTC.",
+      "query": ["startDateTime", "endDateTime", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/events",
+      "name": "list_events",
+      "says": "Lists the events in a user’s mailbox: single events and the masters of recurring series, not each occurrence, which the calendar view lists. Times come back in UTC and bodies in HTML; filter takes start/dateTime ge '2026-07-01T08:00'.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/events/{event_id}",
+      "name": "get_event",
+      "says": "Returns one event, its start and end in UTC and its body in HTML.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/calendars",
+      "name": "list_calendars",
+      "says": "Lists all of a user’s calendars.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/calendars/{calendar_id}/calendarView",
+      "name": "list_events_in_calendar",
+      "says": "Lists the events in one of a user’s calendars, by the calendar’s ID, between two times written as ISO 8601, with recurring events expanded into their occurrences; times come back in UTC.",
+      "query": ["startDateTime", "endDateTime", "$top", "$select"]
+    },
+    {
+      "op": "POST /users/{user_id}/calendar/microsoft.graph.getSchedule",
+      "name": "get_schedule",
+      "says": "Returns the free/busy availability of users, distribution lists or rooms, by email address, over a period; times come back in UTC. Body: {\"schedules\": [addresses], \"startTime\": {\"dateTime\", \"timeZone\"}, \"endTime\": {\"dateTime\", \"timeZone\"}}.",
+      "query": []
+    },
+    {
+      "op": "GET /users/{user_id}/contacts",
+      "name": "list_contacts",
+      "says": "Lists the contacts in a user’s default Contacts folder; to find one by address, filter with emailAddresses/any(a:a/address eq 'ada@school.edu').",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/contacts/{contact_id}",
+      "name": "get_contact",
+      "says": "Returns one contact.",
+      "query": ["$select"]
+    },
+    {
+      "op": "POST /users/{user_id}/microsoft.graph.sendMail",
+      "name": "send_mail",
+      "says": "Sends an email as the user, by ID or sign-in name, and saves it in Sent Items. Body: {\"message\": {\"subject\", \"body\": {\"contentType\": \"Text\", \"content\"}, \"toRecipients\": [{\"emailAddress\": {\"address\"}}]}}.",
+      "query": []
+    },
+    {
+      "op": "POST /users/{user_id}/messages/{message_id}/microsoft.graph.reply",
+      "name": "reply_to_message",
+      "says": "Replies to a message’s sender, or to its replyTo addresses when it has them, and saves the reply in Sent Items. Body: {\"comment\"}.",
+      "query": []
+    },
+    {
+      "op": "POST /users/{user_id}/events",
+      "name": "create_event",
+      "says": "Creates an event in a user’s default calendar; Graph sends an invitation to each attendee, and this can’t be turned off. Body: {\"subject\", \"start\": {\"dateTime\", \"timeZone\"}, \"end\": {\"dateTime\", \"timeZone\"}, \"attendees\": [{\"emailAddress\": {\"address\"}}]}.",
+      "query": []
+    },
+    {
+      "op": "POST /users/{user_id}/contacts",
+      "name": "create_contact",
+      "says": "Adds a contact to a user’s default Contacts folder. Body: {\"givenName\", \"surname\", \"emailAddresses\": [{\"address\", \"name\"}], \"businessPhones\": [numbers]}.",
+      "query": []
+    }
+  ]
+}

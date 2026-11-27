@@ -1,0 +1,221 @@
+{
+  "id": "google-classroom",
+  "name": "Google Classroom",
+  "abbr": "Cr",
+  "color": "#0F9D58",
+  "baseUrl": "https://classroom.googleapis.com",
+  "example": "https://classroom.googleapis.com",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Classroom API enabled, and a teacher’s or a Workspace for Education admin’s refresh token for these scopes under https://www.googleapis.com/auth/: classroom.courses.readonly, classroom.rosters.readonly, classroom.coursework.students, classroom.announcements, classroom.topics.readonly, classroom.courseworkmaterials.readonly, classroom.guardianlinks.students.readonly, classroom.profile.emails, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://classroom.googleapis.com/$discovery/rest?version=v1",
+      "version": "20261122"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_courses",
+      "method": "GET",
+      "path": "/v1/courses",
+      "description": "Lists the courses this account may see, newest first: a teacher or student sees their own, a domain administrator every course in the domain. teacherId or studentId (a user id, an email or me, never both) narrows it; courseStates takes one of ACTIVE, ARCHIVED, PROVISIONED, DECLINED, SUSPENDED.",
+      "query": ["teacherId", "studentId", "courseStates", "pageSize", "pageToken"],
+      "notes": {
+        "teacherId": "Restricts returned courses to those having a teacher with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `\"me\"`, indicating the requesting user If specified, `student_id` must be empty.",
+        "studentId": "Restricts returned courses to those having a student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `\"me\"`, indicating the requesting user If specified, `teacher_id` must be empty.",
+        "courseStates": "Restricts returned courses to those in one of the specified states. If unspecified, Courses in any state are returned.",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "get_course",
+      "method": "GET",
+      "path": "/v1/courses/{id}",
+      "description": "Returns one course: name, section, courseState, ownerId and alternateLink; id is the course’s id or an alias.",
+      "query": [],
+      "notes": {
+        "id": "Identifier of the course to return. This identifier can be either the Classroom-assigned identifier or an alias."
+      }
+    },
+    {
+      "name": "list_students",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/students",
+      "description": "Lists a course’s students, each with a userId and a profile holding their name; a profile’s email comes back only if the refresh token was granted the classroom.profile.emails scope.",
+      "query": ["pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "pageSize": "Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "list_teachers",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/teachers",
+      "description": "Lists a course’s teachers, each with a userId and a profile holding their name; a profile’s email comes back only if the refresh token was granted the classroom.profile.emails scope.",
+      "query": ["pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "pageSize": "Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "list_coursework",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/courseWork",
+      "description": "Lists a course’s coursework, last updated first; only PUBLISHED items unless courseWorkStates is DRAFT or DELETED. orderBy takes updateTime or dueDate, each with asc or desc, e.g. dueDate asc.",
+      "query": ["courseWorkStates", "orderBy", "pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "courseWorkStates": "Restriction on the work status to return. Only courseWork that matches is returned. If unspecified, items with a work status of `PUBLISHED` is returned.",
+        "orderBy": "Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported fields are `updateTime` and `dueDate`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `dueDate asc,update",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "get_coursework",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/courseWork/{id}",
+      "description": "Returns one piece of coursework: title, description, workType, state, dueDate and dueTime in UTC, and maxPoints. associatedWithDeveloper is true when it belongs to this OAuth client’s Cloud project, the only project Google lets edit it or grade and return its submissions.",
+      "query": [],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "id": "Identifier of the course work."
+      }
+    },
+    {
+      "name": "list_submissions",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions",
+      "description": "Lists the submissions to one piece of coursework, or to all of a course’s coursework when courseWorkId is -, each with its state, late flag and grades. userId (a user id, an email or me) narrows it to one student; states takes one of NEW, CREATED, TURNED_IN, RETURNED, RECLAIMED_BY_STUDENT; late takes LATE_ONLY or NOT_LATE_ONLY.",
+      "query": ["userId", "states", "late", "pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "courseWorkId": "Identifier of the student work to request. This may be set to the string literal `\"-\"` to request student work for all course work in the specified course.",
+        "userId": "Optional argument to restrict returned student work to those owned by the student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `\"me\"`, indicating the requesting user",
+        "states": "Requested submission states. If specified, returned student submissions match one of the specified submission states.",
+        "late": "Requested lateness value. If specified, returned student submissions are restricted by the requested value. If unspecified, submissions are returned regardless of `late` value.",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "get_submission",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}",
+      "description": "Returns one student submission: state, late, draftGrade and assignedGrade; draftGrade is seen only by the course’s teachers.",
+      "query": [],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "courseWorkId": "Identifier of the course work.",
+        "id": "Identifier of the student submission."
+      }
+    },
+    {
+      "name": "list_announcements",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/announcements",
+      "description": "Lists a course’s announcements, last updated first; only PUBLISHED ones unless announcementStates is DRAFT or DELETED.",
+      "query": ["announcementStates", "pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "announcementStates": "Restriction on the `state` of announcements returned. If this argument is left unspecified, the default value is `PUBLISHED`.",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "list_topics",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/topics",
+      "description": "Lists a course’s topics, each a topicId and a name; coursework and materials name their topic by topicId.",
+      "query": ["pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "list_coursework_materials",
+      "method": "GET",
+      "path": "/v1/courses/{courseId}/courseWorkMaterials",
+      "description": "Lists a course’s material posts, each with a title, a description and attached links, Drive files, videos or forms, last updated first; only PUBLISHED ones unless courseWorkMaterialStates is DRAFT or DELETED.",
+      "query": ["courseWorkMaterialStates", "pageSize", "pageToken"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "courseWorkMaterialStates": "Restriction on the work status to return. Only course work material that matches is returned. If unspecified, items with a work status of `PUBLISHED` is returned.",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "list_guardians",
+      "method": "GET",
+      "path": "/v1/userProfiles/{studentId}/guardians",
+      "description": "Lists a student’s guardians; studentId is a user id, an email or me. Guardians must be enabled for the domain, whoever asks; then a teacher reads the guardians of students in their own classes and a domain administrator any student’s, and studentId - (every student’s) is for administrators only.",
+      "query": ["pageSize", "pageToken"],
+      "notes": {
+        "studentId": "Filter results by the student who the guardian is linked to. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `\"me\"`, indicating the requesting user * the string literal `\"-\"`, indicating that results should be ret",
+        "pageSize": "Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.",
+        "pageToken": "nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token."
+      }
+    },
+    {
+      "name": "create_coursework",
+      "method": "POST",
+      "path": "/v1/courses/{courseId}/courseWork",
+      "description": "Creates coursework, a draft unless state is PUBLISHED; title and workType are required, dueDate and dueTime are in UTC, and only this OAuth client’s Cloud project may later edit it or grade and return its submissions. Body: {\"title\", \"workType\": \"ASSIGNMENT\", \"description\", \"state\": \"PUBLISHED\", \"maxPoints\", \"dueDate\": {\"year\", \"month\", \"day\"}, \"dueTime\": {\"hours\", \"minutes\"}, \"topicId\", \"materials\": [{\"link\": {\"url\"}}]}.",
+      "query": [],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias."
+      }
+    },
+    {
+      "name": "create_announcement",
+      "method": "POST",
+      "path": "/v1/courses/{courseId}/announcements",
+      "description": "Posts an announcement in a course, a draft unless state is PUBLISHED. Body: {\"text\", \"state\": \"PUBLISHED\", \"materials\": [{\"link\": {\"url\"}}]}.",
+      "query": [],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias."
+      }
+    },
+    {
+      "name": "grade_submission",
+      "method": "PATCH",
+      "path": "/v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}",
+      "description": "Grades a submission as a teacher of the course, only on coursework this OAuth client’s Cloud project created (associatedWithDeveloper true). updateMask is draftGrade (seen only by teachers) or assignedGrade,draftGrade (the grade returned to the student), never assignedGrade alone. Body: {\"draftGrade\": 90, \"assignedGrade\": 90}.",
+      "query": ["updateMask"],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "courseWorkId": "Identifier of the course work.",
+        "id": "Identifier of the student submission.",
+        "updateMask": "Mask that identifies which fields on the student submission to update. This field is required to do an update. The update fails if invalid fields are specified. The following fields may be specified by teachers: * `draft_grade` * `assigned_grade`"
+      }
+    },
+    {
+      "name": "return_submission",
+      "method": "POST",
+      "path": "/v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:return",
+      "description": "Returns a turned-in submission to its student, as a teacher of the course and only on coursework this OAuth client’s Cloud project created (associatedWithDeveloper true). It does not copy draftGrade into assignedGrade, so set assignedGrade first. Body: {}.",
+      "query": [],
+      "notes": {
+        "courseId": "Identifier of the course. This identifier can be either the Classroom-assigned identifier or an alias.",
+        "courseWorkId": "Identifier of the course work.",
+        "id": "Identifier of the student submission."
+      }
+    }
+  ]
+}

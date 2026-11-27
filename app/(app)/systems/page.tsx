@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,8 +14,16 @@ import { Card, PageHeader, Pill, Tag } from "@/components/shell/page-header";
 import { FilePicker } from "@/components/file-picker";
 import { QueryState } from "@/components/query-state";
 import { catalog, useActions, useSystems, type CatalogKind } from "@/lib/data";
-import type { HostApiEndpoint, HostApiMethod, HostSystemTest } from "@/lib/host/types";
+import type {
+  HostApiEndpoint,
+  HostApiMethod,
+  HostApiOAuthInput,
+  HostSpec,
+  HostSystemTest,
+} from "@/lib/host/types";
 import { isDemo } from "@/lib/iblai/session";
+import { load } from "@/lib/library";
+import { toolName, type ReadyApi } from "@/lib/library/types";
 import { cn } from "@/lib/utils";
 import { withScheme } from "@/lib/view/systems";
 
@@ -38,6 +48,8 @@ const schemeOf: Record<string, string> = {
 
 // The server builder reads this key to tick the same toolsets.
 const PREBUILT_KEY = "ontology.prebuilt";
+// "1" while the connected list is folded away.
+const HIDE_CONNECTED_KEY = "ontology.hide-connected";
 
 const demo = isDemo();
 const DEMO_URL = "snowflake://FIN_RO:••••@acme.us-east-1/FIN?warehouse=ANALYTICS";
@@ -91,8 +103,28 @@ function endpointOf(line: string): HostApiEndpoint | null {
 
 const keyOf = (ep: HostApiEndpoint) => `${ep.method} ${ep.path}`;
 
-type Row = { ep: HostApiEndpoint; on: boolean };
+// `own`: from a ready-made API, so named behind the API's own name when it is saved.
+type Row = { ep: HostApiEndpoint; on: boolean; own?: boolean };
 const DEMO_ROWS: Row[] = DEMO_ENDPOINTS.map((e) => ({ ep: endpointOf(e)!, on: true }));
+
+const NO_OAUTH: HostApiOAuthInput = {
+  grant: "client_credentials",
+  tokenUrl: "",
+  clientId: "",
+  clientAuth: "basic",
+  scope: "",
+  clientSecret: "",
+  refreshToken: "",
+};
+
+/** "3 operations and 12 parameters", for what a document held that a tool cannot carry. */
+function leftWords({ operations, parameters }: NonNullable<HostSpec["left"]>): string {
+  const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  return [
+    ...(operations ? [count(operations, "operation")] : []),
+    ...(parameters ? [count(parameters, "parameter")] : []),
+  ].join(" and ");
+}
 
 /** Adds a document's operations after the rows already there; a small one has its GETs ticked. */
 function mergeSpec(rows: Row[], eps: HostApiEndpoint[]): Row[] {
@@ -147,6 +179,14 @@ export default function SystemsPage() {
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
   const [tab, setTab] = useState("db");
   const shown = catalog.filter((c) => filter === "All" || c.group === groupOf[filter]);
+  // Client-only, as the providers render after mount.
+  const [connectedHidden, setConnectedHidden] = useState(
+    () => localStorage.getItem(HIDE_CONNECTED_KEY) === "1",
+  );
+  const toggleConnected = () => {
+    setConnectedHidden(!connectedHidden);
+    localStorage.setItem(HIDE_CONNECTED_KEY, connectedHidden ? "0" : "1");
+  };
 
   // Database tab
   const [url, setUrl] = useState(demo ? DEMO_URL : "");
@@ -173,6 +213,22 @@ export default function SystemsPage() {
   const apiName = nameDraft ?? apiNameOf(baseUrl);
   const [specUrl, setSpecUrl] = useState("");
   const [authHeader, setAuthHeader] = useState(demo ? DEMO_AUTH : "");
+  // OAuth in place of the header: the fields, and whether they are the ones in use.
+  const [oauthOn, setOauthOn] = useState(false);
+  const [oauth, setOauth] = useState(NO_OAUTH);
+  const setSignIn = (part: Partial<HostApiOAuthInput>) => setOauth((all) => ({ ...all, ...part }));
+  // With a refresh token the host renews from it; a ready-made API may ask for one.
+  const signIn: HostApiOAuthInput = {
+    ...oauth,
+    grant:
+      oauth.refreshToken.trim() || oauth.grant === "refresh_token"
+        ? "refresh_token"
+        : "client_credentials",
+  };
+  const auth = oauthOn ? { authHeader: "", oauth: signIn } : { authHeader };
+  // The ready-made API the form was filled from, for its example address and its hint.
+  const [ready, setReady] = useState<ReadyApi | null>(null);
+  const tokenExample = ready && "oauth" in ready.auth ? ready.auth.oauth.tokenExample : undefined;
   const [rows, setRows] = useState<Row[]>(demo ? DEMO_ROWS : []);
   const [manual, setManual] = useState("");
   const [manualBad, setManualBad] = useState(false);
@@ -194,13 +250,49 @@ export default function SystemsPage() {
     localStorage.setItem(PREBUILT_KEY, JSON.stringify(next));
   };
 
+  // Fills the HTTP API form from a ready-made API: its reads ticked, its changes left to tick.
+  const fillFrom = (api: ReadyApi) => {
+    const preset = "oauth" in api.auth ? api.auth.oauth : null;
+    setReady(api);
+    setNameDraft(api.id);
+    setBaseUrl(api.baseUrl);
+    setSpecUrl("");
+    setFind("");
+    setOauthOn(preset !== null);
+    setAuthHeader("header" in api.auth ? api.auth.header : "");
+    setOauth({
+      ...NO_OAUTH,
+      ...(preset && {
+        grant: preset.grant,
+        tokenUrl: preset.tokenUrl,
+        clientAuth: preset.clientAuth,
+        scope: preset.scope,
+      }),
+    });
+    const asks = api.ask ?? [];
+    setRows(
+      api.endpoints.map((ep) => ({
+        ep,
+        on: ep.method === "GET" || asks.includes(ep.name),
+        own: true,
+      })),
+    );
+  };
+
   const pickKind = (c: CatalogKind) => {
     const scheme = schemeOf[c.name];
     if (scheme) {
       setUrl((u) => withScheme(u, scheme));
       setFiles(scheme === "local://");
       setTab("db");
-    } else if (c.group === "api") setTab("api");
+    } else if (c.group === "api") {
+      setTab("api");
+      if (c.ready) {
+        void load[c.ready]().then(fillFrom, () =>
+          toast(`${c.name} did not load: reload the page.`),
+        );
+      }
+    }
   };
 
   // Closes the scope field, keeping what was typed; null drops it (Escape).
@@ -257,94 +349,116 @@ export default function SystemsPage() {
             <QueryState query={systemsQ}>
               {(data) => (
                 <>
-                  <div className="mb-2 flex items-center justify-between">
+                  <div
+                    className={cn("flex items-center justify-between", !connectedHidden && "mb-2")}
+                  >
                     <h3 className="text-sm font-semibold text-gray-900">
                       Connected to Institution
                     </h3>
-                    <span className="text-xs text-gray-600">
-                      {data.systems.length} databases · {data.apis.length} API
-                      {data.files.length > 0 && ` · ${data.files.length} filesystems`}
-                    </span>
-                  </div>
-                  {data.systems.map((s) => (
-                    <div
-                      key={s.key}
-                      className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
-                    >
-                      <div
-                        className="grid size-[34px] place-items-center rounded-lg text-[11px] font-bold text-white"
-                        style={{ background: s.color }}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600">
+                        {data.systems.length} databases · {data.apis.length} API
+                        {data.files.length > 0 && ` · ${data.files.length} filesystems`}
+                      </span>
+                      <button
+                        type="button"
+                        className="-mr-1 text-gray-400 hover:text-gray-700"
+                        aria-expanded={!connectedHidden}
+                        aria-label={`${connectedHidden ? "Show" : "Hide"} the connected systems`}
+                        onClick={toggleConnected}
                       >
-                        {s.abbr}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                          <b className="text-gray-900">{s.name}</b>{" "}
-                          <span className="text-gray-600">· {s.engine}</span>
-                          {s.dissect && <Tag tone="blue">dissect</Tag>}
-                          {s.serve && <Tag tone="green">serve</Tag>}
-                        </div>
-                        <small className="mono block truncate text-[11.5px] text-gray-600">
-                          {s.url} · {s.detail}
-                        </small>
-                      </div>
-                      {s.status === "ingested" ? (
-                        <Pill tone="green" dot>
-                          ingested
-                        </Pill>
-                      ) : (
-                        <Pill tone="amber" dot>
-                          {s.status}
-                        </Pill>
-                      )}
+                        <ChevronDown
+                          className={cn(
+                            "size-4 transition-transform",
+                            connectedHidden && "-rotate-90",
+                          )}
+                        />
+                      </button>
                     </div>
-                  ))}
-                  {data.apis.map((a) => (
-                    <div
-                      key={a.name}
-                      className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
-                    >
-                      <div className="grid size-[34px] place-items-center rounded-lg bg-[#FF7A59] text-[11px] font-bold text-white">
-                        API
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                          <b className="text-gray-900">{a.name}</b>{" "}
-                          <span className="text-gray-600">· HTTP API</span>{" "}
-                          <Tag tone="green">serve</Tag>
+                  </div>
+                  {!connectedHidden && (
+                    <>
+                      {data.systems.map((s) => (
+                        <div
+                          key={s.key}
+                          className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
+                        >
+                          <div
+                            className="grid size-[34px] place-items-center rounded-lg text-[11px] font-bold text-white"
+                            style={{ background: s.color }}
+                          >
+                            {s.abbr}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                              <b className="text-gray-900">{s.name}</b>{" "}
+                              <span className="text-gray-600">· {s.engine}</span>
+                              {s.dissect && <Tag tone="blue">dissect</Tag>}
+                              {s.serve && <Tag tone="green">serve</Tag>}
+                            </div>
+                            <small className="mono block truncate text-[11.5px] text-gray-600">
+                              {s.url} · {s.detail}
+                            </small>
+                          </div>
+                          {s.status === "ingested" ? (
+                            <Pill tone="green" dot>
+                              ingested
+                            </Pill>
+                          ) : (
+                            <Pill tone="amber" dot>
+                              {s.status}
+                            </Pill>
+                          )}
                         </div>
-                        <small className="mono block truncate text-[11.5px] text-gray-600">
-                          {a.baseUrl} · {a.endpoints} endpoints → {a.tools} tools
-                        </small>
-                      </div>
-                      <Pill tone="green" dot>
-                        serving
-                      </Pill>
-                    </div>
-                  ))}
-                  {data.files.map((f) => (
-                    <div
-                      key={f.name}
-                      className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
-                    >
-                      <div className="grid size-[34px] place-items-center rounded-lg bg-[#64748B] text-[11px] font-bold text-white">
-                        FS
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                          <b className="text-gray-900">{f.name}</b>{" "}
-                          <span className="text-gray-600">· Filesystem</span>{" "}
-                          <Tag tone="green">serve</Tag>
+                      ))}
+                      {data.apis.map((a) => (
+                        <div
+                          key={a.name}
+                          className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
+                        >
+                          <div className="grid size-[34px] place-items-center rounded-lg bg-[#FF7A59] text-[11px] font-bold text-white">
+                            API
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                              <b className="text-gray-900">{a.name}</b>{" "}
+                              <span className="text-gray-600">· HTTP API</span>{" "}
+                              <Tag tone="green">serve</Tag>
+                            </div>
+                            <small className="mono block truncate text-[11.5px] text-gray-600">
+                              {a.baseUrl} · {a.endpoints} endpoints → {a.tools} tools
+                            </small>
+                          </div>
+                          <Pill tone="green" dot>
+                            serving
+                          </Pill>
                         </div>
-                        <small className="mono block truncate text-[11.5px] text-gray-600">
-                          {f.url}
-                        </small>
-                      </div>
-                      <Pill tone="green" dot>
-                        serving
-                      </Pill>
-                    </div>
-                  ))}
+                      ))}
+                      {data.files.map((f) => (
+                        <div
+                          key={f.name}
+                          className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-color)] py-2.5 last:border-b-0"
+                        >
+                          <div className="grid size-[34px] place-items-center rounded-lg bg-[#64748B] text-[11px] font-bold text-white">
+                            FS
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                              <b className="text-gray-900">{f.name}</b>{" "}
+                              <span className="text-gray-600">· Filesystem</span>{" "}
+                              <Tag tone="green">serve</Tag>
+                            </div>
+                            <small className="mono block truncate text-[11.5px] text-gray-600">
+                              {f.url}
+                            </small>
+                          </div>
+                          <Pill tone="green" dot>
+                            serving
+                          </Pill>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
             </QueryState>
@@ -359,12 +473,22 @@ export default function SystemsPage() {
                 onClick={() => pickKind(c)}
                 className="rounded-lg border border-[var(--border-color)] bg-white p-3 text-left transition hover:border-[#0058cc]"
               >
-                <div
-                  className="mb-2 grid size-[30px] place-items-center rounded-md text-[11px] font-bold text-white"
-                  style={{ background: c.color }}
-                >
-                  {c.abbr}
-                </div>
+                {c.logo ? (
+                  <Image
+                    src={c.logo}
+                    alt=""
+                    width={30}
+                    height={30}
+                    className="mb-2 size-[30px] object-contain"
+                  />
+                ) : (
+                  <div
+                    className="mb-2 grid size-[30px] place-items-center rounded-md text-[11px] font-bold text-white"
+                    style={{ background: c.color }}
+                  >
+                    {c.abbr}
+                  </div>
+                )}
                 <b className="block text-[13px] font-semibold text-gray-900">{c.name}</b>
                 <div className="mt-2 flex gap-1">
                   {c.dissect ? <Cap kind="o">DISSECT</Cap> : <Cap kind="x">—</Cap>}
@@ -594,7 +718,7 @@ export default function SystemsPage() {
                 <Input
                   className="mono h-9"
                   value={baseUrl}
-                  placeholder={DEMO_BASE}
+                  placeholder={ready?.example ?? DEMO_BASE}
                   onChange={(e) => setBaseUrl(e.target.value)}
                 />
               </div>
@@ -608,13 +732,106 @@ export default function SystemsPage() {
                 />
               </div>
               <div>
-                <Label className="mb-1.5 text-gray-700">Upstream Auth Header</Label>
-                <Input
-                  className="mono h-9"
-                  value={authHeader}
-                  placeholder={DEMO_AUTH}
-                  onChange={(e) => setAuthHeader(e.target.value)}
-                />
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <Label className="text-gray-700">
+                    {oauthOn ? "Upstream Auth" : "Upstream Auth Header"}
+                  </Label>
+                  <span className="flex gap-3 text-xs text-gray-500">
+                    {(["Header", "OAuth 2.0"] as const).map((way) => (
+                      <button
+                        key={way}
+                        type="button"
+                        aria-pressed={oauthOn === (way === "OAuth 2.0")}
+                        className={cn(
+                          "hover:text-gray-900",
+                          oauthOn === (way === "OAuth 2.0") && "font-medium text-gray-900",
+                        )}
+                        onClick={() => setOauthOn(way === "OAuth 2.0")}
+                      >
+                        {way}
+                      </button>
+                    ))}
+                  </span>
+                </div>
+                {oauthOn ? (
+                  <div className="space-y-2.5">
+                    <div>
+                      <Label className="mb-1 text-xs font-normal text-gray-600">Token URL</Label>
+                      <Input
+                        className="mono h-9"
+                        value={oauth.tokenUrl}
+                        placeholder={tokenExample ?? "https://…/oauth2/token"}
+                        onChange={(e) => setSignIn({ tokenUrl: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1 text-xs font-normal text-gray-600">Client ID</Label>
+                      <Input
+                        className="mono h-9"
+                        value={oauth.clientId}
+                        onChange={(e) => setSignIn({ clientId: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1 text-xs font-normal text-gray-600">
+                        Client Secret
+                      </Label>
+                      <Input
+                        className="mono h-9"
+                        type="password"
+                        autoComplete="off"
+                        value={oauth.clientSecret}
+                        onChange={(e) => setSignIn({ clientSecret: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1 text-xs font-normal text-gray-600">
+                        Scope (optional)
+                      </Label>
+                      <Input
+                        className="mono h-9"
+                        value={oauth.scope}
+                        onChange={(e) => setSignIn({ scope: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-1 text-xs font-normal text-gray-600">
+                        {oauth.grant === "refresh_token"
+                          ? "Refresh Token"
+                          : "Refresh Token (optional)"}
+                      </Label>
+                      <Input
+                        className="mono h-9"
+                        type="password"
+                        autoComplete="off"
+                        value={oauth.refreshToken}
+                        onChange={(e) => setSignIn({ refreshToken: e.target.value })}
+                      />
+                    </div>
+                    <label className="flex items-start gap-2.5 rounded-md border border-[var(--border-color)] p-2.5 text-sm">
+                      <Checkbox
+                        checked={oauth.clientAuth === "body"}
+                        onCheckedChange={(on) => setSignIn({ clientAuth: on ? "body" : "basic" })}
+                        className="mt-0.5"
+                      />{" "}
+                      <span>
+                        Credentials in the body{" "}
+                        <span className="text-xs text-gray-600">
+                          · for a token URL that takes no Basic header
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                ) : (
+                  <Input
+                    className="mono h-9"
+                    aria-label="Upstream auth header"
+                    value={authHeader}
+                    placeholder={DEMO_AUTH}
+                    onChange={(e) => setAuthHeader(e.target.value)}
+                  />
+                )}
+                {ready && <p className="mt-1.5 text-xs text-gray-600">{ready.hint}</p>}
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between gap-3">
@@ -696,10 +913,13 @@ export default function SystemsPage() {
                   disabled={fetchSpec.busy || !specUrl.trim()}
                   onClick={() =>
                     void fetchSpec.run(async () => {
-                      const spec = await actions.fetchSpec({ url: specUrl, baseUrl, authHeader });
+                      const spec = await actions.fetchSpec({ url: specUrl, baseUrl, ...auth });
                       setRows((all) => mergeSpec(all, spec.endpoints));
                       if (spec.withoutAuth) {
                         toast(`Fetched without the auth header. With it, ${spec.withoutAuth}.`);
+                      }
+                      if (spec.left) {
+                        toast(`Left out ${leftWords(spec.left)} that a tool cannot carry.`);
                       }
                     })
                   }
@@ -712,11 +932,16 @@ export default function SystemsPage() {
                   disabled={addApi.busy}
                   onClick={() =>
                     void addApi.run(async () => {
+                      const name = apiName.trim();
                       await actions.addApi({
-                        name: apiName.trim(),
+                        name,
                         baseUrl,
-                        authHeader,
-                        endpoints: rows.filter((r) => r.on).map((r) => r.ep),
+                        ...auth,
+                        endpoints: rows
+                          .filter((r) => r.on)
+                          .map((r) =>
+                            r.own ? { ...r.ep, name: toolName(name, r.ep.name) } : r.ep,
+                          ),
                       });
                       router.push("/mcp/new");
                     })

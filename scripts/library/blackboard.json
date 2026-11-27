@@ -1,0 +1,114 @@
+{
+  "id": "blackboard",
+  "name": "Blackboard Learn",
+  "abbr": "Bb",
+  "color": "#262626",
+  "baseUrl": "",
+  "example": "https://learn.school.edu",
+  "hint": "A REST application’s key and secret from developer.blackboard.com, enabled by your Learn admin under REST API Integrations.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "/learn/api/public/v1/oauth2/token",
+      "clientAuth": "basic",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://developer.anthology.com/portal/docs/apis/learn-swagger.json"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /learn/api/public/v3/courses",
+      "name": "list_courses",
+      "says": "Lists courses, filtered by name, course ID or term.",
+      "query": ["name", "courseId", "termId", "limit", "offset", "sort"]
+    },
+    {
+      "op": "GET /learn/api/public/v3/courses/{courseId}",
+      "name": "get_course",
+      "says": "Returns one course. Its ID may be written courseId:<id> or externalId:<id>.",
+      "query": []
+    },
+    {
+      "op": "GET /learn/api/public/v1/courses/{courseId}/users",
+      "name": "list_course_members",
+      "says": "Lists a course’s members and their roles.",
+      "query": ["role", "limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v1/users/{userId}/courses",
+      "name": "list_user_courses",
+      "says": "Lists the courses a user is a member of.",
+      "query": ["role", "limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v1/users",
+      "name": "list_users",
+      "says": "Lists users, filtered by user name or family name.",
+      "query": ["userName", "name.family", "limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v1/users/{userId}",
+      "name": "get_user",
+      "says": "Returns one user. The ID may be written userName:<name> or externalId:<id>.",
+      "query": []
+    },
+    {
+      "op": "GET /learn/api/public/v2/courses/{courseId}/gradebook/columns",
+      "name": "list_grade_columns",
+      "says": "Lists a course’s grade columns, its assignments among them.",
+      "query": ["displayName", "name", "limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v2/courses/{courseId}/gradebook/columns/{columnId}/users",
+      "name": "list_column_grades",
+      "says": "Lists every member’s grade in one column.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v2/courses/{courseId}/gradebook/users/{userId}",
+      "name": "list_user_grades",
+      "says": "Lists one member’s grades in a course.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v1/courses/{courseId}/contents",
+      "name": "list_contents",
+      "says": "Lists a course’s content items.",
+      "query": ["title", "recursive", "limit", "offset"]
+    },
+    {
+      "op": "GET /learn/api/public/v1/courses/{courseId}/announcements",
+      "name": "list_announcements",
+      "says": "Lists a course’s announcements.",
+      "query": ["limit", "offset", "sort"]
+    },
+    {
+      "op": "GET /learn/api/public/v1/terms",
+      "name": "list_terms",
+      "says": "Lists terms.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "PATCH /learn/api/public/v2/courses/{courseId}/gradebook/columns/{columnId}/users/{userId}",
+      "name": "set_grade",
+      "says": "Sets or changes a member’s grade in a column. Body: {\"score\", \"text\", \"feedback\"}.",
+      "query": []
+    },
+    {
+      "op": "POST /learn/api/public/v1/courses/{courseId}/contents/createAssignment",
+      "name": "create_assignment",
+      "says": "Creates an assignment and its grade column. Body: {\"parentId\", \"title\", \"instructions\", \"grading\": {\"due\"}, \"score\": {\"possible\"}}.",
+      "query": []
+    },
+    {
+      "op": "POST /learn/api/public/v1/courses/{courseId}/announcements",
+      "name": "create_announcement",
+      "says": "Posts an announcement in a course. Body: {\"title\", \"body\"}.",
+      "query": []
+    }
+  ]
+}

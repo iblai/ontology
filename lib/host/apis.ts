@@ -3,19 +3,54 @@
 import { parse, stringify } from "yaml";
 import { apiAddress } from "./address";
 import { HostError } from "./errors";
-import { assertName, envName, homePath, readText, setEnv, writeAtomic } from "./files";
+import {
+  assertName,
+  envName,
+  homePath,
+  inTurn,
+  readEnv,
+  readText,
+  setEnv,
+  writeAtomic,
+} from "./files";
+import { forget, requestToken, tokenUrlOf } from "./oauth";
+import {
+  BODIES,
+  METHODS,
+  PLACE,
+  QUERY,
+  TOOL_NAME_MAX,
+  agentName,
+  endpointsFromSpec as fromSpec,
+  namesApart,
+  noteOf,
+  pathFits,
+  placesOf,
+  words,
+} from "./openapi";
 import { SEMANTIC_TOOLS } from "./semantic";
 import { toolsetDoc, type ToolboxDoc } from "./toolbox-config";
-import type { HostApi, HostApiEndpoint, HostApiInput, HostApiMethod, HostSpec } from "./types";
+import type {
+  HostApi,
+  HostApiEndpoint,
+  HostApiInput,
+  HostApiMethod,
+  HostApiOAuth,
+  HostApiOAuthInput,
+  HostSpec,
+} from "./types";
+
+export { METHODS, TOOL_NAME_MAX };
 
 /** An API as kept in apis.yaml. The secret itself is in the env file under `secretEnv`. */
 export type StoredApi = HostApi & { secretEnv: string | null; private: boolean; local: boolean };
 
-export const METHODS: HostApiMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-const BODIES = ["POST", "PUT", "PATCH"]; // the methods a JSON body goes with
+/** What an OAuth API's secrets are, as entered: "" keeps the one the env file holds. */
+type OAuthSecrets = { clientSecret: string; refreshToken: string };
+
 const TIMEOUT = "20s"; // the runtime's, under the gateway's own wait for a call
-export const TOOL_NAME_MAX = 64; // what an agent's model takes for a tool's name
-const NOTE_MAX = 300; // characters of what a parameter means
+/** The header the gateway sets on every call of an OAuth API's tool. */
+export const SIGNED_HEADER = "Authorization";
 // The private networks an API inside one may reach; loopback is LOOPBACK, link-local in neither.
 const PRIVATE = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"];
 // This machine, which an API on it may reach (when apiAddress takes it: see its rule).
@@ -33,22 +68,24 @@ const OWN_HEADERS = new Set([
 const ENV_REF = /^(?:([A-Za-z][A-Za-z0-9-]*) )?\$\{([A-Z0-9_]+)\}$/;
 const SCHEME = /^([A-Za-z][A-Za-z0-9-]*) +(\S.*)$/;
 const TOOL = /^[a-z][a-z0-9_-]*$/;
-// A value in a path as it is entered, `{id}`.
-const PLACE = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
-const SEGMENT = /^(?:[A-Za-z0-9._~-]|\{[A-Za-z][A-Za-z0-9_]*\})+$/;
-const QUERY = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+const GRANTS = ["client_credentials", "refresh_token"];
+// A client ID or a scope: one line of printable characters.
+const ONE_LINE = /^[\x20-\x7e]*$/;
 
 const bad = (message: string) => new HostError(400, message);
 
 /**
- * Checks an API against the old product's rules (name, address, header, each endpoint) and
- * splits the secret out of the auth header. Throws HostError 400 with the rule's own words.
+ * Checks an API against the old product's rules (name, address, header or OAuth, each endpoint)
+ * and splits its secrets out. Throws HostError 400 with the rule's own words.
  */
 export async function checkApi(
   input: HostApiInput,
-): Promise<{ api: StoredApi; secret: string | null }> {
+): Promise<{ api: StoredApi; secret: string | null; oauth: OAuthSecrets | null }> {
   const name = assertName(input.name.trim());
   const { address, private: inside, local } = await apiAddress(input.baseUrl);
+  if (input.oauth && input.authHeader.trim()) {
+    throw bad("An API signs in with a header or with OAuth, not with both.");
+  }
   const header = splitHeader(input.authHeader, envName(name, "API_KEY"));
   const endpoints = input.endpoints.map(checkEndpoint);
   const seen = new Set<string>();
@@ -56,6 +93,7 @@ export async function checkApi(
     if (seen.has(endpoint.name)) throw bad(`Two endpoints are named ${endpoint.name}.`);
     seen.add(endpoint.name);
   }
+  const oauth = input.oauth ? await checkOAuth(input.oauth, address, endpoints) : null;
   const api: StoredApi = {
     name,
     baseUrl: address,
@@ -65,8 +103,43 @@ export async function checkApi(
     secretEnv: header.env,
     private: inside,
     local,
+    ...(oauth ? { oauth } : {}),
   };
-  return { api, secret: header.secret };
+  const secrets = input.oauth
+    ? { clientSecret: input.oauth.clientSecret, refreshToken: input.oauth.refreshToken }
+    : null;
+  return { api, secret: header.secret, oauth: secrets };
+}
+
+// An OAuth sign-in as it is kept, without its secrets.
+async function checkOAuth(
+  entered: HostApiOAuth,
+  baseUrl: string,
+  endpoints: HostApiEndpoint[],
+): Promise<HostApiOAuth> {
+  const clientId = entered.clientId.trim();
+  const scope = words(entered.scope);
+  if (!GRANTS.includes(entered.grant) || !["basic", "body"].includes(entered.clientAuth)) {
+    throw bad("OAuth signs in with client credentials or a refresh token, by header or body.");
+  }
+  if (!clientId) throw bad("OAuth needs a client ID.");
+  if (!ONE_LINE.test(clientId) || !ONE_LINE.test(scope)) {
+    throw bad("A client ID and a scope are plain text on one line.");
+  }
+  const tokenUrl = entered.tokenUrl.trim();
+  await apiAddress(tokenUrlOf(tokenUrl, baseUrl));
+  const named = endpoints.find((endpoint) =>
+    [...endpoint.query.map(agentName), ...placesOf(endpoint.path)].some(
+      (param) => param.toLowerCase() === SIGNED_HEADER.toLowerCase(),
+    ),
+  );
+  if (named) {
+    throw bad(
+      `With OAuth the gateway sets ${SIGNED_HEADER} itself: ${named.name} cannot have a ` +
+        "parameter of that name.",
+    );
+  }
+  return { grant: entered.grant, tokenUrl, clientId, clientAuth: entered.clientAuth, scope };
 }
 
 /**
@@ -92,6 +165,36 @@ export function specHeader(
   if (ref && !secret) throw bad(`${ref[2]} is not in this platform’s secrets.`);
   const sent = ref?.[1] ? `${ref[1]} ${secret}` : secret;
   return { headers: { [full.slice(0, colon).trim()]: sent }, withheld: false };
+}
+
+/**
+ * The same for an OAuth API: a token the host signs in for, sent to the base URL's origin alone.
+ * With a refresh token, which a sign-in may use up before the API is saved, no token is sent.
+ * Throws HostError 400 with the token endpoint's own words.
+ */
+export async function specToken(
+  url: string,
+  baseUrl: string,
+  oauth: HostApiOAuthInput,
+): Promise<{ headers: Record<string, string>; withheld: boolean }> {
+  const origin = originOf(url);
+  if (!origin || origin !== originOf(baseUrl)) return { headers: {}, withheld: true };
+  if (oauth.grant !== "client_credentials") return { headers: {}, withheld: false };
+  const { address } = await apiAddress(baseUrl);
+  const { clientSecret, refreshToken, ...kept } = oauth;
+  try {
+    const { token } = await requestToken({
+      oauth: kept,
+      baseUrl: address,
+      clientSecret,
+      refreshToken,
+    });
+    return { headers: { [SIGNED_HEADER]: `Bearer ${token}` }, withheld: false };
+  } catch (error) {
+    throw error instanceof HostError
+      ? error
+      : bad(error instanceof Error ? error.message : String(error));
+  }
 }
 
 // A value alone is the value of Authorization, as entered.
@@ -183,27 +286,22 @@ function checkEndpoint(entered: HostApiEndpoint): HostApiEndpoint {
     );
   }
   const path = entered.path.trim();
-  const segments = path.replace(/^\/+|\/+$/g, "").split("/");
-  if (
-    !path.startsWith("/") ||
-    !segments.every((segment) => SEGMENT.test(segment)) ||
-    segments.some((segment) => segment === "." || segment === "..")
-  ) {
+  if (!pathFits(path)) {
     throw bad(
       "A path starts with / and holds plain segments and {name} for a value: " +
         "/invoices/{invoice_id}/notes",
     );
   }
   const query = entered.query.map((q) => q.trim()).filter(Boolean);
-  const names = [
-    ...new Set(placesOf(path)),
-    ...query,
-    ...(BODIES.includes(method) ? ["body"] : []),
-  ].map((n) => n.toLowerCase());
-  if (!query.every((q) => QUERY.test(q)) || new Set(names).size !== names.length) {
+  if (!query.every((q) => QUERY.test(q))) {
     throw bad(
-      "A query name is letters, digits, '_', '.' and '-', and repeats no name in the path " +
-        "or 'body'.",
+      `A query name of ${name} is letters, digits, '_', '.' and '-', after an optional '$'.`,
+    );
+  }
+  if (!namesApart(method, path, query)) {
+    throw bad(
+      `${name} has two parameters an agent would see alike: its path’s values, its query names ` +
+        "(without '$') and 'body' must differ, whatever their case.",
     );
   }
   const notes: Record<string, string> = {};
@@ -222,21 +320,21 @@ function checkEndpoint(entered: HostApiEndpoint): HostApiEndpoint {
   };
 }
 
-const placesOf = (path: string) => [...path.matchAll(PLACE)].map((match) => match[1]);
-
 /**
  * The documents one API becomes: sources `<name>-reads` and `<name>-writes`, one tool per
  * endpoint, and the toolsets `<name>-reads` and `<name>-writes` (only those that have tools).
+ * An OAuth API's sources carry no key: each of its tools takes the header from the gateway.
  */
 export function apiDocs(api: StoredApi): ToolboxDoc[] {
   // One address twice, so a read never runs where a change does.
   const sides = [`${api.name}-reads`, `${api.name}-writes`];
+  const signed = Boolean(api.oauth);
   const tools = api.endpoints.map((endpoint) =>
-    toolOf(endpoint, endpoint.method === "GET" ? sides[0] : sides[1]),
+    toolOf(endpoint, endpoint.method === "GET" ? sides[0] : sides[1], signed),
   );
   const colon = api.authHeader.indexOf(":");
   const headers =
-    colon < 0
+    signed || colon < 0
       ? undefined
       : { [api.authHeader.slice(0, colon).trim()]: api.authHeader.slice(colon + 1).trim() };
   const ranges = [...(api.private ? PRIVATE : []), ...(api.local ? LOOPBACK : [])];
@@ -261,8 +359,35 @@ export function apiDocs(api: StoredApi): ToolboxDoc[] {
   return [...sources, ...tools, ...toolsets];
 }
 
+/** The tools of a config the gateway signs, each by the API it calls. */
+export function signedTools(docs: ToolboxDoc[]): Record<string, string> {
+  // No prototype: a tool may be named "constructor".
+  const found: Record<string, string> = Object.create(null);
+  for (const doc of docs) {
+    if (doc.kind !== "tool" || doc.type !== "http" || !Array.isArray(doc.headerParams)) continue;
+    const side = /^(.+)-(?:reads|writes)$/.exec(String(doc.source ?? ""));
+    const takes = doc.headerParams.some((param) => isRecord(param) && param.name === SIGNED_HEADER);
+    if (side && takes) found[doc.name] = side[1];
+  }
+  return found;
+}
+
+/** The query names of a config's tools that start with $ (Graph's $filter), by tool. */
+export function dollarQueries(docs: ToolboxDoc[]): Record<string, string[]> {
+  // No prototype: a tool may be named "constructor".
+  const found: Record<string, string[]> = Object.create(null);
+  for (const doc of docs) {
+    if (doc.kind !== "tool" || doc.type !== "http" || !Array.isArray(doc.queryParams)) continue;
+    const named = doc.queryParams
+      .map((param) => (isRecord(param) && typeof param.name === "string" ? param.name : ""))
+      .filter((name) => name.startsWith("$"));
+    if (named.length) found[doc.name] = named;
+  }
+  return found;
+}
+
 // An endpoint as the runtime's http tool on the API's source for its kind.
-function toolOf(endpoint: HostApiEndpoint, source: string): ToolboxDoc {
+function toolOf(endpoint: HostApiEndpoint, source: string, signed: boolean): ToolboxDoc {
   const doc: ToolboxDoc = {
     kind: "tool",
     name: endpoint.name,
@@ -273,19 +398,22 @@ function toolOf(endpoint: HostApiEndpoint, source: string): ToolboxDoc {
     // Under the address, and each value escaped: a "/" in one stays part of the value.
     path: endpoint.path.replace(/^\/+/, "").replace(PLACE, "{{pathEscape .$1}}"),
   };
+  // Own notes only: a parameter may be named "constructor".
+  const said = (param: string) =>
+    endpoint.notes && Object.hasOwn(endpoint.notes, param) ? endpoint.notes[param] : undefined;
   const values = [...new Set(placesOf(endpoint.path))];
   if (values.length) {
     doc.pathParams = values.map((v) => ({
       name: v,
       type: "string",
-      description: endpoint.notes?.[v] ?? v.replaceAll("_", " "),
+      description: said(v) ?? v.replaceAll("_", " "),
     }));
   }
   if (endpoint.query.length) {
     doc.queryParams = endpoint.query.map((q) => ({
       name: q,
       type: "string",
-      description: endpoint.notes?.[q] ?? q.replaceAll("_", " "),
+      description: said(q) ?? q.replaceAll("_", " "),
       required: false,
     }));
   }
@@ -296,6 +424,11 @@ function toolOf(endpoint: HostApiEndpoint, source: string): ToolboxDoc {
       { name: "body", type: "map", description: "The JSON body to send, as one object." },
     ];
     doc.requestBody = "{{json .body}}";
+  }
+  if (signed) {
+    doc.headerParams = [
+      { name: SIGNED_HEADER, type: "string", description: "Set by the gateway." },
+    ];
   }
   return doc;
 }
@@ -311,107 +444,119 @@ export async function listApis(): Promise<StoredApi[]> {
   return (value as StoredApi[]).map((api) => ({ ...api, local: api.local === true }));
 }
 
-/** Checks, writes the secret to the env file and the API to apis.yaml (replacing its name). */
+/**
+ * Checks, signs in once when the API uses OAuth, writes the secrets to the env file and the API
+ * to apis.yaml (replacing its name).
+ */
 export async function saveApi(input: HostApiInput): Promise<HostApi> {
-  const { api, secret } = await checkApi(input);
-  const apis = await listApis();
-  const taken = new Set(
-    apis.filter((other) => other.name !== api.name).flatMap((o) => o.endpoints.map((e) => e.name)),
-  );
-  const clash = api.endpoints.find((endpoint) => taken.has(endpoint.name));
-  if (clash)
-    throw bad(`A tool named ${clash.name} exists already: name the endpoint something else.`);
-  if (secret !== null && api.secretEnv) await setEnv(api.secretEnv, secret);
-  const at = apis.findIndex((other) => other.name === api.name);
-  const next = at < 0 ? [...apis, api] : apis.map((other, i) => (i === at ? api : other));
-  await writeAtomic(homePath("apis.yaml"), stringify(next));
-  const { name, baseUrl, authHeader, endpoints, tools } = api;
-  return { name, baseUrl, authHeader, endpoints, tools };
-}
-
-/** The operations of a parsed OpenAPI 3 or Swagger 2 document, as endpoints to choose from. */
-export function endpointsFromSpec(doc: unknown): HostSpec {
-  const openapi = isRecord(doc) && typeof doc.openapi === "string" && doc.openapi.startsWith("3.");
-  const swagger = isRecord(doc) && doc.swagger === "2.0";
-  if (!isRecord(doc) || !(openapi || swagger) || !isRecord(doc.paths)) {
-    throw bad("That is not an OpenAPI 3 or Swagger 2 document with paths.");
-  }
-  const title = isRecord(doc.info) && typeof doc.info.title === "string" ? doc.info.title : "";
-  const taken = new Set<string>();
-  const endpoints: HostApiEndpoint[] = [];
-  for (const [path, item] of Object.entries(doc.paths as Record<string, unknown>)) {
-    if (!isRecord(item)) continue;
-    const shared = paramsOf(doc, item.parameters);
-    for (const [key, op] of Object.entries(item)) {
-      const method = key.toUpperCase() as HostApiMethod;
-      if (!METHODS.includes(method) || !isRecord(op)) continue;
-      const id = typeof op.operationId === "string" ? op.operationId.trim() : "";
-      const params = [...shared, ...paramsOf(doc, op.parameters)].filter(
-        (param) => typeof param.name === "string",
-      );
-      const query = params.filter((p) => p.in === "query").map((p) => p.name as string);
-      const notes: Record<string, string> = {};
-      for (const param of params) {
-        const said = noteOf(param.description);
-        if (said && (param.in === "query" || param.in === "path")) {
-          notes[param.name as string] = said;
-        }
-      }
-      endpoints.push({
-        name: unique(snake(id || `${key} ${path}`), taken),
-        method,
-        path,
-        description: words(op.summary) || words(op.description) || `${method} ${path}`,
-        query: [...new Set(query)],
-        ...(Object.keys(notes).length ? { notes } : {}),
-      });
+  const { api, secret, oauth } = await checkApi(input);
+  const refuseClash = (apis: StoredApi[]) => {
+    const taken = new Set(
+      apis
+        .filter((other) => other.name !== api.name)
+        .flatMap((o) => o.endpoints.map((e) => e.name)),
+    );
+    const clash = api.endpoints.find((endpoint) => taken.has(endpoint.name));
+    if (clash) {
+      throw bad(`A tool named ${clash.name} exists already: name the endpoint something else.`);
     }
+  };
+  const seen = await listApis();
+  refuseClash(seen);
+  // Signed in outside the file's turn: a token request may take seconds.
+  const before = seen.find((other) => other.name === api.name);
+  const signed =
+    api.oauth && oauth ? await keepOAuth(api.name, api.baseUrl, api.oauth, oauth, before) : false;
+  await inTurn("apis", async () => {
+    // Read again: another save may have written since.
+    const apis = await listApis();
+    refuseClash(apis);
+    if (secret !== null && api.secretEnv) await setEnv(api.secretEnv, secret);
+    const at = apis.findIndex((other) => other.name === api.name);
+    const next = at < 0 ? [...apis, api] : apis.map((other, i) => (i === at ? api : other));
+    await writeAtomic(homePath("apis.yaml"), stringify(next));
+  });
+  // After the write: a token asked for from here on is asked with the new sign-in.
+  if (signed) forget(api.name);
+  const { name, baseUrl, authHeader, endpoints, tools } = api;
+  return {
+    name,
+    baseUrl,
+    authHeader,
+    endpoints,
+    tools,
+    ...(api.oauth ? { oauth: api.oauth } : {}),
+  };
+}
+
+// Proves an OAuth sign-in with one token request, then keeps its secrets; whether it signed in.
+// A save that changes neither the sign-in nor a secret asks for no token, so it spends no
+// refresh token.
+async function keepOAuth(
+  name: string,
+  baseUrl: string,
+  oauth: HostApiOAuth,
+  entered: OAuthSecrets,
+  before: StoredApi | undefined,
+): Promise<boolean> {
+  const env = await readEnv();
+  const [secretEnv, refreshEnv] = [
+    envName(name, "OAUTH_CLIENT_SECRET"),
+    envName(name, "OAUTH_REFRESH_TOKEN"),
+  ];
+  const clientSecret = entered.clientSecret || env[secretEnv] || "";
+  const refreshToken = entered.refreshToken || env[refreshEnv] || "";
+  if (oauth.grant === "client_credentials" && !clientSecret) {
+    throw bad("OAuth needs the client secret.");
   }
-  return { title, endpoints };
-}
-
-// A list of parameters, each a local $ref resolved once.
-function paramsOf(root: Record<string, unknown>, value: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((param) => resolve(root, param)).filter(isRecord);
-}
-
-function resolve(root: Record<string, unknown>, value: unknown): unknown {
-  const ref = isRecord(value) ? value.$ref : undefined;
-  if (typeof ref !== "string" || !ref.startsWith("#/")) return value;
-  let node: unknown = root;
-  for (const part of ref.slice(2).split("/")) {
-    if (!isRecord(node)) return null;
-    node = node[part.replaceAll("~1", "/").replaceAll("~0", "~")];
+  if (oauth.grant === "refresh_token" && !refreshToken) {
+    throw bad("This sign-in needs a refresh token.");
   }
-  return node;
-}
-
-// Lowercase snake_case, starting with a letter, TOOL_NAME_MAX characters at most.
-function snake(text: string): string {
-  const name = text
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[^A-Za-z0-9]+/g, "_")
-    .toLowerCase()
-    .replace(/^_+|_+$/g, "");
-  const lead = /^[a-z]/.test(name) ? name : `op_${name}`;
-  return lead.slice(0, TOOL_NAME_MAX).replace(/_+$/, "");
-}
-
-function unique(name: string, taken: Set<string>): string {
-  let kept = name;
-  for (let n = 2; taken.has(kept); n++) {
-    kept = `${name.slice(0, TOOL_NAME_MAX - String(n).length - 1)}_${n}`;
+  const typed = Boolean(entered.clientSecret || entered.refreshToken);
+  if (!typed && before?.oauth && before.baseUrl === baseUrl && sameSignIn(before.oauth, oauth)) {
+    return false;
   }
-  taken.add(kept);
-  return kept;
+  // A held secret goes to the token address it was entered for, and no other.
+  const tokenOrigin = (o: HostApiOAuth, base: string) => originOf(tokenUrlOf(o.tokenUrl, base));
+  const moved =
+    before?.oauth && tokenOrigin(before.oauth, before.baseUrl) !== tokenOrigin(oauth, baseUrl);
+  const held =
+    (!entered.clientSecret && env[secretEnv]) ||
+    (oauth.grant === "refresh_token" && !entered.refreshToken && env[refreshEnv]);
+  if (moved && held) {
+    throw bad("The token address moved to another host: type the client secret and token again.");
+  }
+  let answer: Awaited<ReturnType<typeof requestToken>>;
+  try {
+    answer = await requestToken({ oauth, baseUrl, clientSecret, refreshToken });
+  } catch (error) {
+    throw bad(error instanceof Error ? error.message : String(error));
+  }
+  if (clientSecret) await setEnv(secretEnv, clientSecret);
+  if (oauth.grant === "refresh_token") {
+    // One read from the env file is replaced only while it is still there: the gateway may have
+    // renewed it meanwhile.
+    const only = entered.refreshToken ? undefined : refreshToken;
+    await setEnv(refreshEnv, answer.refreshToken ?? refreshToken, only);
+  }
+  return true;
 }
 
-const words = (value: unknown) =>
-  typeof value === "string" ? value.split(/\s+/).filter(Boolean).join(" ") : "";
+const sameSignIn = (a: HostApiOAuth, b: HostApiOAuth) =>
+  a.grant === b.grant &&
+  a.tokenUrl === b.tokenUrl &&
+  a.clientId === b.clientId &&
+  a.clientAuth === b.clientAuth &&
+  a.scope === b.scope;
 
-// One line a tool can carry: the runtime would read "${" as a setting of its own.
-const noteOf = (value: unknown) => words(value).replaceAll("${", "$ {").slice(0, NOTE_MAX);
+/** The operations of a parsed OpenAPI 3, Swagger 2 or Google Discovery document, as endpoints. */
+export function endpointsFromSpec(doc: unknown): HostSpec {
+  try {
+    return fromSpec(doc);
+  } catch (error) {
+    throw bad(error instanceof Error ? error.message : String(error));
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

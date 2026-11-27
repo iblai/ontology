@@ -1,0 +1,236 @@
+{
+  "id": "m365-education",
+  "name": "Microsoft 365 Education",
+  "abbr": "Ed",
+  "color": "#0078D4",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: EduRoster.Read.All, EduAssignments.Read.All, EduAssignments.ReadWriteBasic.All; the roster comes from School Data Sync, and the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Education.yml",
+      "version": "v1.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_classes",
+      "method": "GET",
+      "path": "/education/classes",
+      "description": "Lists the first page of the directory’s classes.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_class",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}",
+      "description": "Returns one class. Its ID is also the ID of the class’s Microsoft 365 group.",
+      "query": ["$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_class_members",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/members",
+      "description": "Lists a class’s students and teachers.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_class_teachers",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/teachers",
+      "description": "Lists a class’s teachers.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_class_assignments",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/assignments",
+      "description": "Lists all of a class’s assignments, drafts included. filter takes OData on any property, such as status eq 'assigned'.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_assignment",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/assignments/{educationAssignment_id}",
+      "description": "Returns one assignment. Its status is draft, scheduled, published while it is being handed out, or assigned once students have it.",
+      "query": ["$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "educationAssignment_id": "The unique identifier of educationAssignment",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_assignment_submissions",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/assignments/{educationAssignment_id}/submissions",
+      "description": "Lists the submissions to one assignment, one per student once it is published. filter takes OData on any property, such as status eq 'submitted'.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "educationAssignment_id": "The unique identifier of educationAssignment",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_submission",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/assignments/{educationAssignment_id}/submissions/{educationSubmission_id}",
+      "description": "Returns one student’s submission and its status; the grade and feedback are in its outcomes.",
+      "query": ["$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "educationAssignment_id": "The unique identifier of educationAssignment",
+        "educationSubmission_id": "The unique identifier of educationSubmission",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_submission_outcomes",
+      "method": "GET",
+      "path": "/education/classes/{educationClass_id}/assignments/{educationAssignment_id}/submissions/{educationSubmission_id}/outcomes",
+      "description": "Lists a submission’s grades and feedback: points, feedback and rubric outcomes. Each holds the teacher’s latest value and the one returned to the student, such as points and publishedPoints.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "educationAssignment_id": "The unique identifier of educationAssignment",
+        "educationSubmission_id": "The unique identifier of educationSubmission",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_user_classes",
+      "method": "GET",
+      "path": "/education/users/{educationUser_id}/classes",
+      "description": "Lists the classes a student or teacher is in. The user ID is their Microsoft Entra user ID.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationUser_id": "The unique identifier of educationUser",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_user_assignments",
+      "method": "GET",
+      "path": "/education/users/{educationUser_id}/assignments",
+      "description": "Lists a student’s or teacher’s assignments across all their classes. instructions and webUrl are always null here; get the assignment from its class for them.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationUser_id": "The unique identifier of educationUser",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_schools",
+      "method": "GET",
+      "path": "/education/schools",
+      "description": "Lists the first page of the directory’s schools.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_school",
+      "method": "GET",
+      "path": "/education/schools/{educationSchool_id}",
+      "description": "Returns one school, with its address and principal.",
+      "query": ["$select"],
+      "notes": {
+        "educationSchool_id": "The unique identifier of educationSchool",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_school_classes",
+      "method": "GET",
+      "path": "/education/schools/{educationSchool_id}/classes",
+      "description": "Lists the first page of a school’s classes.",
+      "query": ["$filter"],
+      "notes": {
+        "educationSchool_id": "The unique identifier of educationSchool",
+        "$filter": "Filter items by property values"
+      }
+    },
+    {
+      "name": "list_school_users",
+      "method": "GET",
+      "path": "/education/schools/{educationSchool_id}/users",
+      "description": "Lists the first page of a school’s users, each with a primaryRole such as student or teacher.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "educationSchool_id": "The unique identifier of educationSchool",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "create_assignment",
+      "method": "POST",
+      "path": "/education/classes/{educationClass_id}/assignments",
+      "description": "Creates a draft assignment in a class; students see it only once it is published. Body: {\"displayName\", \"dueDateTime\", \"instructions\": {\"contentType\": \"text\", \"content\"}, \"grading\": {\"@odata.type\": \"#microsoft.graph.educationAssignmentPointsGradeType\", \"maxPoints\"}, \"assignTo\": {\"@odata.type\": \"#microsoft.graph.educationAssignmentClassRecipient\"}}, dueDateTime in ISO 8601 UTC.",
+      "query": [],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass"
+      }
+    },
+    {
+      "name": "publish_assignment",
+      "method": "POST",
+      "path": "/education/classes/{educationClass_id}/assignments/{educationAssignment_id}/microsoft.graph.publish",
+      "description": "Publishes a draft assignment: each student it is assigned to sees it and gets a submission. It runs in the background, so get the assignment after; its status turns assigned when done, or back to draft if it failed. Body: {}.",
+      "query": [],
+      "notes": {
+        "educationClass_id": "The unique identifier of educationClass",
+        "educationAssignment_id": "The unique identifier of educationAssignment"
+      }
+    }
+  ]
+}

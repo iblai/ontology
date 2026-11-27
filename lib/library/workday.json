@@ -1,0 +1,172 @@
+{
+  "id": "workday",
+  "name": "Workday",
+  "abbr": "Wd",
+  "color": "#005CB9",
+  "baseUrl": "",
+  "example": "https://wd2-impl-services1.workday.com/ccx/api/staffing/v7/acme",
+  "hint": "An API client for integrations and its refresh token; View API Clients in Workday shows both addresses.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "",
+      "tokenExample": "https://wd2-impl-services1.workday.com/ccx/oauth2/acme/token",
+      "clientAuth": "basic",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://community.workday.com/sites/default/files/file-hosting/restapi/staffing_v7_20261121_oas2.json",
+      "version": "v7"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_workers",
+      "method": "GET",
+      "path": "/workers",
+      "description": "Lists workers with their current job; search matches a name.",
+      "query": ["search", "email", "includeTerminatedWorkers", "limit", "offset"],
+      "notes": {
+        "search": "Searches workers by name or worker ID. The search is case-insensitive. You can include space-delimited search strings for an OR search.",
+        "email": "Only return workers whose email matches.",
+        "includeTerminatedWorkers": "Include terminated workers in the output",
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "get_worker",
+      "method": "GET",
+      "path": "/workers/{ID}",
+      "description": "Returns one worker and their current staffing information.",
+      "query": [],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Employee_ID, Contingent_Worker_ID - **Named entry**: Valid values: `me`."
+      }
+    },
+    {
+      "name": "list_service_dates",
+      "method": "GET",
+      "path": "/workers/{ID}/serviceDates",
+      "description": "Lists a worker’s service dates: hire date, continuous service and the like.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Employee_ID, Contingent_Worker_ID - **Named entry**: Valid values: `me`.",
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "list_worker_skills",
+      "method": "GET",
+      "path": "/workers/{ID}/skillItems",
+      "description": "Lists a worker’s skills.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Employee_ID, Contingent_Worker_ID - **Named entry**: Valid values: `me`.",
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "list_supervisory_orgs",
+      "method": "GET",
+      "path": "/supervisoryOrganizations",
+      "description": "Lists supervisory organizations.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "get_supervisory_org",
+      "method": "GET",
+      "path": "/supervisoryOrganizations/{ID}",
+      "description": "Returns one supervisory organization.",
+      "query": [],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Organization_Reference_ID"
+      }
+    },
+    {
+      "name": "list_org_members",
+      "method": "GET",
+      "path": "/supervisoryOrganizations/{ID}/members",
+      "description": "Lists the members of a supervisory organization.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Organization_Reference_ID",
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "get_org_chart",
+      "method": "GET",
+      "path": "/supervisoryOrganizations/{ID}/orgChart",
+      "description": "Returns the organization chart under a supervisory organization.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Organization_Reference_ID",
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "list_jobs",
+      "method": "GET",
+      "path": "/jobs",
+      "description": "Lists jobs.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "get_job",
+      "method": "GET",
+      "path": "/jobs/{ID}",
+      "description": "Returns one job.",
+      "query": [],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Position_ID"
+      }
+    },
+    {
+      "name": "list_job_profiles",
+      "method": "GET",
+      "path": "/jobProfiles",
+      "description": "Lists job profiles.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    },
+    {
+      "name": "get_job_profile",
+      "method": "GET",
+      "path": "/jobProfiles/{ID}",
+      "description": "Returns one job profile.",
+      "query": [],
+      "notes": {
+        "ID": "The Workday ID of the resource. Accepts: - **Workday ID**: Workday ID (32-character lowercase hexadecimal string). - **Reference ID**: Workday reference ID (Type=Value). Valid types: Job_Profile_ID"
+      }
+    },
+    {
+      "name": "list_job_families",
+      "method": "GET",
+      "path": "/jobFamilies",
+      "description": "Lists job families.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "limit": "The maximum number of objects in a single response. The default is 20. The maximum is 100.",
+        "offset": "The zero-based index of the first object in a response collection. The default is 0. Use offset with the limit parameter to control paging of a response collection. Example: If limit is 5 and offset is 9, the response returns a collection of 5 objects starting with the 10th object."
+      }
+    }
+  ]
+}

@@ -1,0 +1,184 @@
+{
+  "id": "google-drive",
+  "name": "Google Drive",
+  "abbr": "Dr",
+  "color": "#4285F4",
+  "baseUrl": "https://www.googleapis.com/drive/v3",
+  "example": "https://www.googleapis.com/drive/v3",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Drive API enabled, and one account’s refresh token for this scope under https://www.googleapis.com/auth/: drive (drive.readonly if agents only read), for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+      "version": "20261117"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_files",
+      "method": "GET",
+      "path": "/files",
+      "description": "Searches My Drive and Shared with me; q filters, e.g. name contains 'budget' and trashed = false, as trashed files are listed otherwise, and shared drives need corpora=drive with driveId (or allDrives) plus supportsAllDrives and includeItemsFromAllDrives true. Drive returns only kind, id, name and mimeType unless fields names more, e.g. nextPageToken,files(id,name,mimeType,modifiedTime,owners(emailAddress),webViewLink).",
+      "query": [
+        "q",
+        "fields",
+        "pageSize",
+        "pageToken",
+        "orderBy",
+        "corpora",
+        "driveId",
+        "includeItemsFromAllDrives",
+        "supportsAllDrives"
+      ],
+      "notes": {
+        "q": "A query for filtering the file results. For supported syntax, see [Search for files and folders](/workspace/drive/api/guides/search-files).",
+        "fields": "Selector specifying which fields to include in a partial response.",
+        "pageSize": "The maximum number of files to return. The service may return fewer than this value. If unspecified, at most 100 files will be returned for shared drives, and the entire list of files for non-shared drives. The maximum value is 1000; values above 1000 will be coerced to 1000.",
+        "pageToken": "The token for continuing a previous list request on the next page. This should be set to the value of `nextPageToken` from the previous response.",
+        "orderBy": "A comma-separated list of sort keys. Valid keys are: * `createdTime`: When the file was created. Avoid using this key for queries on large item collections as it might result in timeouts or other issues. For time-related sorting on large item collections, use `modifiedTime desc` instead. * `folder`:",
+        "corpora": "Specifies a collection of items (files or documents) to which the query applies. Supported items include: * `user` * `domain` * `drive` * `allDrives` Prefer `user` or `drive` to `allDrives` for efficiency. By default, corpora is set to `user`. However, this can change depending on the filter set thr",
+        "driveId": "ID of the shared drive to search.",
+        "includeItemsFromAllDrives": "Whether both My Drive and shared drive items should be included in results.",
+        "supportsAllDrives": "Whether the requesting application supports both My Drives and shared drives."
+      }
+    },
+    {
+      "name": "get_file",
+      "method": "GET",
+      "path": "/files/{fileId}",
+      "description": "Returns one file’s metadata, not its content: a default set of fields unless fields names more, e.g. id,name,mimeType,parents,owners(emailAddress),modifiedTime,size,webViewLink. Set supportsAllDrives to true for a file on a shared drive.",
+      "query": ["fields", "supportsAllDrives"],
+      "notes": {
+        "fileId": "The ID of the file.",
+        "fields": "Selector specifying which fields to include in a partial response.",
+        "supportsAllDrives": "Whether the requesting application supports both My Drives and shared drives."
+      }
+    },
+    {
+      "name": "export_file",
+      "method": "GET",
+      "path": "/files/{fileId}/export",
+      "description": "Returns a Google Doc, Sheet or Slides file’s content as text, 10 MB at most. mimeType: text/markdown or text/plain for a Doc, text/csv for a Sheet (its first sheet only), text/plain for Slides.",
+      "query": ["mimeType"],
+      "notes": {
+        "fileId": "The ID of the file.",
+        "mimeType": "Required. The MIME type of the format requested for this export. For a list of supported MIME types, see [Export MIME types for Google Workspace documents](/workspace/drive/api/guides/ref-export-formats)."
+      }
+    },
+    {
+      "name": "list_drives",
+      "method": "GET",
+      "path": "/drives",
+      "description": "Lists the account’s shared drives, 10 at a time unless pageSize says more (100 at most); q filters, e.g. name contains 'finance'. A drive’s id is the driveId that searches inside it.",
+      "query": ["q", "pageSize", "pageToken"],
+      "notes": {
+        "q": "Query string for searching shared drives.",
+        "pageSize": "The maximum number of shared drives to return. The service may return fewer than this value. If unspecified, at most 10 shared drives will be returned. The maximum value is 100; values above 100 will be coerced to 100.",
+        "pageToken": "Page token for shared drives."
+      }
+    },
+    {
+      "name": "list_comments",
+      "method": "GET",
+      "path": "/files/{fileId}/comments",
+      "description": "Lists a file’s comments, 20 at a time unless pageSize says more (100 at most). fields is required, e.g. nextPageToken,comments(id,content,author(displayName),createdTime,resolved,replies(content,author(displayName))).",
+      "query": ["fields", "pageSize", "pageToken"],
+      "notes": {
+        "fileId": "The ID of the file.",
+        "fields": "Selector specifying which fields to include in a partial response.",
+        "pageSize": "The maximum number of comments to return. The service may return fewer than this value. If unspecified, at most 20 comments will be returned. The maximum value is 100; values above 100 will be coerced to 100.",
+        "pageToken": "The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response."
+      }
+    },
+    {
+      "name": "list_permissions",
+      "method": "GET",
+      "path": "/files/{fileId}/permissions",
+      "description": "Lists who has access to a file, folder or shared drive. Drive returns only id, type, kind and role unless fields names more, e.g. nextPageToken,permissions(id,type,role,emailAddress,displayName,domain); set supportsAllDrives to true on a shared drive.",
+      "query": ["fields", "supportsAllDrives", "pageToken"],
+      "notes": {
+        "fileId": "The ID of the file or shared drive.",
+        "fields": "Selector specifying which fields to include in a partial response.",
+        "supportsAllDrives": "Whether the requesting application supports both My Drives and shared drives.",
+        "pageToken": "The token for continuing a previous list request on the next page. This should be set to the value of `nextPageToken` from the previous response."
+      }
+    },
+    {
+      "name": "list_revisions",
+      "method": "GET",
+      "path": "/files/{fileId}/revisions",
+      "description": "Lists a file’s versions; for often-edited Docs, Sheets and Slides the oldest may be missing. Drive returns only id, mimeType, kind and modifiedTime unless fields names more, e.g. nextPageToken,revisions(id,modifiedTime,lastModifyingUser(displayName,emailAddress)).",
+      "query": ["fields", "pageSize", "pageToken"],
+      "notes": {
+        "fileId": "The ID of the file.",
+        "fields": "Selector specifying which fields to include in a partial response.",
+        "pageSize": "The maximum number of revisions to return. The service may return fewer than this value. If unspecified, at most 200 revisions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.",
+        "pageToken": "The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response."
+      }
+    },
+    {
+      "name": "get_about",
+      "method": "GET",
+      "path": "/about",
+      "description": "Returns the signed-in account and its Drive storage. fields is required, e.g. user(displayName,emailAddress),storageQuota.",
+      "query": ["fields"],
+      "notes": {
+        "fields": "Selector specifying which fields to include in a partial response."
+      }
+    },
+    {
+      "name": "create_file",
+      "method": "POST",
+      "path": "/files",
+      "description": "Creates a folder, or another file with metadata and no content, in My Drive unless parents names one folder; set supportsAllDrives to true for a shared drive. Body: {\"name\", \"mimeType\": \"application/vnd.google-apps.folder\", \"parents\": [folder id], \"description\"}.",
+      "query": ["supportsAllDrives"],
+      "notes": {
+        "supportsAllDrives": "Whether the requesting application supports both My Drives and shared drives."
+      }
+    },
+    {
+      "name": "update_file",
+      "method": "PATCH",
+      "path": "/files/{fileId}",
+      "description": "Changes a file’s metadata, and moves it with addParents (the new folder’s id) and removeParents (the old one’s). Body: only the fields to change, e.g. {\"name\", \"description\", \"starred\"}.",
+      "query": ["addParents", "removeParents", "supportsAllDrives"],
+      "notes": {
+        "fileId": "The ID of the file.",
+        "addParents": "A comma-separated list of parent IDs to add.",
+        "removeParents": "A comma-separated list of parent IDs to remove.",
+        "supportsAllDrives": "Whether the requesting application supports both My Drives and shared drives."
+      }
+    },
+    {
+      "name": "share_file",
+      "method": "POST",
+      "path": "/files/{fileId}/permissions",
+      "description": "Shares a file, folder or shared drive. Body: {\"type\": \"user\", \"role\": \"reader\", \"emailAddress\"}, type being user, group, domain (with \"domain\") or anyone and role reader, commenter or writer; Drive emails users and groups unless sendNotificationEmail is false, which other types must leave out.",
+      "query": ["sendNotificationEmail", "emailMessage", "supportsAllDrives"],
+      "notes": {
+        "fileId": "The ID of the file or shared drive.",
+        "sendNotificationEmail": "Whether to send a notification email when sharing to users or groups. This defaults to `true` for users and groups, and is not allowed for other requests. It must not be disabled for ownership transfers.",
+        "emailMessage": "A plain text custom message to include in the notification email.",
+        "supportsAllDrives": "Whether the requesting application supports both My Drives and shared drives."
+      }
+    },
+    {
+      "name": "create_comment",
+      "method": "POST",
+      "path": "/files/{fileId}/comments",
+      "description": "Adds a comment to a file; Docs, Sheets and Slides show it under All Comments. fields is required, e.g. id,content,createdTime. Body: {\"content\"}.",
+      "query": ["fields"],
+      "notes": {
+        "fileId": "The ID of the file.",
+        "fields": "Selector specifying which fields to include in a partial response."
+      }
+    }
+  ]
+}

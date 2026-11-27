@@ -1,0 +1,95 @@
+{
+  "id": "zendesk",
+  "name": "Zendesk",
+  "abbr": "Zd",
+  "color": "#03363D",
+  "baseUrl": "",
+  "example": "https://acme.zendesk.com",
+  "hint": "An OAuth access token from Admin Center, under Apps and integrations, APIs.",
+  "auth": {
+    "header": "Authorization: Bearer "
+  },
+  "sources": [
+    {
+      "url": "https://developer.zendesk.com/zendesk/oas.yaml"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /api/v2/tickets",
+      "name": "list_tickets",
+      "says": "Lists tickets.",
+      "query": ["sort_by", "sort_order", "per_page", "page", "include"]
+    },
+    {
+      "op": "GET /api/v2/tickets/{ticket_id}",
+      "name": "get_ticket",
+      "says": "Returns one ticket.",
+      "query": ["include"]
+    },
+    {
+      "op": "GET /api/v2/tickets/{ticket_id}/comments",
+      "name": "list_ticket_comments",
+      "says": "Lists a ticket’s comments: its conversation.",
+      "query": ["sort_order", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v2/search",
+      "name": "search",
+      "says": "Searches tickets, users and organizations with Zendesk’s query syntax, e.g. type:ticket status:open.",
+      "query": ["query", "sort_by", "sort_order"]
+    },
+    {
+      "op": "GET /api/v2/organizations/{organization_id}/tickets",
+      "name": "list_organization_tickets",
+      "says": "Lists an organization’s tickets."
+    },
+    {
+      "op": "GET /api/v2/users/{user_id}/tickets/requested",
+      "name": "list_user_requested_tickets",
+      "says": "Lists the tickets a user requested.",
+      "query": ["sort_by", "sort_order", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v2/users/search",
+      "name": "search_users",
+      "says": "Searches users by name, email or another property.",
+      "query": ["query", "per_page", "page"]
+    },
+    {
+      "op": "GET /api/v2/users/{user_id}",
+      "name": "get_user",
+      "says": "Returns one user.",
+      "query": []
+    },
+    {
+      "op": "GET /api/v2/organizations",
+      "name": "list_organizations",
+      "says": "Lists organizations.",
+      "query": ["per_page", "page"]
+    },
+    {
+      "op": "GET /api/v2/organizations/{organization_id}",
+      "name": "get_organization",
+      "says": "Returns one organization.",
+      "query": []
+    },
+    {
+      "op": "GET /api/v2/views/{view_id}/tickets",
+      "name": "list_view_tickets",
+      "says": "Lists the tickets in a view.",
+      "query": ["sort_by", "sort_order"]
+    },
+    {
+      "op": "POST /api/v2/tickets",
+      "name": "create_ticket",
+      "says": "Creates a ticket. Body: {\"ticket\": {\"subject\", \"comment\": {\"body\"}, \"requester_id\", \"priority\"}}.",
+      "query": []
+    },
+    {
+      "op": "PUT /api/v2/tickets/{ticket_id}",
+      "name": "update_ticket",
+      "says": "Updates a ticket; a comment with \"public\": true is seen by the requester. Body: {\"ticket\": {\"status\", \"comment\": {\"body\", \"public\"}}}."
+    }
+  ]
+}

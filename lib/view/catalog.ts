@@ -1,16 +1,20 @@
 // The source kinds the product knows: the intersection of the engine's connectors and the
-// runtime's source kinds. Static, not fetched.
+// runtime's source kinds, then the ready-made APIs. Static, not fetched.
+
+import { library } from "@/lib/library";
 
 export type CatalogKind = {
   name: string;
   abbr: string;
   color: string;
+  logo?: string; // the vendor's own mark, drawn instead of the badge
   group: "db" | "wh" | "api" | "gc" | "fs";
   dissect: boolean; // the engine supports it
   serve: boolean; // the runtime has a source kind
+  ready?: string; // the ready-made API its tile fills the HTTP API form with
 };
 
-export const catalog: CatalogKind[] = [
+const kinds: CatalogKind[] = [
   { name: "PostgreSQL", abbr: "PG", color: "#336791", group: "db", dissect: true, serve: true },
   { name: "MySQL", abbr: "My", color: "#E48E00", group: "db", dissect: true, serve: true },
   { name: "SQL Server", abbr: "MS", color: "#A4373A", group: "db", dissect: false, serve: true },
@@ -38,6 +42,21 @@ export const catalog: CatalogKind[] = [
     serve: true,
   },
   { name: "Filesystem", abbr: "FS", color: "#64748B", group: "fs", dissect: false, serve: true },
+];
+
+export const catalog: CatalogKind[] = [
+  ...kinds,
+  ...library.map(({ id, name, abbr, color }): CatalogKind => ({
+    name,
+    abbr,
+    color,
+    // Socrata publishes no vector mark, so its tile keeps the badge.
+    logo: id === "socrata" ? undefined : `/logos/${id}.svg`,
+    group: "api",
+    dissect: false,
+    serve: true,
+    ready: id,
+  })),
 ];
 
 // The engine's connector types (lib/ao-types.ts AoConnectionConfig) by catalog name.

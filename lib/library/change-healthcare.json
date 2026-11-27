@@ -1,0 +1,58 @@
+{
+  "id": "change-healthcare",
+  "name": "Change Healthcare",
+  "abbr": "CHC",
+  "color": "#FF612B",
+  "baseUrl": "https://apigw.optum.com",
+  "example": "https://sandbox-apigw.optum.com",
+  "hint": "A client ID and secret from the Optum developer portal; sandbox-apigw.optum.com is the test host.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "/apip/auth/v2/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "ask": ["check_eligibility", "validate_claim"],
+  "sources": [
+    {
+      "url": "https://developer.optum.com/eligibilityandclaims/openapi/60352a6f7e12f500829d5bbe",
+      "version": "v3"
+    },
+    {
+      "url": "https://developer.optum.com/eligibilityandclaims/openapi/6079c32a4c6175002d4467b0",
+      "version": "V3"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "eligibility_healthcheck",
+      "method": "GET",
+      "path": "/medicalnetwork/eligibility/v3/healthcheck",
+      "description": "Says whether the eligibility service is up.",
+      "query": []
+    },
+    {
+      "name": "check_eligibility",
+      "method": "POST",
+      "path": "/medicalnetwork/eligibility/v3/",
+      "description": "Asks a payer whether a member is covered (270/271). Body: {\"controlNumber\", \"tradingPartnerServiceId\", \"provider\": {\"organizationName\", \"npi\"}, \"subscriber\": {\"memberId\", \"firstName\", \"lastName\", \"dateOfBirth\"}, \"encounter\": {\"serviceTypeCodes\"}}.",
+      "query": []
+    },
+    {
+      "name": "validate_claim",
+      "method": "POST",
+      "path": "/medicalnetwork/professionalclaims/v3/validation",
+      "description": "Checks a professional claim (837P) for errors without sending it. Body: the claim, as for a submission.",
+      "query": []
+    },
+    {
+      "name": "submit_claim",
+      "method": "POST",
+      "path": "/medicalnetwork/professionalclaims/v3/submission",
+      "description": "Submits a professional claim (837P) to the payer. Body: the claim: controlNumber, tradingPartnerServiceId, submitter, receiver, subscriber, providers and claimInformation.",
+      "query": []
+    }
+  ]
+}

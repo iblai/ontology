@@ -1,0 +1,48 @@
+{
+  "id": "change-healthcare",
+  "name": "Change Healthcare",
+  "abbr": "CHC",
+  "color": "#FF612B",
+  "baseUrl": "https://apigw.optum.com",
+  "example": "https://sandbox-apigw.optum.com",
+  "hint": "A client ID and secret from the Optum developer portal; sandbox-apigw.optum.com is the test host.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "/apip/auth/v2/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://developer.optum.com/eligibilityandclaims/openapi/60352a6f7e12f500829d5bbe"
+    },
+    {
+      "url": "https://developer.optum.com/eligibilityandclaims/openapi/6079c32a4c6175002d4467b0"
+    }
+  ],
+  "ask": ["check_eligibility", "validate_claim"],
+  "pick": [
+    {
+      "op": "GET /medicalnetwork/eligibility/v3/healthcheck",
+      "name": "eligibility_healthcheck",
+      "says": "Says whether the eligibility service is up."
+    },
+    {
+      "op": "POST /medicalnetwork/eligibility/v3/",
+      "name": "check_eligibility",
+      "says": "Asks a payer whether a member is covered (270/271). Body: {\"controlNumber\", \"tradingPartnerServiceId\", \"provider\": {\"organizationName\", \"npi\"}, \"subscriber\": {\"memberId\", \"firstName\", \"lastName\", \"dateOfBirth\"}, \"encounter\": {\"serviceTypeCodes\"}}."
+    },
+    {
+      "op": "POST /medicalnetwork/professionalclaims/v3/validation",
+      "name": "validate_claim",
+      "says": "Checks a professional claim (837P) for errors without sending it. Body: the claim, as for a submission."
+    },
+    {
+      "op": "POST /medicalnetwork/professionalclaims/v3/submission",
+      "name": "submit_claim",
+      "says": "Submits a professional claim (837P) to the payer. Body: the claim: controlNumber, tradingPartnerServiceId, submitter, receiver, subscriber, providers and claimInformation."
+    }
+  ]
+}

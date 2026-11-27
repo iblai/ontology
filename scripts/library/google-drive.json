@@ -1,0 +1,106 @@
+{
+  "id": "google-drive",
+  "name": "Google Drive",
+  "abbr": "Dr",
+  "color": "#4285F4",
+  "baseUrl": "https://www.googleapis.com/drive/v3",
+  "example": "https://www.googleapis.com/drive/v3",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Drive API enabled, and one account’s refresh token for this scope under https://www.googleapis.com/auth/: drive (drive.readonly if agents only read), for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /files",
+      "name": "list_files",
+      "says": "Searches My Drive and Shared with me; q filters, e.g. name contains 'budget' and trashed = false, as trashed files are listed otherwise, and shared drives need corpora=drive with driveId (or allDrives) plus supportsAllDrives and includeItemsFromAllDrives true. Drive returns only kind, id, name and mimeType unless fields names more, e.g. nextPageToken,files(id,name,mimeType,modifiedTime,owners(emailAddress),webViewLink).",
+      "query": [
+        "q",
+        "fields",
+        "pageSize",
+        "pageToken",
+        "orderBy",
+        "corpora",
+        "driveId",
+        "includeItemsFromAllDrives",
+        "supportsAllDrives"
+      ]
+    },
+    {
+      "op": "GET /files/{fileId}",
+      "name": "get_file",
+      "says": "Returns one file’s metadata, not its content: a default set of fields unless fields names more, e.g. id,name,mimeType,parents,owners(emailAddress),modifiedTime,size,webViewLink. Set supportsAllDrives to true for a file on a shared drive.",
+      "query": ["fields", "supportsAllDrives"]
+    },
+    {
+      "op": "GET /files/{fileId}/export",
+      "name": "export_file",
+      "says": "Returns a Google Doc, Sheet or Slides file’s content as text, 10 MB at most. mimeType: text/markdown or text/plain for a Doc, text/csv for a Sheet (its first sheet only), text/plain for Slides.",
+      "query": ["mimeType"]
+    },
+    {
+      "op": "GET /drives",
+      "name": "list_drives",
+      "says": "Lists the account’s shared drives, 10 at a time unless pageSize says more (100 at most); q filters, e.g. name contains 'finance'. A drive’s id is the driveId that searches inside it.",
+      "query": ["q", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /files/{fileId}/comments",
+      "name": "list_comments",
+      "says": "Lists a file’s comments, 20 at a time unless pageSize says more (100 at most). fields is required, e.g. nextPageToken,comments(id,content,author(displayName),createdTime,resolved,replies(content,author(displayName))).",
+      "query": ["fields", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /files/{fileId}/permissions",
+      "name": "list_permissions",
+      "says": "Lists who has access to a file, folder or shared drive. Drive returns only id, type, kind and role unless fields names more, e.g. nextPageToken,permissions(id,type,role,emailAddress,displayName,domain); set supportsAllDrives to true on a shared drive.",
+      "query": ["fields", "supportsAllDrives", "pageToken"]
+    },
+    {
+      "op": "GET /files/{fileId}/revisions",
+      "name": "list_revisions",
+      "says": "Lists a file’s versions; for often-edited Docs, Sheets and Slides the oldest may be missing. Drive returns only id, mimeType, kind and modifiedTime unless fields names more, e.g. nextPageToken,revisions(id,modifiedTime,lastModifyingUser(displayName,emailAddress)).",
+      "query": ["fields", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /about",
+      "name": "get_about",
+      "says": "Returns the signed-in account and its Drive storage. fields is required, e.g. user(displayName,emailAddress),storageQuota.",
+      "query": ["fields"]
+    },
+    {
+      "op": "POST /files",
+      "name": "create_file",
+      "says": "Creates a folder, or another file with metadata and no content, in My Drive unless parents names one folder; set supportsAllDrives to true for a shared drive. Body: {\"name\", \"mimeType\": \"application/vnd.google-apps.folder\", \"parents\": [folder id], \"description\"}.",
+      "query": ["supportsAllDrives"]
+    },
+    {
+      "op": "PATCH /files/{fileId}",
+      "name": "update_file",
+      "says": "Changes a file’s metadata, and moves it with addParents (the new folder’s id) and removeParents (the old one’s). Body: only the fields to change, e.g. {\"name\", \"description\", \"starred\"}.",
+      "query": ["addParents", "removeParents", "supportsAllDrives"]
+    },
+    {
+      "op": "POST /files/{fileId}/permissions",
+      "name": "share_file",
+      "says": "Shares a file, folder or shared drive. Body: {\"type\": \"user\", \"role\": \"reader\", \"emailAddress\"}, type being user, group, domain (with \"domain\") or anyone and role reader, commenter or writer; Drive emails users and groups unless sendNotificationEmail is false, which other types must leave out.",
+      "query": ["sendNotificationEmail", "emailMessage", "supportsAllDrives"]
+    },
+    {
+      "op": "POST /files/{fileId}/comments",
+      "name": "create_comment",
+      "says": "Adds a comment to a file; Docs, Sheets and Slides show it under All Comments. fields is required, e.g. id,content,createdTime. Body: {\"content\"}.",
+      "query": ["fields"]
+    }
+  ]
+}

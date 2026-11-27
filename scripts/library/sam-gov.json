@@ -1,0 +1,90 @@
+{
+  "id": "sam-gov",
+  "name": "SAM.gov",
+  "abbr": "SAM",
+  "color": "#005EA2",
+  "baseUrl": "https://api.sam.gov",
+  "example": "https://api.sam.gov",
+  "hint": "A public API key from the Account Details page of your SAM.gov account.",
+  "auth": {
+    "header": "X-Api-Key: "
+  },
+  "sources": [
+    {
+      "url": "https://open.gsa.gov/api/entity-api/v1/openapi.yaml"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /entity-information/v4/entities",
+      "name": "search_entities",
+      "says": "Searches entity registrations by UEI, legal name, CAGE code, state or NAICS code; ten to a page.",
+      "query": [
+        "ueiSAM",
+        "legalBusinessName",
+        "cageCode",
+        "registrationStatus",
+        "physicalAddressProvinceOrStateCode",
+        "naicsCode",
+        "q",
+        "includeSections",
+        "page",
+        "size"
+      ]
+    }
+  ],
+  "extra": [
+    {
+      "name": "search_opportunities",
+      "method": "GET",
+      "path": "/opportunities/v2/search",
+      "description": "Searches contract opportunities posted between two dates, at most a year apart.",
+      "query": [
+        "postedFrom",
+        "postedTo",
+        "limit",
+        "offset",
+        "title",
+        "solnum",
+        "noticeid",
+        "ptype",
+        "state",
+        "zip",
+        "ncode",
+        "typeOfSetAside"
+      ],
+      "notes": {
+        "postedFrom": "Required. The first posted date, as MM/dd/yyyy.",
+        "postedTo": "Required. The last posted date, as MM/dd/yyyy.",
+        "limit": "Required. Records to return, 1000 at most.",
+        "offset": "Required. The page to start at, from 0.",
+        "ptype": "The notice type’s code, e.g. o for a solicitation, k for a combined synopsis.",
+        "ncode": "A NAICS code.",
+        "solnum": "A solicitation number."
+      }
+    },
+    {
+      "name": "search_contract_awards",
+      "method": "GET",
+      "path": "/contract-awards/v1/search",
+      "description": "Searches contract awards (FPDS) by contract number, awardee, fiscal year, agency or NAICS code.",
+      "query": [
+        "piid",
+        "awardeeUniqueEntityId",
+        "awardeeLegalBusinessName",
+        "fiscalYear",
+        "contractingDepartmentCode",
+        "naicsCode",
+        "dateSigned",
+        "lastModifiedDate",
+        "limit",
+        "offset"
+      ],
+      "notes": {
+        "piid": "The contract’s number (PIID).",
+        "awardeeUniqueEntityId": "The awardee’s UEI.",
+        "limit": "Records to return, 100 at most."
+      }
+    }
+  ]
+}

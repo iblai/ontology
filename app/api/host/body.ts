@@ -4,6 +4,7 @@ import { HostError } from "@/lib/host/errors";
 import type {
   HostApiEndpoint,
   HostApiInput,
+  HostApiOAuthInput,
   HostAuth,
   HostLocalInput,
   HostServerDraft,
@@ -86,13 +87,31 @@ const textsOf = (value: Record<string, unknown>): Record<string, string> =>
     ),
   );
 
+/** An API's OAuth sign-in as a form sends it; undefined when there is none. */
+export function oauthInput(body: Body): HostApiOAuthInput | undefined {
+  const oauth = body.oauth;
+  if (oauth === undefined || oauth === null) return undefined;
+  if (!isObject(oauth)) throw bad("oauth");
+  return {
+    grant: text(oauth, "grant") as HostApiOAuthInput["grant"],
+    clientAuth: text(oauth, "clientAuth") as HostApiOAuthInput["clientAuth"],
+    tokenUrl: text(oauth, "tokenUrl"),
+    clientId: text(oauth, "clientId"),
+    scope: optionalText(oauth, "scope"),
+    clientSecret: optionalText(oauth, "clientSecret"),
+    refreshToken: optionalText(oauth, "refreshToken"),
+  };
+}
+
 export function apiInput(body: Body): HostApiInput {
   const endpoints = body.endpoints;
   if (!Array.isArray(endpoints)) throw bad("endpoints", "is not a list");
+  const oauth = oauthInput(body);
   return {
     name: text(body, "name"),
     baseUrl: text(body, "baseUrl"),
     authHeader: text(body, "authHeader"),
+    ...(oauth ? { oauth } : {}),
     endpoints: endpoints.map((item, i): HostApiEndpoint => {
       if (!isObject(item)) throw bad(`endpoints[${i}]`);
       const method = text(item, "method");

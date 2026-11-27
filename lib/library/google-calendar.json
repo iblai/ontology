@@ -1,0 +1,149 @@
+{
+  "id": "google-calendar",
+  "name": "Google Calendar",
+  "abbr": "Ca",
+  "color": "#4285F4",
+  "baseUrl": "https://www.googleapis.com/calendar/v3",
+  "example": "https://www.googleapis.com/calendar/v3",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Calendar API enabled, and one account’s refresh token for these scopes under https://www.googleapis.com/auth/: calendar.events, calendar.calendarlist.readonly, calendar.calendars.readonly, calendar.events.freebusy, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "ask": ["get_free_busy"],
+  "sources": [
+    {
+      "url": "https://calendar-json.googleapis.com/$discovery/rest?version=v3",
+      "version": "20261118"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_events",
+      "method": "GET",
+      "path": "/calendars/{calendarId}/events",
+      "description": "Lists the events on a calendar; timeMin and timeMax are RFC 3339 with an offset (2026-12-01T09:00:00-05:00), and a nextPageToken in the answer is the pageToken of the next page. orderBy is startTime or updated, and startTime needs singleEvents=true, which lists each occurrence of a recurring event as an event of its own. Each event comes in full unless fields names less, e.g. nextPageToken,items(id,summary,start,end,location).",
+      "query": [
+        "timeMin",
+        "timeMax",
+        "q",
+        "singleEvents",
+        "orderBy",
+        "maxResults",
+        "pageToken",
+        "timeZone",
+        "fields"
+      ],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword.",
+        "timeMin": "Lower bound (exclusive) for an event's end time to filter by. Optional. The default is not to filter by end time. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. If timeMax is se",
+        "timeMax": "Upper bound (exclusive) for an event's start time to filter by. Optional. The default is not to filter by start time. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. If timeMin i",
+        "q": "Free text search terms to find events that match these terms in the following fields: - summary - description - location - attendee's displayName - attendee's email - organizer's displayName - organizer's email - workingLocationProperties.officeLocation.buildingId - workingLocationProperties.officeL",
+        "singleEvents": "Whether to expand recurring events into instances and only return single one-off events and instances of recurring events, but not the underlying recurring events themselves. Optional. The default is False.",
+        "orderBy": "The order of the events returned in the result. Optional. The default is an unspecified, stable order.",
+        "maxResults": "Maximum number of events returned on one result page. The number of events in the resulting page may be less than this value, or none at all, even if there are more events matching the query. Incomplete pages can be detected by a non-empty nextPageToken field in the response. By default the value is",
+        "pageToken": "Token specifying which result page to return. Optional.",
+        "timeZone": "Time zone used in the response. Optional. The default is the time zone of the calendar.",
+        "fields": "Selector specifying which fields to include in a partial response."
+      }
+    },
+    {
+      "name": "get_event",
+      "method": "GET",
+      "path": "/calendars/{calendarId}/events/{eventId}",
+      "description": "Returns one event by the id that list_events or list_event_instances gives.",
+      "query": ["timeZone"],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword.",
+        "eventId": "Event identifier.",
+        "timeZone": "Time zone used in the response. Optional. The default is the time zone of the calendar."
+      }
+    },
+    {
+      "name": "list_calendars",
+      "method": "GET",
+      "path": "/users/me/calendarList",
+      "description": "Lists the calendars on this account’s calendar list, each with its id, summary (title), timeZone and accessRole; its own main calendar has primary set to true. minAccessRole=writer keeps those whose events it can change.",
+      "query": ["minAccessRole", "maxResults", "pageToken"],
+      "notes": {
+        "minAccessRole": "The minimum access role for the user in the returned entries. Optional. The default is no restriction.",
+        "maxResults": "Maximum number of entries returned on one result page. By default the value is 100 entries. The page size can never be larger than 250 entries. Optional.",
+        "pageToken": "Token specifying which result page to return. Optional."
+      }
+    },
+    {
+      "name": "get_calendar",
+      "method": "GET",
+      "path": "/calendars/{calendarId}",
+      "description": "Returns a calendar’s summary (title), description and timeZone, an IANA name such as Europe/Zurich.",
+      "query": [],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword."
+      }
+    },
+    {
+      "name": "list_event_instances",
+      "method": "GET",
+      "path": "/calendars/{calendarId}/events/{eventId}/instances",
+      "description": "Lists the occurrences of a recurring event, each with its own id and originalStartTime; update_event takes that id to change one occurrence alone. timeMin and timeMax are RFC 3339 with an offset.",
+      "query": ["timeMin", "timeMax", "maxResults", "pageToken", "timeZone"],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword.",
+        "eventId": "Recurring event identifier.",
+        "timeMin": "Lower bound (inclusive) for an event's end time to filter by. Optional. The default is not to filter by end time. Must be an RFC3339 timestamp with mandatory time zone offset.",
+        "timeMax": "Upper bound (exclusive) for an event's start time to filter by. Optional. The default is not to filter by start time. Must be an RFC3339 timestamp with mandatory time zone offset.",
+        "maxResults": "Maximum number of events returned on one result page. By default the value is 250 events. The page size can never be larger than 2500 events. Optional.",
+        "pageToken": "Token specifying which result page to return. Optional.",
+        "timeZone": "Time zone used in the response. Optional. The default is the time zone of the calendar."
+      }
+    },
+    {
+      "name": "get_free_busy",
+      "method": "POST",
+      "path": "/freeBusy",
+      "description": "Returns when the calendars asked about are busy between two times, as start and end ranges without event details, in UTC unless the body sets timeZone. Body: {\"timeMin\", \"timeMax\", \"items\": [{\"id\"}]}, times as RFC 3339 with an offset; an id is a calendar’s, and a person’s email is usually their main calendar’s.",
+      "query": []
+    },
+    {
+      "name": "create_event",
+      "method": "POST",
+      "path": "/calendars/{calendarId}/events",
+      "description": "Creates an event; only start and end are required, and sendUpdates=all emails the guests. Body: {\"summary\", \"description\", \"location\", \"start\": {\"dateTime\": RFC 3339 with an offset} or {\"date\": \"yyyy-mm-dd\"} for a whole day, \"end\" alike, \"attendees\": [{\"email\"}], \"recurrence\": [\"RRULE:…\"] with a \"timeZone\" in start and end}; conferenceDataVersion=1 with \"conferenceData\": {\"createRequest\": {\"requestId\": a new string, \"conferenceSolutionKey\": {\"type\": \"hangoutsMeet\"}}} adds a Google Meet.",
+      "query": ["sendUpdates", "conferenceDataVersion"],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword.",
+        "sendUpdates": "Whether to send notifications about the creation of the new event. Note that some emails might still be sent. The default is false.",
+        "conferenceDataVersion": "Version number of conference data supported by the API client. Version 0 assumes no conference data support and ignores conference data in the event's body. Version 1 enables support for copying of ConferenceData as well as for creating new conferences using the createRequest field of conferenceData"
+      }
+    },
+    {
+      "name": "create_event_from_text",
+      "method": "POST",
+      "path": "/calendars/{calendarId}/events/quickAdd",
+      "description": "Creates an event from a simple text string describing it, given as text. Body: {}.",
+      "query": ["text", "sendUpdates"],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword.",
+        "text": "The text describing the event to be created.",
+        "sendUpdates": "Guests who should receive notifications about the creation of the new event."
+      }
+    },
+    {
+      "name": "update_event",
+      "method": "PATCH",
+      "path": "/calendars/{calendarId}/events/{eventId}",
+      "description": "Changes only the fields the body names, such as {\"summary\"} or {\"start\", \"end\"} shaped as in create_event; an array such as attendees replaces the whole list, so send every guest to add one. sendUpdates=all emails the guests; conferenceDataVersion=1 lets it add or change conferenceData.",
+      "query": ["sendUpdates", "conferenceDataVersion"],
+      "notes": {
+        "calendarId": "Calendar identifier. To retrieve calendar IDs call the calendarList.list method. If you want to access the primary calendar of the currently logged in user, use the \"primary\" keyword.",
+        "eventId": "Event identifier.",
+        "sendUpdates": "Guests who should receive notifications about the event update (for example, title changes, etc.).",
+        "conferenceDataVersion": "Version number of conference data supported by the API client. Version 0 assumes no conference data support and ignores conference data in the event's body. Version 1 enables support for copying of ConferenceData as well as for creating new conferences using the createRequest field of conferenceData"
+      }
+    }
+  ]
+}

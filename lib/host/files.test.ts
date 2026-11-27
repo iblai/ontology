@@ -11,6 +11,7 @@ import {
   readEnv,
   readLabels,
   readText,
+  runtimeEnv,
   setEnv,
   setLabel,
   slugOf,
@@ -54,6 +55,22 @@ describe("names", () => {
   it("makes an env name", () => {
     expect(envName("sis-eu", "DB_PASSWORD")).toBe("SIS_EU_DB_PASSWORD");
     expect(envName("crm.v2", "API_KEY")).toBe("CRM_V2_API_KEY");
+    expect(envName("canvas", "OAUTH_CLIENT_SECRET")).toBe("CANVAS_OAUTH_CLIENT_SECRET");
+  });
+
+  it("leaves the OAuth secrets out of the runtime’s share of the env", () => {
+    const env = {
+      SIS_DB_PASSWORD: "p",
+      CRM_API_KEY: "k",
+      CANVAS_OAUTH_CLIENT_SECRET: "s",
+      CANVAS_OAUTH_REFRESH_TOKEN: "r",
+      OAUTH_REFRESH_TOKEN_DB_PASSWORD: "q",
+    };
+    expect(runtimeEnv(env)).toEqual({
+      SIS_DB_PASSWORD: "p",
+      CRM_API_KEY: "k",
+      OAUTH_REFRESH_TOKEN_DB_PASSWORD: "q",
+    });
   });
 });
 
@@ -116,6 +133,19 @@ describe("files under ONTOLOGY_HOME", () => {
       expect(await readEnv()).toEqual({ SIS_DB_PASSWORD: "p=a ss#1 ", CRM_API_KEY: "k", B: "3" });
       expect((await stat(homePath("env"))).mode & 0o777).toBe(0o600);
       expect(await inPlatform("beta", readEnv)).toEqual({});
+    }));
+
+  it("writes one secret over another only while that one is still there", () =>
+    inPlatform("acme", async () => {
+      await setEnv("X_OAUTH_REFRESH_TOKEN", "first");
+      await setEnv("X_OAUTH_REFRESH_TOKEN", "second", "first");
+      expect((await readEnv()).X_OAUTH_REFRESH_TOKEN).toBe("second");
+      // An admin saved "pasted" meanwhile: the one a request got back does not replace it.
+      await setEnv("X_OAUTH_REFRESH_TOKEN", "pasted");
+      await setEnv("X_OAUTH_REFRESH_TOKEN", "third", "second");
+      expect((await readEnv()).X_OAUTH_REFRESH_TOKEN).toBe("pasted");
+      await setEnv("Y_OAUTH_REFRESH_TOKEN", "new", "none-kept");
+      expect((await readEnv()).Y_OAUTH_REFRESH_TOKEN).toBeUndefined();
     }));
 
   it("keeps what a platform calls its systems, and forgets a label taken back", () =>

@@ -37,6 +37,7 @@ import type {
   HostServerDetail,
   HostServerDraft,
   HostSpec,
+  HostSpecInput,
   HostSystem,
   HostSystemInput,
   HostSystemTest,
@@ -152,7 +153,7 @@ export const hostApi = createApi({
       query: (path) => `/locals/browse${path ? `?path=${id(path)}` : ""}`,
       keepUnusedDataFor: 0,
     }),
-    fetchSpec: b.mutation<HostSpec, { url: string; baseUrl: string; authHeader: string }>({
+    fetchSpec: b.mutation<HostSpec, HostSpecInput>({
       query: (body) => ({ url: "/apis/spec", method: "POST", body }),
     }),
     getGraph: b.query<HostGraph, void>({ query: () => "/graph", providesTags: ["Graph"] }),

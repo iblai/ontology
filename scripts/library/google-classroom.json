@@ -1,0 +1,120 @@
+{
+  "id": "google-classroom",
+  "name": "Google Classroom",
+  "abbr": "Cr",
+  "color": "#0F9D58",
+  "baseUrl": "https://classroom.googleapis.com",
+  "example": "https://classroom.googleapis.com",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Classroom API enabled, and a teacher’s or a Workspace for Education admin’s refresh token for these scopes under https://www.googleapis.com/auth/: classroom.courses.readonly, classroom.rosters.readonly, classroom.coursework.students, classroom.announcements, classroom.topics.readonly, classroom.courseworkmaterials.readonly, classroom.guardianlinks.students.readonly, classroom.profile.emails, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://classroom.googleapis.com/$discovery/rest?version=v1"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /v1/courses",
+      "name": "list_courses",
+      "says": "Lists the courses this account may see, newest first: a teacher or student sees their own, a domain administrator every course in the domain. teacherId or studentId (a user id, an email or me, never both) narrows it; courseStates takes one of ACTIVE, ARCHIVED, PROVISIONED, DECLINED, SUSPENDED.",
+      "query": ["teacherId", "studentId", "courseStates", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{id}",
+      "name": "get_course",
+      "says": "Returns one course: name, section, courseState, ownerId and alternateLink; id is the course’s id or an alias.",
+      "query": []
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/students",
+      "name": "list_students",
+      "says": "Lists a course’s students, each with a userId and a profile holding their name; a profile’s email comes back only if the refresh token was granted the classroom.profile.emails scope.",
+      "query": ["pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/teachers",
+      "name": "list_teachers",
+      "says": "Lists a course’s teachers, each with a userId and a profile holding their name; a profile’s email comes back only if the refresh token was granted the classroom.profile.emails scope.",
+      "query": ["pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/courseWork",
+      "name": "list_coursework",
+      "says": "Lists a course’s coursework, last updated first; only PUBLISHED items unless courseWorkStates is DRAFT or DELETED. orderBy takes updateTime or dueDate, each with asc or desc, e.g. dueDate asc.",
+      "query": ["courseWorkStates", "orderBy", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/courseWork/{id}",
+      "name": "get_coursework",
+      "says": "Returns one piece of coursework: title, description, workType, state, dueDate and dueTime in UTC, and maxPoints. associatedWithDeveloper is true when it belongs to this OAuth client’s Cloud project, the only project Google lets edit it or grade and return its submissions.",
+      "query": []
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions",
+      "name": "list_submissions",
+      "says": "Lists the submissions to one piece of coursework, or to all of a course’s coursework when courseWorkId is -, each with its state, late flag and grades. userId (a user id, an email or me) narrows it to one student; states takes one of NEW, CREATED, TURNED_IN, RETURNED, RECLAIMED_BY_STUDENT; late takes LATE_ONLY or NOT_LATE_ONLY.",
+      "query": ["userId", "states", "late", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}",
+      "name": "get_submission",
+      "says": "Returns one student submission: state, late, draftGrade and assignedGrade; draftGrade is seen only by the course’s teachers.",
+      "query": []
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/announcements",
+      "name": "list_announcements",
+      "says": "Lists a course’s announcements, last updated first; only PUBLISHED ones unless announcementStates is DRAFT or DELETED.",
+      "query": ["announcementStates", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/topics",
+      "name": "list_topics",
+      "says": "Lists a course’s topics, each a topicId and a name; coursework and materials name their topic by topicId.",
+      "query": ["pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/courses/{courseId}/courseWorkMaterials",
+      "name": "list_coursework_materials",
+      "says": "Lists a course’s material posts, each with a title, a description and attached links, Drive files, videos or forms, last updated first; only PUBLISHED ones unless courseWorkMaterialStates is DRAFT or DELETED.",
+      "query": ["courseWorkMaterialStates", "pageSize", "pageToken"]
+    },
+    {
+      "op": "GET /v1/userProfiles/{studentId}/guardians",
+      "name": "list_guardians",
+      "says": "Lists a student’s guardians; studentId is a user id, an email or me. Guardians must be enabled for the domain, whoever asks; then a teacher reads the guardians of students in their own classes and a domain administrator any student’s, and studentId - (every student’s) is for administrators only.",
+      "query": ["pageSize", "pageToken"]
+    },
+    {
+      "op": "POST /v1/courses/{courseId}/courseWork",
+      "name": "create_coursework",
+      "says": "Creates coursework, a draft unless state is PUBLISHED; title and workType are required, dueDate and dueTime are in UTC, and only this OAuth client’s Cloud project may later edit it or grade and return its submissions. Body: {\"title\", \"workType\": \"ASSIGNMENT\", \"description\", \"state\": \"PUBLISHED\", \"maxPoints\", \"dueDate\": {\"year\", \"month\", \"day\"}, \"dueTime\": {\"hours\", \"minutes\"}, \"topicId\", \"materials\": [{\"link\": {\"url\"}}]}.",
+      "query": []
+    },
+    {
+      "op": "POST /v1/courses/{courseId}/announcements",
+      "name": "create_announcement",
+      "says": "Posts an announcement in a course, a draft unless state is PUBLISHED. Body: {\"text\", \"state\": \"PUBLISHED\", \"materials\": [{\"link\": {\"url\"}}]}.",
+      "query": []
+    },
+    {
+      "op": "PATCH /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}",
+      "name": "grade_submission",
+      "says": "Grades a submission as a teacher of the course, only on coursework this OAuth client’s Cloud project created (associatedWithDeveloper true). updateMask is draftGrade (seen only by teachers) or assignedGrade,draftGrade (the grade returned to the student), never assignedGrade alone. Body: {\"draftGrade\": 90, \"assignedGrade\": 90}.",
+      "query": ["updateMask"]
+    },
+    {
+      "op": "POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:return",
+      "name": "return_submission",
+      "says": "Returns a turned-in submission to its student, as a teacher of the course and only on coursework this OAuth client’s Cloud project created (associatedWithDeveloper true). It does not copy draftGrade into assignedGrade, so set assignedGrade first. Body: {}.",
+      "query": []
+    }
+  ]
+}

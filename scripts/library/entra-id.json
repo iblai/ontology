@@ -1,0 +1,124 @@
+{
+  "id": "entra-id",
+  "name": "Microsoft Entra ID",
+  "abbr": "En",
+  "color": "#0078D4",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Directory.Read.All and AuditLog.Read.All; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Users.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Groups.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Identity.DirectoryManagement.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Reports.yml"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /users",
+      "name": "list_users",
+      "says": "Lists the directory’s users, 100 a page or up to 999 with top; fields such as department or accountEnabled come back only when named in select. filter takes eq, in or startsWith on displayName, givenName, surname, mail, userPrincipalName or jobTitle, and eq on accountEnabled, userType or employeeId; ne, not and endsWith don’t work here.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}",
+      "name": "get_user",
+      "says": "Returns one user, by ID or by sign-in name (ada@school.edu); fields such as department or accountEnabled come back only when named in select.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/memberOf",
+      "name": "list_memberships",
+      "says": "Lists the groups, directory roles and administrative units a user is a direct member of, by ID or sign-in name; groups reached through nesting are not included.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/directReports",
+      "name": "list_direct_reports",
+      "says": "Lists the users and contacts whose manager is this user, by ID or sign-in name; it goes one level down only.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /groups",
+      "name": "list_groups",
+      "says": "Lists the directory’s groups, 100 a page or up to 999 with top. filter takes eq, in or startsWith on displayName, mail or mailNickname, eq on mailEnabled, securityEnabled or isAssignableToRole, and groupTypes/any(c:c eq 'Unified') for Microsoft 365 groups; ne, not and endsWith don’t work here.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /groups/{group_id}",
+      "name": "get_group",
+      "says": "Returns one group; select names the fields to return beyond the default ones.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /groups/{group_id}/members",
+      "name": "list_group_members",
+      "says": "Lists a group’s direct members (users, contacts, devices and nested groups), 100 a page or up to 999 with top; service principals are left out in v1.0.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /groups/{group_id}/owners",
+      "name": "list_group_owners",
+      "says": "Lists the users who own a group and may change it; owners of groups made in Exchange, of distribution groups and of groups synced from on-premises are not available.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /directoryRoles",
+      "name": "list_directory_roles",
+      "says": "Lists the activated directory roles, such as Global Administrator, with each role’s ID; assigning a role in the admin center activates it. filter takes eq only, on displayName or roleTemplateId.",
+      "query": ["$filter", "$select"]
+    },
+    {
+      "op": "GET /directoryRoles/{directoryRole_id}/members",
+      "name": "list_role_members",
+      "says": "Lists the principals assigned a directory role, 1,000 a page, by the role’s ID as the list of roles gives it.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /auditLogs/signIns",
+      "name": "list_sign_ins",
+      "says": "Lists interactive sign-ins, newest first, 1,000 a page; give filter a createdDateTime range (createdDateTime ge followed by an ISO 8601 time within the last 30 days) so it doesn’t time out, and narrow it with eq on userPrincipalName, appId or conditionalAccessStatus. The directory needs Microsoft Entra ID P1 or P2, and the log reaches back 30 days.",
+      "query": ["$filter", "$top"]
+    },
+    {
+      "op": "GET /auditLogs/directoryAudits",
+      "name": "list_directory_audits",
+      "says": "Lists the directory’s audit log: each change to users, groups, apps, roles and policies, who made it and when. filter takes eq, ge, le and startswith, as in activityDateTime ge followed by an ISO 8601 time within the last 30 days, or \"initiatedBy/user/userPrincipalName eq 'ada@school.edu'\"; the log reaches back 30 days, 7 without Microsoft Entra ID P1 or P2.",
+      "query": ["$filter", "$top"]
+    },
+    {
+      "op": "GET /subscribedSkus",
+      "name": "list_subscribed_skus",
+      "says": "Lists the licenses the organization has bought, one entry per SKU named by skuPartNumber (AAD_PREMIUM): consumedUnits counts those assigned and prepaidUnits those paid for.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /domains",
+      "name": "list_domains",
+      "says": "Lists the directory’s domains (school.edu), each with isVerified, isDefault for the one new users get, and authenticationType Managed or Federated.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /organization",
+      "name": "get_organization",
+      "says": "Returns the organization as a list of one: its displayName, its directory ID as id, its verifiedDomains and its assignedPlans.",
+      "query": ["$select"]
+    }
+  ]
+}

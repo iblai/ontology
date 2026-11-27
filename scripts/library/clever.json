@@ -1,0 +1,100 @@
+{
+  "id": "clever",
+  "name": "Clever",
+  "abbr": "Cl",
+  "color": "#4274F6",
+  "baseUrl": "https://api.clever.com/v3.0",
+  "example": "https://api.clever.com/v3.0",
+  "hint": "A district-app token from your Clever App Dashboard.",
+  "auth": {
+    "header": "Authorization: Bearer "
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/Clever/swagger-api/master/v3.0.yml"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /districts",
+      "name": "list_districts",
+      "says": "Returns the district this token belongs to.",
+      "query": []
+    },
+    {
+      "op": "GET /schools",
+      "name": "list_schools",
+      "says": "Lists the district’s schools.",
+      "query": ["limit", "starting_after"]
+    },
+    {
+      "op": "GET /schools/{id}",
+      "name": "get_school",
+      "says": "Returns one school."
+    },
+    {
+      "op": "GET /schools/{id}/users",
+      "name": "list_school_users",
+      "says": "Lists a school’s staff, students and teachers; role picks one kind.",
+      "query": ["role", "limit", "starting_after"]
+    },
+    {
+      "op": "GET /users",
+      "name": "list_users",
+      "says": "Lists users: students, teachers, staff, district admins and contacts; role picks one kind.",
+      "query": ["role", "limit", "starting_after"]
+    },
+    {
+      "op": "GET /users/{id}",
+      "name": "get_user",
+      "says": "Returns one user."
+    },
+    {
+      "op": "GET /users/{id}/sections",
+      "name": "list_user_sections",
+      "says": "Lists the sections (classes) a student or teacher is in.",
+      "query": ["limit", "starting_after"]
+    },
+    {
+      "op": "GET /users/{id}/mystudents",
+      "name": "list_students_of",
+      "says": "Lists the students of a teacher or a contact.",
+      "query": ["limit", "starting_after"]
+    },
+    {
+      "op": "GET /users/{id}/myteachers",
+      "name": "list_teachers_of",
+      "says": "Lists a student’s teachers.",
+      "query": ["limit", "starting_after"]
+    },
+    {
+      "op": "GET /sections",
+      "name": "list_sections",
+      "says": "Lists sections (classes).",
+      "query": ["limit", "starting_after"]
+    },
+    {
+      "op": "GET /sections/{id}",
+      "name": "get_section",
+      "says": "Returns one section."
+    },
+    {
+      "op": "GET /sections/{id}/users",
+      "name": "list_section_users",
+      "says": "Lists a section’s students and teachers; role picks one kind.",
+      "query": ["role", "limit", "starting_after"]
+    },
+    {
+      "op": "GET /courses",
+      "name": "list_courses",
+      "says": "Lists courses.",
+      "query": ["limit", "starting_after"]
+    },
+    {
+      "op": "GET /terms",
+      "name": "list_terms",
+      "says": "Lists terms.",
+      "query": ["limit", "starting_after"]
+    }
+  ]
+}

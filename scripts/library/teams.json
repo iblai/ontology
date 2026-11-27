@@ -1,0 +1,109 @@
+{
+  "id": "teams",
+  "name": "Microsoft Teams",
+  "abbr": "Te",
+  "color": "#5059C9",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Team.ReadBasic.All, Channel.ReadBasic.All, TeamMember.Read.All, ChannelMember.Read.All, ChannelMessage.Read.All, Chat.Read.All, and Channel.Create, TeamMember.ReadWriteNonOwnerRole.All for the writes; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Teams.yml"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /teams",
+      "name": "list_teams",
+      "says": "Lists the teams in the organization with only id, displayName, description and visibility filled; get_team returns the rest.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /teams/{team_id}",
+      "name": "get_team",
+      "says": "Returns one team’s properties, by its ID.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /teams/{team_id}/channels",
+      "name": "list_channels",
+      "says": "Lists a team’s channels. A select without email makes it faster, e.g. id,displayName,description,membershipType.",
+      "query": ["$filter", "$select"]
+    },
+    {
+      "op": "GET /teams/{team_id}/channels/{channel_id}",
+      "name": "get_channel",
+      "says": "Returns one channel. Its summary comes back only when select names it, and leaving email out of select makes it faster.",
+      "query": ["$select"]
+    },
+    {
+      "op": "GET /teams/{team_id}/channels/{channel_id}/messages",
+      "name": "list_channel_messages",
+      "says": "Lists a channel’s messages without their replies, 20 to a page or up to 50 by top; expand=replies brings the replies along.",
+      "query": ["$top", "$expand"]
+    },
+    {
+      "op": "GET /teams/{team_id}/channels/{channel_id}/messages/{chatMessage_id}/replies",
+      "name": "list_message_replies",
+      "says": "Lists the replies to one channel message, up to 50 by top.",
+      "query": ["$top"]
+    },
+    {
+      "op": "GET /teams/{team_id}/channels/{channel_id}/messages/{chatMessage_id}",
+      "name": "get_channel_message",
+      "says": "Returns one message in a channel.",
+      "query": []
+    },
+    {
+      "op": "GET /teams/{team_id}/members",
+      "name": "list_team_members",
+      "says": "Lists a team’s members, 100 to a page or up to 999 by top; roles holds owner or guest where a member is one.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /teams/{team_id}/channels/{channel_id}/members",
+      "name": "list_channel_members",
+      "says": "Lists a channel’s direct members, 100 to a page or up to 999 by top.",
+      "query": ["$filter", "$top", "$select"]
+    },
+    {
+      "op": "GET /users/{user_id}/joinedTeams",
+      "name": "list_joined_teams",
+      "says": "Lists the teams a user is a direct member of, by user ID or sign-in name (ada@school.edu), with only id, displayName, description, isArchived and the directory ID filled; get_team returns the rest.",
+      "query": []
+    },
+    {
+      "op": "GET /users/{user_id}/chats",
+      "name": "list_user_chats",
+      "says": "Lists the chats a user is part of, by user ID or sign-in name. top is at most 50, expand takes members (25 at most) or lastMessagePreview, and orderby only lastMessagePreview/createdDateTime desc.",
+      "query": ["$filter", "$top", "$orderby", "$expand"]
+    },
+    {
+      "op": "GET /chats/{chat_id}/messages",
+      "name": "list_chat_messages",
+      "says": "Lists a chat’s messages, last changed first, up to 50 by top. filter works only beside an orderby on the same field: createdDateTime desc with lt, or lastModifiedDateTime desc with gt and lt.",
+      "query": ["$top", "$orderby", "$filter"]
+    },
+    {
+      "op": "POST /teams/{team_id}/channels",
+      "name": "create_channel",
+      "says": "Creates a channel in a team; displayName is at most 50 characters. Body: {\"displayName\", \"description\", \"membershipType\": \"standard\"}.",
+      "query": []
+    },
+    {
+      "op": "POST /teams/{team_id}/members",
+      "name": "add_team_member",
+      "says": "Adds a user to a team as a member; guests cannot be added this way, and the member list can take a while to show it. Body: {\"@odata.type\": \"#microsoft.graph.aadUserConversationMember\", \"roles\": [], \"user@odata.bind\": \"https://graph.microsoft.com/v1.0/users('<user ID>')\"}.",
+      "query": []
+    }
+  ]
+}

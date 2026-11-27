@@ -1,0 +1,89 @@
+{
+  "id": "onedrive",
+  "name": "Microsoft OneDrive",
+  "abbr": "OD",
+  "color": "#0078D4",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Files.Read.All, and Files.ReadWrite.All for the writes; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Files.yml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Search.yml"
+    }
+  ],
+  "ask": ["search_files"],
+  "pick": [
+    {
+      "op": "GET /users/{user_id}/drives",
+      "name": "list_user_drives",
+      "says": "Lists a user’s drives, by user ID or sign-in name; their OneDrive is the one whose driveType is business.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /groups/{group_id}/drives",
+      "name": "list_group_drives",
+      "says": "Lists a group’s document libraries.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/root/children",
+      "name": "list_root_items",
+      "says": "Lists the first page of the files and folders at the top of a drive.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/items/{driveItem_id}/children",
+      "name": "list_folder_items",
+      "says": "Lists the first page of the files and folders in a folder.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/items/{driveItem_id}",
+      "name": "get_item",
+      "says": "Returns a file’s or folder’s metadata; expand=children adds a folder’s items in the same call.",
+      "query": ["$select", "$expand"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/items/{driveItem_id}/permissions",
+      "name": "list_item_permissions",
+      "says": "Lists the effective sharing permissions on a file or folder; those inherited from a folder above it carry inheritedFrom.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "GET /drives/{drive_id}/items/{driveItem_id}/versions",
+      "name": "list_file_versions",
+      "says": "Lists a file’s versions; which ones are kept, and for how long, depends on admin settings.",
+      "query": ["$top", "$select"]
+    },
+    {
+      "op": "POST /search/microsoft.graph.query",
+      "name": "search_files",
+      "says": "Searches OneDrive and SharePoint files and folders by keywords; region, the organization’s data location code (NAM, EUR, …), is required when the app signs in with application permissions, as it does here, and private files are included only when \"sharePointOneDriveOptions\": {\"includeContent\": \"privateContent,sharedContent\"} is added. Body: {\"requests\": [{\"entityTypes\": [\"driveItem\"], \"query\": {\"queryString\"}, \"region\", \"from\": 0, \"size\": 25}]}.",
+      "query": []
+    },
+    {
+      "op": "POST /drives/{drive_id}/items/{driveItem_id}/children",
+      "name": "create_folder",
+      "says": "Creates a folder inside a folder; root as the item ID is the top of the drive. Body: {\"name\", \"folder\": {}, \"@microsoft.graph.conflictBehavior\": \"rename\"}.",
+      "query": []
+    },
+    {
+      "op": "POST /drives/{drive_id}/items/{driveItem_id}/microsoft.graph.createLink",
+      "name": "create_sharing_link",
+      "says": "Creates a view or edit link to a file or folder, or returns the link of that type this app already made; scope organization opens it to people signed in to the organization, anonymous to anyone with the link if an admin allows it. Body: {\"type\": \"view\", \"scope\": \"organization\"}.",
+      "query": []
+    }
+  ]
+}

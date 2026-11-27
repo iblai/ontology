@@ -1,0 +1,209 @@
+{
+  "id": "blackboard",
+  "name": "Blackboard Learn",
+  "abbr": "Bb",
+  "color": "#262626",
+  "baseUrl": "",
+  "example": "https://learn.school.edu",
+  "hint": "A REST application’s key and secret from developer.blackboard.com, enabled by your Learn admin under REST API Integrations.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "/learn/api/public/v1/oauth2/token",
+      "clientAuth": "basic",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://developer.anthology.com/portal/docs/apis/learn-swagger.json",
+      "version": "3900.23.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_courses",
+      "method": "GET",
+      "path": "/learn/api/public/v3/courses",
+      "description": "Lists courses, filtered by name, course ID or term.",
+      "query": ["name", "courseId", "termId", "limit", "offset", "sort"],
+      "notes": {
+        "name": "Search for courses with name properties that contain this value. **Since**: 3100.0.0",
+        "courseId": "Search for courses with courseId properties that contain this value. **Since**: 3100.0.0",
+        "termId": "Search for courses with this termId. This may optionally be the term's externalId using the syntax \"externalId:spring2015\". **Since**: 3100.0.0",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter.",
+        "sort": "Properties to sort by. This is a comma-delimited list of JSON properties, with an optional \"(desc)\" suffix to request a descending sort for that property. e.g. \"name(desc),created\" Supported fields are: - courseId - name - externalId - created - modified **Since**: 3400.8.0"
+      }
+    },
+    {
+      "name": "get_course",
+      "method": "GET",
+      "path": "/learn/api/public/v3/courses/{courseId}",
+      "description": "Returns one course. Its ID may be written courseId:<id> or externalId:<id>.",
+      "query": [],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75"
+      }
+    },
+    {
+      "name": "list_course_members",
+      "method": "GET",
+      "path": "/learn/api/public/v1/courses/{courseId}/users",
+      "description": "Lists a course’s members and their roles.",
+      "query": ["role", "limit", "offset"],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "role": "Search for memberships with a course role id that matches this value. **Since**: 3500.5.0",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "list_user_courses",
+      "method": "GET",
+      "path": "/learn/api/public/v1/users/{userId}/courses",
+      "description": "Lists the courses a user is a member of.",
+      "query": ["role", "limit", "offset"],
+      "notes": {
+        "userId": "The user ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:jsmith | | userName | userName:jsmith | | uuid | uuid:915c7567d76d444abf1eed56aa",
+        "role": "Search for memberships with a course role id that matches this value. **Since**: 3500.5.0",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "list_users",
+      "method": "GET",
+      "path": "/learn/api/public/v1/users",
+      "description": "Lists users, filtered by user name or family name.",
+      "query": ["userName", "name.family", "limit", "offset"],
+      "notes": {
+        "userName": "Search for users with userName properties that contain this value. **Since**: 3000.11.0",
+        "name.family": "Search for users with name.family properties that contain this value. **Since**: 3000.11.0",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "get_user",
+      "method": "GET",
+      "path": "/learn/api/public/v1/users/{userId}",
+      "description": "Returns one user. The ID may be written userName:<name> or externalId:<id>.",
+      "query": [],
+      "notes": {
+        "userId": "The user ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:jsmith | | userName | userName:jsmith | | uuid | uuid:915c7567d76d444abf1eed56aa"
+      }
+    },
+    {
+      "name": "list_grade_columns",
+      "method": "GET",
+      "path": "/learn/api/public/v2/courses/{courseId}/gradebook/columns",
+      "description": "Lists a course’s grade columns, its assignments among them.",
+      "query": ["displayName", "name", "limit", "offset"],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "displayName": "The 'displayName' value to use as search criteria. Currently only supports 'contains' searches. **Since**: 3300.2.0",
+        "name": "The 'name' value to use as search criteria. Currently only supports 'contains' searches. **Since**: 3900.11.0",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "list_column_grades",
+      "method": "GET",
+      "path": "/learn/api/public/v2/courses/{courseId}/gradebook/columns/{columnId}/users",
+      "description": "Lists every member’s grade in one column.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "columnId": "The grade column ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. The ID may also be the keyword 'finalGrade', which indicates that the course's final grade column is specified. | ID type | Example | |------------|---------------------------------------| | prima",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "list_user_grades",
+      "method": "GET",
+      "path": "/learn/api/public/v2/courses/{courseId}/gradebook/users/{userId}",
+      "description": "Lists one member’s grades in a course.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "userId": "The user ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:jsmith | | userName | userName:jsmith | | uuid | uuid:915c7567d76d444abf1eed56aa",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "list_contents",
+      "method": "GET",
+      "path": "/learn/api/public/v1/courses/{courseId}/contents",
+      "description": "Lists a course’s content items.",
+      "query": ["title", "recursive", "limit", "offset"],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "title": "Search for content title. Will return all Content items whose title contains the supplied search value. **Since**: 3900.10.0",
+        "recursive": "Search for child content recursively. A value of 'true' indicates that search results should include all content descendants within the hierarchy of the specified parent. A value of 'false' indicates results should be limited to immediate children only. Not setting this field defaults to 'false' beh",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "list_announcements",
+      "method": "GET",
+      "path": "/learn/api/public/v1/courses/{courseId}/announcements",
+      "description": "Lists a course’s announcements.",
+      "query": ["limit", "offset", "sort"],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter.",
+        "sort": "Properties to sort by. This is a comma-delimited list of JSON properties, with an optional \"(desc)\" suffix to request a descending sort for that property. e.g. \"title(desc),created\" Supported fields are: - title - modified **Since**: 3500.3.0"
+      }
+    },
+    {
+      "name": "list_terms",
+      "method": "GET",
+      "path": "/learn/api/public/v1/terms",
+      "description": "Lists terms.",
+      "query": ["limit", "offset"],
+      "notes": {
+        "limit": "The maximum number of results to be returned. There may be less if the query returned less than the maximum.",
+        "offset": "The number of rows to skip before beginning to return rows. An offset of 0 is the same as omitting the offset parameter."
+      }
+    },
+    {
+      "name": "set_grade",
+      "method": "PATCH",
+      "path": "/learn/api/public/v2/courses/{courseId}/gradebook/columns/{columnId}/users/{userId}",
+      "description": "Sets or changes a member’s grade in a column. Body: {\"score\", \"text\", \"feedback\"}.",
+      "query": [],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75",
+        "columnId": "The grade column ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. The ID may also be the keyword 'finalGrade', which indicates that the course's final grade column is specified. | ID type | Example | |------------|---------------------------------------| | prima",
+        "userId": "The user ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:jsmith | | userName | userName:jsmith | | uuid | uuid:915c7567d76d444abf1eed56aa"
+      }
+    },
+    {
+      "name": "create_assignment",
+      "method": "POST",
+      "path": "/learn/api/public/v1/courses/{courseId}/contents/createAssignment",
+      "description": "Creates an assignment and its grade column. Body: {\"parentId\", \"title\", \"instructions\", \"grading\": {\"due\"}, \"score\": {\"possible\"}}.",
+      "query": [],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75"
+      }
+    },
+    {
+      "name": "create_announcement",
+      "method": "POST",
+      "path": "/learn/api/public/v1/courses/{courseId}/announcements",
+      "description": "Posts an announcement in a course. Body: {\"title\", \"body\"}.",
+      "query": [],
+      "notes": {
+        "courseId": "The course or organization ID. This may be the primary ID, or any of the secondary IDs prefixed with the ID type. | ID type | Example | |------------|---------------------------------------| | primary | _123_1 | | externalId | externalId:math101 | | courseId | courseId:math101 | | uuid | uuid:915c75"
+      }
+    }
+  ]
+}

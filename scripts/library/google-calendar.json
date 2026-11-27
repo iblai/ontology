@@ -1,0 +1,89 @@
+{
+  "id": "google-calendar",
+  "name": "Google Calendar",
+  "abbr": "Ca",
+  "color": "#4285F4",
+  "baseUrl": "https://www.googleapis.com/calendar/v3",
+  "example": "https://www.googleapis.com/calendar/v3",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Calendar API enabled, and one account’s refresh token for these scopes under https://www.googleapis.com/auth/: calendar.events, calendar.calendarlist.readonly, calendar.calendars.readonly, calendar.events.freebusy, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://calendar-json.googleapis.com/$discovery/rest?version=v3"
+    }
+  ],
+  "ask": ["get_free_busy"],
+  "pick": [
+    {
+      "op": "GET /calendars/{calendarId}/events",
+      "name": "list_events",
+      "says": "Lists the events on a calendar; timeMin and timeMax are RFC 3339 with an offset (2026-12-01T09:00:00-05:00), and a nextPageToken in the answer is the pageToken of the next page. orderBy is startTime or updated, and startTime needs singleEvents=true, which lists each occurrence of a recurring event as an event of its own. Each event comes in full unless fields names less, e.g. nextPageToken,items(id,summary,start,end,location).",
+      "query": [
+        "timeMin",
+        "timeMax",
+        "q",
+        "singleEvents",
+        "orderBy",
+        "maxResults",
+        "pageToken",
+        "timeZone",
+        "fields"
+      ]
+    },
+    {
+      "op": "GET /calendars/{calendarId}/events/{eventId}",
+      "name": "get_event",
+      "says": "Returns one event by the id that list_events or list_event_instances gives.",
+      "query": ["timeZone"]
+    },
+    {
+      "op": "GET /users/me/calendarList",
+      "name": "list_calendars",
+      "says": "Lists the calendars on this account’s calendar list, each with its id, summary (title), timeZone and accessRole; its own main calendar has primary set to true. minAccessRole=writer keeps those whose events it can change.",
+      "query": ["minAccessRole", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /calendars/{calendarId}",
+      "name": "get_calendar",
+      "says": "Returns a calendar’s summary (title), description and timeZone, an IANA name such as Europe/Zurich.",
+      "query": []
+    },
+    {
+      "op": "GET /calendars/{calendarId}/events/{eventId}/instances",
+      "name": "list_event_instances",
+      "says": "Lists the occurrences of a recurring event, each with its own id and originalStartTime; update_event takes that id to change one occurrence alone. timeMin and timeMax are RFC 3339 with an offset.",
+      "query": ["timeMin", "timeMax", "maxResults", "pageToken", "timeZone"]
+    },
+    {
+      "op": "POST /freeBusy",
+      "name": "get_free_busy",
+      "says": "Returns when the calendars asked about are busy between two times, as start and end ranges without event details, in UTC unless the body sets timeZone. Body: {\"timeMin\", \"timeMax\", \"items\": [{\"id\"}]}, times as RFC 3339 with an offset; an id is a calendar’s, and a person’s email is usually their main calendar’s.",
+      "query": []
+    },
+    {
+      "op": "POST /calendars/{calendarId}/events",
+      "name": "create_event",
+      "says": "Creates an event; only start and end are required, and sendUpdates=all emails the guests. Body: {\"summary\", \"description\", \"location\", \"start\": {\"dateTime\": RFC 3339 with an offset} or {\"date\": \"yyyy-mm-dd\"} for a whole day, \"end\" alike, \"attendees\": [{\"email\"}], \"recurrence\": [\"RRULE:…\"] with a \"timeZone\" in start and end}; conferenceDataVersion=1 with \"conferenceData\": {\"createRequest\": {\"requestId\": a new string, \"conferenceSolutionKey\": {\"type\": \"hangoutsMeet\"}}} adds a Google Meet.",
+      "query": ["sendUpdates", "conferenceDataVersion"]
+    },
+    {
+      "op": "POST /calendars/{calendarId}/events/quickAdd",
+      "name": "create_event_from_text",
+      "says": "Creates an event from a simple text string describing it, given as text. Body: {}.",
+      "query": ["text", "sendUpdates"]
+    },
+    {
+      "op": "PATCH /calendars/{calendarId}/events/{eventId}",
+      "name": "update_event",
+      "says": "Changes only the fields the body names, such as {\"summary\"} or {\"start\", \"end\"} shaped as in create_event; an array such as attendees replaces the whole list, so send every guest to add one. sendUpdates=all emails the guests; conferenceDataVersion=1 lets it add or change conferenceData.",
+      "query": ["sendUpdates", "conferenceDataVersion"]
+    }
+  ]
+}

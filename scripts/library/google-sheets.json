@@ -1,0 +1,54 @@
+{
+  "id": "google-sheets",
+  "name": "Google Sheets",
+  "abbr": "Sh",
+  "color": "#0F9D58",
+  "baseUrl": "https://sheets.googleapis.com",
+  "example": "https://sheets.googleapis.com",
+  "hint": "A web OAuth client in your Google Cloud project with the Google Sheets API enabled, and one account’s refresh token for this scope under https://www.googleapis.com/auth/: spreadsheets, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://sheets.googleapis.com/$discovery/rest?version=v4"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /v4/spreadsheets/{spreadsheetId}",
+      "name": "get_spreadsheet",
+      "says": "Returns a spreadsheet’s title, locale and time zone, and each sheet’s properties, formatting and protected ranges, with no cell data unless fields asks for it. Without fields the answer can be large: fields=sheets.properties(sheetId,title) lists the sheets. ranges takes one range in A1 notation, for example Sheet1!A1:D20, and keeps only the parts of the spreadsheet that intersect it. spreadsheetId is in the spreadsheet’s address: docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit.",
+      "query": ["fields", "ranges"]
+    },
+    {
+      "op": "GET /v4/spreadsheets/{spreadsheetId}/values/{range}",
+      "name": "get_values",
+      "says": "Returns the values of a range in A1 notation, for example Sheet1!A1:D20 or 'Q3 Sales'!A:C (quote a sheet name with spaces); empty trailing rows and columns are left out. valueRenderOption is FORMATTED_VALUE (the default), UNFORMATTED_VALUE or FORMULA, and dateTimeRenderOption is SERIAL_NUMBER (the default) or FORMATTED_STRING.",
+      "query": ["majorDimension", "valueRenderOption", "dateTimeRenderOption"]
+    },
+    {
+      "op": "POST /v4/spreadsheets",
+      "name": "create_spreadsheet",
+      "says": "Creates a spreadsheet in the root folder of the account’s Google Drive and returns it, with its spreadsheetId and spreadsheetUrl. Body: {\"properties\": {\"title\": \"Budget 2027\"}}.",
+      "query": []
+    },
+    {
+      "op": "PUT /v4/spreadsheets/{spreadsheetId}/values/{range}",
+      "name": "update_values",
+      "says": "Writes values into a range in A1 notation, for example Sheet1!A1:D20. valueInputOption is required: USER_ENTERED reads each value as if typed into Sheets (formulas, dates, numbers), RAW stores it as it is. Body: {\"values\": [[\"A1\", \"B1\"], [\"A2\", \"B2\"]]}.",
+      "query": ["valueInputOption"]
+    },
+    {
+      "op": "POST /v4/spreadsheets/{spreadsheetId}/values/{range}:append",
+      "name": "append_values",
+      "says": "Appends rows after the table of data found in a range in A1 notation; Sheet1 searches the whole sheet. valueInputOption is required (USER_ENTERED or RAW); by default the rows overwrite what follows the table, and insertDataOption=INSERT_ROWS inserts new rows instead. Body: {\"values\": [[\"Ada\", \"2027-01-31\", 42]]}.",
+      "query": ["valueInputOption", "insertDataOption"]
+    }
+  ]
+}

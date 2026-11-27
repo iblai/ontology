@@ -13,12 +13,13 @@ export async function GET(request: Request) {
   try {
     return await asConsole(request, async () => {
       const apis: HostApi[] = (await listApis()).map(
-        ({ name, baseUrl, authHeader, endpoints, tools }) => ({
+        ({ name, baseUrl, authHeader, endpoints, tools, oauth }) => ({
           name,
           baseUrl,
           authHeader,
           endpoints,
           tools,
+          ...(oauth ? { oauth } : {}),
         }),
       );
       return json(apis);

@@ -1,0 +1,130 @@
+{
+  "id": "planner",
+  "name": "Microsoft Planner",
+  "abbr": "Pl",
+  "color": "#31752F",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Tasks.ReadWrite.All; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Planner.yml",
+      "version": "v1.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_group_plans",
+      "method": "GET",
+      "path": "/groups/{group_id}/planner/plans",
+      "description": "Lists the plans a Microsoft 365 group owns, by the group’s ID.",
+      "query": [],
+      "notes": {
+        "group_id": "The unique identifier of group"
+      }
+    },
+    {
+      "name": "list_plan_tasks",
+      "method": "GET",
+      "path": "/planner/plans/{plannerPlan_id}/tasks",
+      "description": "Lists a plan’s tasks with their titles, buckets, assignees, due dates and percent complete; 100 is done.",
+      "query": [],
+      "notes": {
+        "plannerPlan_id": "The unique identifier of plannerPlan"
+      }
+    },
+    {
+      "name": "list_user_tasks",
+      "method": "GET",
+      "path": "/users/{user_id}/planner/tasks",
+      "description": "Lists the tasks assigned to a user.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user"
+      }
+    },
+    {
+      "name": "get_task",
+      "method": "GET",
+      "path": "/planner/tasks/{plannerTask_id}",
+      "description": "Returns one task; its description and checklist are in the task’s details.",
+      "query": [],
+      "notes": {
+        "plannerTask_id": "The unique identifier of plannerTask"
+      }
+    },
+    {
+      "name": "get_task_details",
+      "method": "GET",
+      "path": "/planner/tasks/{plannerTask_id}/details",
+      "description": "Returns a task’s description, checklist items and references.",
+      "query": [],
+      "notes": {
+        "plannerTask_id": "The unique identifier of plannerTask"
+      }
+    },
+    {
+      "name": "list_plan_buckets",
+      "method": "GET",
+      "path": "/planner/plans/{plannerPlan_id}/buckets",
+      "description": "Lists a plan’s buckets, the custom columns of its task board.",
+      "query": [],
+      "notes": {
+        "plannerPlan_id": "The unique identifier of plannerPlan"
+      }
+    },
+    {
+      "name": "list_bucket_tasks",
+      "method": "GET",
+      "path": "/planner/buckets/{plannerBucket_id}/tasks",
+      "description": "Lists the tasks in one bucket.",
+      "query": [],
+      "notes": {
+        "plannerBucket_id": "The unique identifier of plannerBucket"
+      }
+    },
+    {
+      "name": "get_plan",
+      "method": "GET",
+      "path": "/planner/plans/{plannerPlan_id}",
+      "description": "Returns one plan: its title, who created it and the container, such as a group, that holds it.",
+      "query": [],
+      "notes": {
+        "plannerPlan_id": "The unique identifier of plannerPlan"
+      }
+    },
+    {
+      "name": "get_plan_details",
+      "method": "GET",
+      "path": "/planner/plans/{plannerPlan_id}/details",
+      "description": "Returns a plan’s category names, category1 to category25, which a task’s appliedCategories refer to.",
+      "query": [],
+      "notes": {
+        "plannerPlan_id": "The unique identifier of plannerPlan"
+      }
+    },
+    {
+      "name": "create_task",
+      "method": "POST",
+      "path": "/planner/tasks",
+      "description": "Creates a task in a plan, in a bucket of that plan; dates are ISO 8601 in UTC. Body: {\"planId\", \"bucketId\", \"title\", \"dueDateTime\", \"assignments\": {\"<user id>\": {\"@odata.type\": \"#microsoft.graph.plannerAssignment\", \"orderHint\": \" !\"}}}.",
+      "query": []
+    },
+    {
+      "name": "create_bucket",
+      "method": "POST",
+      "path": "/planner/buckets",
+      "description": "Creates a bucket, a column of the task board, in a plan. Body: {\"name\", \"planId\", \"orderHint\": \" !\"}.",
+      "query": []
+    }
+  ]
+}

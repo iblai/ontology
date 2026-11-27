@@ -1,0 +1,99 @@
+{
+  "id": "workday",
+  "name": "Workday",
+  "abbr": "Wd",
+  "color": "#005CB9",
+  "baseUrl": "",
+  "example": "https://wd2-impl-services1.workday.com/ccx/api/staffing/v7/acme",
+  "hint": "An API client for integrations and its refresh token; View API Clients in Workday shows both addresses.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "",
+      "tokenExample": "https://wd2-impl-services1.workday.com/ccx/oauth2/acme/token",
+      "clientAuth": "basic",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://community.workday.com/sites/default/files/file-hosting/restapi/staffing_v7_20261121_oas2.json"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /workers",
+      "name": "list_workers",
+      "says": "Lists workers with their current job; search matches a name.",
+      "query": ["search", "email", "includeTerminatedWorkers", "limit", "offset"]
+    },
+    {
+      "op": "GET /workers/{ID}",
+      "name": "get_worker",
+      "says": "Returns one worker and their current staffing information."
+    },
+    {
+      "op": "GET /workers/{ID}/serviceDates",
+      "name": "list_service_dates",
+      "says": "Lists a worker’s service dates: hire date, continuous service and the like.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /workers/{ID}/skillItems",
+      "name": "list_worker_skills",
+      "says": "Lists a worker’s skills.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /supervisoryOrganizations",
+      "name": "list_supervisory_orgs",
+      "says": "Lists supervisory organizations.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /supervisoryOrganizations/{ID}",
+      "name": "get_supervisory_org",
+      "says": "Returns one supervisory organization."
+    },
+    {
+      "op": "GET /supervisoryOrganizations/{ID}/members",
+      "name": "list_org_members",
+      "says": "Lists the members of a supervisory organization.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /supervisoryOrganizations/{ID}/orgChart",
+      "name": "get_org_chart",
+      "says": "Returns the organization chart under a supervisory organization.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /jobs",
+      "name": "list_jobs",
+      "says": "Lists jobs.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /jobs/{ID}",
+      "name": "get_job",
+      "says": "Returns one job."
+    },
+    {
+      "op": "GET /jobProfiles",
+      "name": "list_job_profiles",
+      "says": "Lists job profiles.",
+      "query": ["limit", "offset"]
+    },
+    {
+      "op": "GET /jobProfiles/{ID}",
+      "name": "get_job_profile",
+      "says": "Returns one job profile."
+    },
+    {
+      "op": "GET /jobFamilies",
+      "name": "list_job_families",
+      "says": "Lists job families.",
+      "query": ["limit", "offset"]
+    }
+  ]
+}

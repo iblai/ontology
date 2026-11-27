@@ -1,0 +1,230 @@
+{
+  "id": "canvas",
+  "name": "Canvas LMS",
+  "abbr": "Cv",
+  "color": "#E72429",
+  "baseUrl": "",
+  "example": "https://school.instructure.com",
+  "hint": "An access token from your Canvas profile: Account, Settings, New access token.",
+  "auth": {
+    "header": "Authorization: Bearer "
+  },
+  "sources": [
+    {
+      "url": "https://instructure.instructure.com/doc/openapi/canvas.openapi.yaml",
+      "version": "1.0.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_courses",
+      "method": "GET",
+      "path": "/api/v1/courses",
+      "description": "Lists the courses the token’s user is enrolled in.",
+      "query": ["enrollment_type", "enrollment_state", "state", "include", "per_page", "page"],
+      "notes": {
+        "enrollment_type": "When set, only return courses where the user is enrolled as this type. For example, set to \"teacher\" to return only courses where the user is enrolled as a Teacher. This argument is ignored if enrollment_role is given.",
+        "enrollment_state": "When set, only return courses where the user has an enrollment with the given state. This will respect section/course/term date overrides.",
+        "state": "If set, only return courses that are in the given state(s). By default, \"available\" is returned for students and observers, and anything except \"deleted\", for all other enrollment types",
+        "include": "- \"needs_grading_count\": Optional information to include with each Course. When needs_grading_count is given, and the current user has grading rights, the total number of submissions needing grading for all assignments is returned. - \"syllabus_body\": Optional information to include with each Course.",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "get_course",
+      "method": "GET",
+      "path": "/api/v1/courses/{id}",
+      "description": "Returns one course.",
+      "query": ["include"],
+      "notes": {
+        "id": "Scope response to id",
+        "include": "- \"all_courses\": Also search recently deleted courses. - \"permissions\": Include permissions the current user has for the course. - \"observed_users\": Include observed users in the enrollments - \"course_image\": Include course image url if a course image has been set - \"banner_image\": Include course ba"
+      }
+    },
+    {
+      "name": "list_course_users",
+      "method": "GET",
+      "path": "/api/v1/courses/{course_id}/users",
+      "description": "Lists the people in a course: students, teachers, TAs and observers.",
+      "query": ["search_term", "enrollment_type", "include", "per_page", "page"],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "search_term": "The partial name or full ID of the users to match and return in the results list.",
+        "enrollment_type": "When set, only return users where the user is enrolled as this type. \"student_view\" implies include[]=test_student. This argument is ignored if enrollment_role is given.",
+        "include": "- \"enrollments\": Optionally include with each Course the user's current and invited enrollments. If the user is enrolled as a student, and the account has permission to manage or view all grades, each enrollment will include a 'grades' key with 'current_score', 'final_score', 'current_grade' and 'fi",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "list_enrollments",
+      "method": "GET",
+      "path": "/api/v1/courses/{course_id}/enrollments",
+      "description": "Lists a course’s enrollments, with each one’s grades.",
+      "query": ["type", "state", "user_id", "per_page", "page"],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "type": "A list of enrollment types to return. Accepted values are 'StudentEnrollment', 'TeacherEnrollment', 'TaEnrollment', 'DesignerEnrollment', and 'ObserverEnrollment.' If omitted, all enrollment types are returned. This argument is ignored if `role` is given.",
+        "state": "Filter by enrollment state. If omitted, 'active' and 'invited' enrollments are returned. The following synthetic states are supported only when querying a user's enrollments (either via user_id argument or via user enrollments endpoint): +current_and_invited+, +current_and_future+, +current_future_a",
+        "user_id": "Filter by user_id (only valid for course or section enrollment queries). If set to the current user's id, this is a way to determine if the user has any enrollments in the course or section, independent of whether the user has permission to view other people on the roster.",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "list_assignments",
+      "method": "GET",
+      "path": "/api/v1/courses/{course_id}/assignments",
+      "description": "Lists a course’s assignments with due dates and points.",
+      "query": ["search_term", "bucket", "order_by", "include", "per_page", "page"],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "search_term": "The partial title of the assignments to match and return.",
+        "bucket": "If included, only return certain assignments depending on due date and submission status.",
+        "order_by": "Determines the order of the assignments. Defaults to \"position\".",
+        "include": "Optional information to include with each assignment: submission:: The current user's current +Submission+ assignment_visibility:: An array of ids of students who can see the assignment all_dates:: An array of +AssignmentDate+ structures, one for each override, and also a +base+ if the assignment ha",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "get_assignment",
+      "method": "GET",
+      "path": "/api/v1/courses/{course_id}/assignments/{id}",
+      "description": "Returns one assignment.",
+      "query": ["include"],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "id": "Scope response to id",
+        "include": "Associations to include with the assignment. The \"assignment_visibility\" option requires that the Differentiated Assignments course feature be turned on. If \"observed_users\" is passed, submissions for observed users will also be included. For \"score_statistics\" to be included, the \"submission\" optio"
+      }
+    },
+    {
+      "name": "list_submissions",
+      "method": "GET",
+      "path": "/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions",
+      "description": "Lists the submissions to one assignment, with scores and grades.",
+      "query": ["include", "per_page", "page"],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "assignment_id": "Scope response to assignment_id",
+        "include": "Associations to include with the group. \"group\" will add group_id and group_name.",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "list_student_submissions",
+      "method": "GET",
+      "path": "/api/v1/courses/{course_id}/students/submissions",
+      "description": "Lists submissions across assignments, for chosen students or all of them.",
+      "query": [
+        "student_ids",
+        "assignment_ids",
+        "workflow_state",
+        "graded_since",
+        "include",
+        "per_page",
+        "page"
+      ],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "student_ids": "List of student ids to return submissions for. If this argument is omitted, return submissions for the calling user. Students may only list their own submissions. Observers may only list those of associated students. The special id \"all\" will return submissions for all students in the course/section",
+        "assignment_ids": "List of assignments to return submissions for. If none are given, submissions for all assignments are returned.",
+        "workflow_state": "The current status of the submission",
+        "graded_since": "If this argument is set, the response will only include submissions that were graded after the specified date_time. This will exclude submissions that have not been graded. The value must be formatted as ISO 8601 YYYY-MM-DDTHH:MM:SSZ.",
+        "include": "Associations to include with the group. `total_scores` requires the `grouped` argument.",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "list_missing_submissions",
+      "method": "GET",
+      "path": "/api/v1/users/{user_id}/missing_submissions",
+      "description": "Lists the past-due assignments a student has not submitted.",
+      "query": ["course_ids", "include", "per_page", "page"],
+      "notes": {
+        "user_id": "the student's ID",
+        "course_ids": "Optionally restricts the list of past-due assignments to only those associated with the specified course IDs. Required if observed_user_id is passed.",
+        "include": "\"planner_overrides\":: Optionally include the assignment's associated planner override, if it exists, for the current user. These will be returned under a +planner_override+ key \"course\":: Optionally include the assignments' courses",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "list_conversations",
+      "method": "GET",
+      "path": "/api/v1/conversations",
+      "description": "Lists the inbox conversations of the token’s user, newest first.",
+      "query": ["scope", "filter", "per_page", "page"],
+      "notes": {
+        "scope": "When set, only return conversations of the specified type. For example, set to \"unread\" to return only conversations that haven't been read. The default behavior is to return all non-archived conversations (i.e. read and unread).",
+        "filter": "When set, only return conversations for the specified courses, groups or users. The id should be prefixed with its type, e.g. \"user_123\",",
+        "per_page": "The number of items to return per page. Defaults to 10. Maximum is 100.",
+        "page": "The page number to return. Defaults to 1."
+      }
+    },
+    {
+      "name": "get_user_profile",
+      "method": "GET",
+      "path": "/api/v1/users/{user_id}/profile",
+      "description": "Returns a user’s profile.",
+      "query": [],
+      "notes": {
+        "user_id": "Scope response to user_id"
+      }
+    },
+    {
+      "name": "create_assignment",
+      "method": "POST",
+      "path": "/api/v1/courses/{course_id}/assignments",
+      "description": "Creates an assignment. Body: {\"assignment\": {\"name\", \"points_possible\", \"due_at\", \"submission_types\", \"published\"}}.",
+      "query": [],
+      "notes": {
+        "course_id": "Scope response to course_id"
+      }
+    },
+    {
+      "name": "update_assignment",
+      "method": "PUT",
+      "path": "/api/v1/courses/{course_id}/assignments/{id}",
+      "description": "Edits an assignment. Body: {\"assignment\": {the fields to change}}.",
+      "query": [],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "id": "Scope response to id"
+      }
+    },
+    {
+      "name": "grade_submission",
+      "method": "PUT",
+      "path": "/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+      "description": "Grades or comments on a student’s submission; the student sees both. Body: {\"submission\": {\"posted_grade\"}, \"comment\": {\"text_comment\"}}.",
+      "query": [],
+      "notes": {
+        "course_id": "Scope response to course_id",
+        "assignment_id": "Scope response to assignment_id",
+        "user_id": "Scope response to user_id"
+      }
+    },
+    {
+      "name": "enroll_user",
+      "method": "POST",
+      "path": "/api/v1/courses/{course_id}/enrollments",
+      "description": "Enrolls a user in a course. Body: {\"enrollment\": {\"user_id\", \"type\": \"StudentEnrollment\", \"enrollment_state\": \"active\"}}.",
+      "query": [],
+      "notes": {
+        "course_id": "Scope response to course_id"
+      }
+    },
+    {
+      "name": "send_message",
+      "method": "POST",
+      "path": "/api/v1/conversations",
+      "description": "Sends an inbox message. Body: {\"recipients\": [user ids], \"subject\", \"body\"}.",
+      "query": []
+    }
+  ]
+}

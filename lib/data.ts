@@ -17,6 +17,7 @@ import type {
   HostLocalInput,
   HostServerDraft,
   HostSpec,
+  HostSpecInput,
   HostSystemInput,
   HostSystemTest,
 } from "@/lib/host/types";
@@ -523,7 +524,7 @@ export type Actions = {
   /** Saves the password on the host, sets the two switches, creates the engine connection. */
   connectSystem(input: HostSystemInput): Promise<void>;
   /** The operations of an OpenAPI document, fetched by the host. */
-  fetchSpec(input: { url: string; baseUrl: string; authHeader: string }): Promise<HostSpec>;
+  fetchSpec(input: HostSpecInput): Promise<HostSpec>;
   /** Saves a custom HTTP API on the host. */
   addApi(input: HostApiInput): Promise<void>;
   /** Saves a filesystem on the host. */

@@ -267,6 +267,65 @@ describe("serving", () => {
         },
         writes: ["sis-raw"],
         files: [],
+        signed: {},
+        dollars: {},
+      });
+    }),
+  );
+
+  it(
+    "names each tool’s $ query names, which callers know without the $",
+    acme(async () => {
+      const query = (...names: string[]) =>
+        names.map((name) => ({ name, type: "string", description: name, required: false }));
+      vi.mocked(serverDocs).mockReturnValue([
+        {
+          kind: "tool",
+          name: "outlook_list_messages",
+          type: "http",
+          source: "outlook-reads",
+          queryParams: query("$filter", "$top", "pageToken"),
+        },
+        {
+          kind: "tool",
+          name: "crm_list_deals",
+          type: "http",
+          source: "crm-reads",
+          queryParams: query("q"),
+        },
+        { kind: "toolset", name: "outlook-reads", tools: ["outlook_list_messages"] },
+      ]);
+      await saveServer("mail", draft(["outlook-reads"]), true);
+      expect((await serving("mail"))?.dollars).toEqual({
+        outlook_list_messages: ["$filter", "$top"],
+      });
+    }),
+  );
+
+  it(
+    "names the tools the gateway signs, each by its OAuth API",
+    acme(async () => {
+      const header = [
+        { name: "Authorization", type: "string", description: "Set by the gateway." },
+      ];
+      const tool = (name: string, source: string, headerParams?: object[]): ToolboxDoc => ({
+        kind: "tool",
+        name,
+        type: "http",
+        source,
+        ...(headerParams ? { headerParams } : {}),
+      });
+      vi.mocked(serverDocs).mockReturnValue([
+        tool("canvas_list_courses", "canvas-reads", header),
+        tool("canvas_grade", "canvas-writes", header),
+        tool("crm_list_deals", "crm-reads"),
+        tool("by_hand", "elsewhere", header),
+        { kind: "toolset", name: "canvas-reads", tools: ["canvas_list_courses"] },
+      ]);
+      await saveServer("lms", draft(["canvas-reads"]), true);
+      expect((await serving("lms"))?.signed).toEqual({
+        canvas_list_courses: "canvas",
+        canvas_grade: "canvas",
       });
     }),
   );

@@ -1,0 +1,247 @@
+{
+  "id": "google-admin",
+  "name": "Google Workspace Admin",
+  "abbr": "Ad",
+  "color": "#4285F4",
+  "baseUrl": "https://admin.googleapis.com",
+  "example": "https://admin.googleapis.com",
+  "hint": "A web OAuth client in your Google Cloud project with the Admin SDK API enabled, and a Workspace admin’s refresh token for these scopes under https://www.googleapis.com/auth/: admin.directory.user.readonly, admin.directory.group.readonly, admin.directory.group.member, admin.directory.orgunit.readonly, admin.directory.device.chromeos.readonly, admin.directory.device.mobile.readonly, admin.directory.domain.readonly, admin.directory.rolemanagement.readonly, admin.reports.audit.readonly, admin.reports.usage.readonly, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://admin.googleapis.com/$discovery/rest?version=directory_v1",
+      "version": "20261117"
+    },
+    {
+      "url": "https://admin.googleapis.com/$discovery/rest?version=reports_v1",
+      "version": "20261117"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_users",
+      "method": "GET",
+      "path": "/admin/directory/v1/users",
+      "description": "Lists the users. Give customer my_customer for the account’s own organization, or domain for one domain; query searches, e.g. email:ada* or orgUnitPath=/Students. Without fields each user comes back whole: fields=users(primaryEmail,name/fullName,orgUnitPath,suspended),nextPageToken keeps the answer small.",
+      "query": [
+        "customer",
+        "domain",
+        "query",
+        "maxResults",
+        "orderBy",
+        "pageToken",
+        "projection",
+        "viewType",
+        "fields"
+      ],
+      "notes": {
+        "customer": "The unique ID for the customer's Google Workspace account. In case of a multi-domain account, to fetch all users for a customer, use this field instead of `domain`. You can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [Us",
+        "domain": "The domain name. Use this field to get users from only one domain. To return all domains for a customer account, use the `customer` query parameter instead. Either the `customer` or the `domain` parameter must be provided.",
+        "query": "Query string for searching user fields. For more information on constructing user queries, see [Search for Users](https://developers.google.com/workspace/admin/directory/v1/guides/search-users).",
+        "maxResults": "Maximum number of results to return.",
+        "orderBy": "Property to use for sorting results.",
+        "pageToken": "Token to specify next page in the list. The page token is only valid for three days.",
+        "projection": "What subset of fields to fetch for this user.",
+        "viewType": "Whether to fetch the administrator-only or domain-wide public view of the user. For more information, see [Retrieve a user as a non-administrator](https://developers.google.com/workspace/admin/directory/v1/guides/manage-users#retrieve_users_non_admin).",
+        "fields": "Selector specifying which fields to include in a partial response."
+      }
+    },
+    {
+      "name": "get_user",
+      "method": "GET",
+      "path": "/admin/directory/v1/users/{userKey}",
+      "description": "Returns one user, by primary email, alias or ID; projection full adds the custom schema fields.",
+      "query": ["projection"],
+      "notes": {
+        "userKey": "Identifies the user in the API request. The value can be the user's primary email address, alias email address, or unique user ID.",
+        "projection": "What subset of fields to fetch for this user."
+      }
+    },
+    {
+      "name": "list_groups",
+      "method": "GET",
+      "path": "/admin/directory/v1/groups",
+      "description": "Lists groups. Give customer my_customer for the account’s own organization, or domain; for the groups one user is in, give userKey and no customer. query searches, e.g. email:support* or name:contact*.",
+      "query": ["customer", "domain", "userKey", "query", "maxResults", "pageToken"],
+      "notes": {
+        "customer": "The unique ID for the customer's Google Workspace account. In case of a multi-domain account, to fetch all groups for a customer, use this field instead of `domain`. You can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [U",
+        "domain": "The domain name. Use this field to get groups from only one domain. To return all domains for a customer account, use the `customer` query parameter instead.",
+        "userKey": "Email or immutable ID of the user if only those groups are to be listed, the given user is a member of. If it's an ID, it should match with the ID of the user object. Cannot be used with the `customer` parameter.",
+        "query": "Query string search. Contains one or more search clauses, each with a field, operator, and value. For complete documentation, go to [Search for groups](https://developers.google.com/workspace/admin/directory/v1/guides/search-groups).",
+        "maxResults": "Maximum number of results to return. Max allowed value is 200.",
+        "pageToken": "Token to specify next page in the list"
+      }
+    },
+    {
+      "name": "get_group",
+      "method": "GET",
+      "path": "/admin/directory/v1/groups/{groupKey}",
+      "description": "Returns one group, by email address, alias or ID.",
+      "query": [],
+      "notes": {
+        "groupKey": "Identifies the group in the API request. The value can be the group's email address, group alias, or the unique group ID."
+      }
+    },
+    {
+      "name": "list_group_members",
+      "method": "GET",
+      "path": "/admin/directory/v1/groups/{groupKey}/members",
+      "description": "Lists a group’s members, users and groups, each with its role: OWNER, MANAGER or MEMBER. includeDerivedMembership true also lists indirect members.",
+      "query": ["roles", "includeDerivedMembership", "maxResults", "pageToken"],
+      "notes": {
+        "groupKey": "Identifies the group in the API request. The value can be the group's email address, group alias, or the unique group ID.",
+        "roles": "The `roles` query parameter allows you to retrieve group members by role. Allowed values are `OWNER`, `MANAGER`, and `MEMBER`.",
+        "includeDerivedMembership": "Whether to list indirect memberships. Default: false.",
+        "maxResults": "Maximum number of results to return. Max allowed value is 200.",
+        "pageToken": "Token to specify next page in the list."
+      }
+    },
+    {
+      "name": "list_org_units",
+      "method": "GET",
+      "path": "/admin/directory/v1/customer/{customerId}/orgunits",
+      "description": "Lists organizational units. customerId my_customer is the account’s own organization; type all lists every level under orgUnitPath, the default only the immediate children.",
+      "query": ["orgUnitPath", "type"],
+      "notes": {
+        "customerId": "The unique ID for the customer's Google Workspace account. As an account administrator, you can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [Users resource](https://developers.google.com/workspace/admin/directory/v1/refe",
+        "orgUnitPath": "The full path to the organizational unit or its unique ID. Returns the children of the specified organizational unit.",
+        "type": "Whether to return all sub-organizations or just immediate children."
+      }
+    },
+    {
+      "name": "list_activities",
+      "method": "GET",
+      "path": "/admin/reports/v1/activity/users/{userKey}/applications/{applicationName}",
+      "description": "Lists the audit events of one application, applicationName such as login, drive (Google says its report is only available for Google Workspace Business and Enterprise customers), admin or groups, for userKey all or one user’s email; eventName and filters narrow it, e.g. login_success and is_suspicious==true. startTime and endTime are RFC 3339 and reach back 180 days; gmail needs both, at most 30 days apart.",
+      "query": ["startTime", "endTime", "eventName", "filters", "maxResults", "pageToken"],
+      "notes": {
+        "userKey": "Represents the profile ID or the user email for which the data should be filtered. Can be `all` for all information, or `userKey` for a user's unique Google Workspace profile ID or their primary email address. Must not be a deleted user. For a deleted user, call `users.list` in Directory API with `s",
+        "applicationName": "Application name for which the events are to be retrieved.",
+        "startTime": "Sets the beginning of the range of time shown in the report. The date is in the RFC 3339 format, for example 2010-10-28T10:26:35.000Z. The report returns all activities from `startTime` until `endTime`. The `startTime` must be before the `endTime` (if specified) and the current time when the request",
+        "endTime": "Sets the end of the range of time shown in the report. The date is in the RFC 3339 format, for example 2010-10-28T10:26:35.000Z. The default value is the approximate time of the API request. An API report has three basic time concepts: - *Date of the API's request for a report*: When the API created",
+        "eventName": "The name of the event being queried by the API. Each `eventName` is related to a specific Google Workspace service or feature which the API organizes into types of events. An example is the Google Calendar events in the Admin console application's reports. The Calendar Settings `type` structure has ",
+        "filters": "The `filters` query string is a comma-separated list composed of event parameters manipulated by relational operators. Event parameters are in the form `{parameter1 name}{relational operator}{parameter1 value},{parameter2 name}{relational operator}{parameter2 value},...` These event parameters are a",
+        "maxResults": "Determines how many activity records are shown on each response page. For example, if the request sets `maxResults=1` and the report has two activities, the report has two pages. The response's `nextPageToken` property has the token to the second page. The `maxResults` query string is optional in th",
+        "pageToken": "The token to specify next page. A report with multiple pages has a `nextPageToken` property in the response. In your follow-on request getting the next page of the report, enter the `nextPageToken` value in the `pageToken` query string."
+      }
+    },
+    {
+      "name": "get_user_usage",
+      "method": "GET",
+      "path": "/admin/reports/v1/usage/users/{userKey}/dates/{date}",
+      "description": "Returns usage statistics per user for one day: userKey all or one user’s email, date yyyy-mm-dd in Pacific Standard Time; parameters picks them, e.g. accounts:timestamp_last_login. A day whose data is not ready comes back with a warning.",
+      "query": ["parameters", "filters", "maxResults", "pageToken"],
+      "notes": {
+        "userKey": "Represents the profile ID or the user email for which the data should be filtered. Can be `all` for all information, or `userKey` for a user's unique Google Workspace profile ID or their primary email address. Must not be a deleted user. For a deleted user, call `users.list` in Directory API with `s",
+        "date": "Represents the date the usage occurred, based on UTC-8:00 (Pacific Standard Time). The timestamp is in the [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601), `yyyy-mm-dd`.",
+        "parameters": "The `parameters` query string is a comma-separated list of event parameters that refine a report's results. The parameter is associated with a specific application. The application values for the Customers Usage report include `accounts`, `app_maker`, `apps_scripts`, `calendar`, `chat`, `classroom`,",
+        "filters": "The `filters` query string is a comma-separated list of an application's event parameters where the parameter's value is manipulated by a relational operator. The `filters` query string includes the name of the application whose usage is returned in the report. The application values for the Users U",
+        "maxResults": "Determines how many activity records are shown on each response page. For example, if the request sets `maxResults=1` and the report has two activities, the report has two pages. The response's `nextPageToken` property has the token to the second page. The `maxResults` query string is optional.",
+        "pageToken": "Token to specify next page. A report with multiple pages has a `nextPageToken` property in the response. In your follow-on request getting the next page of the report, enter the `nextPageToken` value in the `pageToken` query string."
+      }
+    },
+    {
+      "name": "get_customer_usage",
+      "method": "GET",
+      "path": "/admin/reports/v1/usage/dates/{date}",
+      "description": "Returns the organization’s usage statistics for one day: date yyyy-mm-dd in Pacific Standard Time; parameters picks them, e.g. accounts:num_30day_logins. A day whose data is not ready comes back with a warning.",
+      "query": ["parameters", "pageToken"],
+      "notes": {
+        "date": "Represents the date the usage occurred, based on UTC-8:00 (Pacific Standard Time). The timestamp is in the [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601), `yyyy-mm-dd`.",
+        "parameters": "The `parameters` query string is a comma-separated list of event parameters that refine a report's results. The parameter is associated with a specific application. The application values for the Customers usage report include `accounts`, `app_maker`, `apps_scripts`, `calendar`, `chat`, `classroom`,",
+        "pageToken": "Token to specify next page. A report with multiple pages has a `nextPageToken` property in the response. For your follow-on requests getting all of the report's pages, enter the `nextPageToken` value in the `pageToken` query string."
+      }
+    },
+    {
+      "name": "list_chromeos_devices",
+      "method": "GET",
+      "path": "/admin/directory/v1/customer/{customerId}/devices/chromeos",
+      "description": "Lists ChromeOS devices. customerId my_customer is the account’s own organization; query filters, e.g. status:provisioned or recent_user:ada@school.edu, and projection FULL returns every field.",
+      "query": [
+        "query",
+        "orgUnitPath",
+        "includeChildOrgunits",
+        "projection",
+        "maxResults",
+        "pageToken"
+      ],
+      "notes": {
+        "customerId": "The unique ID for the customer's Google Workspace account. As an account administrator, you can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [Users resource](https://developers.google.com/workspace/admin/directory/v1/refe",
+        "query": "Search string in the format given at [List query operators](https://developers.google.com/workspace/admin/directory/v1/list-query-operators).",
+        "orgUnitPath": "The full path of the organizational unit (minus the leading `/`) or its unique ID.",
+        "includeChildOrgunits": "Return devices from all child orgunits, as well as the specified org unit. If this is set to true, 'orgUnitPath' must be provided.",
+        "projection": "Determines whether the response contains the full list of properties or only a subset.",
+        "maxResults": "Maximum number of results to return. Value should not exceed 300.",
+        "pageToken": "The `pageToken` query parameter is used to request the next page of query results. The follow-on request's `pageToken` query parameter is the `nextPageToken` from your previous response."
+      }
+    },
+    {
+      "name": "list_mobile_devices",
+      "method": "GET",
+      "path": "/admin/directory/v1/customer/{customerId}/devices/mobile",
+      "description": "Lists user-owned mobile devices; company-owned ones need Google’s Cloud Identity Devices API. customerId my_customer is the account’s own organization; query filters, e.g. os:Android or status:approved.",
+      "query": ["query", "projection", "maxResults", "pageToken"],
+      "notes": {
+        "customerId": "The unique ID for the customer's Google Workspace account. As an account administrator, you can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [Users resource](https://developers.google.com/workspace/admin/directory/v1/refe",
+        "query": "Search string in the format given at https://developers.google.com/workspace/admin/directory/v1/search-operators",
+        "projection": "Restrict information returned to a set of selected fields.",
+        "maxResults": "Maximum number of results to return. Max allowed value is 100.",
+        "pageToken": "Token to specify next page in the list"
+      }
+    },
+    {
+      "name": "list_domains",
+      "method": "GET",
+      "path": "/admin/directory/v1/customer/{customer}/domains",
+      "description": "Lists the organization’s domains, with whether each is primary and verified. customer my_customer is the account’s own organization.",
+      "query": [],
+      "notes": {
+        "customer": "The unique ID for the customer's Google Workspace account. In case of a multi-domain account, to fetch all groups for a customer, use this field instead of `domain`. You can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [U"
+      }
+    },
+    {
+      "name": "list_admin_roles",
+      "method": "GET",
+      "path": "/admin/directory/v1/customer/{customer}/roles",
+      "description": "Lists the admin roles, prebuilt and custom, with the privileges each grants. customer my_customer is the account’s own organization.",
+      "query": ["maxResults", "pageToken"],
+      "notes": {
+        "customer": "The unique ID for the customer's Google Workspace account. In case of a multi-domain account, to fetch all groups for a customer, use this field instead of `domain`. You can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [U",
+        "maxResults": "Maximum number of results to return.",
+        "pageToken": "Token to specify the next page in the list."
+      }
+    },
+    {
+      "name": "list_role_assignments",
+      "method": "GET",
+      "path": "/admin/directory/v1/customer/{customer}/roleassignments",
+      "description": "Lists who holds which admin role, by role ID and assignee ID; userKey narrows it to one user or group. customer my_customer is the account’s own organization.",
+      "query": ["userKey", "roleId", "includeIndirectRoleAssignments", "maxResults", "pageToken"],
+      "notes": {
+        "customer": "The unique ID for the customer's Google Workspace account. In case of a multi-domain account, to fetch all groups for a customer, use this field instead of `domain`. You can also use the `my_customer` alias to represent your account's `customerId`. The `customerId` is also returned as part of the [U",
+        "userKey": "The primary email address, alias email address, or unique user or group ID. If included in the request, returns role assignments only for this user or group.",
+        "roleId": "Immutable ID of a role. If included in the request, returns only role assignments containing this role ID.",
+        "includeIndirectRoleAssignments": "When set to `true`, fetches indirect role assignments (i.e. role assignment via a group) as well as direct ones. Defaults to `false`. You must specify `user_key` or the indirect role assignments will not be included.",
+        "maxResults": "Maximum number of results to return.",
+        "pageToken": "Token to specify the next page in the list."
+      }
+    },
+    {
+      "name": "add_group_member",
+      "method": "POST",
+      "path": "/admin/directory/v1/groups/{groupKey}/members",
+      "description": "Adds a user or another group to a group. Body: {\"email\", \"role\": \"MEMBER\"}.",
+      "query": [],
+      "notes": {
+        "groupKey": "Identifies the group in the API request. The value can be the group's email address, group alias, or the unique group ID."
+      }
+    }
+  ]
+}

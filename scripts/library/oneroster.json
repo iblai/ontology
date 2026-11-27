@@ -1,0 +1,156 @@
+{
+  "id": "oneroster",
+  "name": "OneRoster 1.2",
+  "abbr": "1R",
+  "color": "#00629B",
+  "baseUrl": "",
+  "example": "https://sis.school.edu/ims/oneroster",
+  "hint": "A client ID, secret and token address from your SIS or rostering hub, such as Infinite Campus, PowerSchool, ClassLink or Skyward.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://sis.school.edu/oauth2/token",
+      "clientAuth": "basic",
+      "scope": "https://purl.imsglobal.org/spec/or/v1p2/scope/roster.readonly https://purl.imsglobal.org/spec/or/v1p2/scope/gradebook.readonly"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://purl.imsglobal.org/spec/or/v1p2/schema/openapi/onerosterv1p2rostersservice_openapi3_v1p0.json",
+      "prefix": "/rostering/v1p2"
+    },
+    {
+      "url": "https://purl.imsglobal.org/spec/or/v1p2/schema/openapi/onerosterv1p2gradebookservice_openapi3_v1p0.json",
+      "prefix": "/gradebook/v1p2"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /rostering/v1p2/orgs",
+      "name": "list_orgs",
+      "says": "Lists the districts, schools and departments.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/schools",
+      "name": "list_schools",
+      "says": "Lists schools.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/schools/{sourcedId}",
+      "name": "get_school",
+      "says": "Returns one school.",
+      "query": []
+    },
+    {
+      "op": "GET /rostering/v1p2/schools/{schoolSourcedId}/classes",
+      "name": "list_school_classes",
+      "says": "Lists a school’s classes.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/schools/{schoolSourcedId}/students",
+      "name": "list_school_students",
+      "says": "Lists a school’s students.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/users",
+      "name": "list_users",
+      "says": "Lists users of every role; filter narrows them, e.g. familyName='Lovelace'.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/users/{sourcedId}",
+      "name": "get_user",
+      "says": "Returns one user.",
+      "query": []
+    },
+    {
+      "op": "GET /rostering/v1p2/students",
+      "name": "list_students",
+      "says": "Lists students.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/teachers",
+      "name": "list_teachers",
+      "says": "Lists teachers.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/classes",
+      "name": "list_classes",
+      "says": "Lists classes.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/classes/{sourcedId}",
+      "name": "get_class",
+      "says": "Returns one class.",
+      "query": []
+    },
+    {
+      "op": "GET /rostering/v1p2/classes/{classSourcedId}/students",
+      "name": "list_class_students",
+      "says": "Lists a class’s students.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/classes/{classSourcedId}/teachers",
+      "name": "list_class_teachers",
+      "says": "Lists a class’s teachers.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/enrollments",
+      "name": "list_enrollments",
+      "says": "Lists enrollments: who is in which class, in which role.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/academicSessions",
+      "name": "list_academic_sessions",
+      "says": "Lists terms, semesters, grading periods and school years.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /rostering/v1p2/courses",
+      "name": "list_courses",
+      "says": "Lists courses.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /gradebook/v1p2/classes/{classSourcedId}/lineItems",
+      "name": "list_class_line_items",
+      "says": "Lists a class’s line items: its assignments and other graded work.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /gradebook/v1p2/classes/{classSourcedId}/results",
+      "name": "list_class_results",
+      "says": "Lists every result (score) in a class.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "GET /gradebook/v1p2/classes/{classSourcedId}/students/{studentSourcedId}/results",
+      "name": "list_student_results",
+      "says": "Lists one student’s results in a class.",
+      "query": ["limit", "offset", "filter", "sort", "orderBy"]
+    },
+    {
+      "op": "PUT /gradebook/v1p2/lineItems/{sourcedId}",
+      "name": "put_line_item",
+      "says": "Creates or replaces a line item; needs the gradebook.createput scope. Body: {\"lineItem\": {\"title\", \"class\": {\"sourcedId\"}, \"dueDate\", \"resultValueMin\", \"resultValueMax\"}}.",
+      "query": []
+    },
+    {
+      "op": "PUT /gradebook/v1p2/results/{sourcedId}",
+      "name": "put_result",
+      "says": "Creates or replaces a student’s result; needs the gradebook.createput scope. Body: {\"result\": {\"lineItem\": {\"sourcedId\"}, \"student\": {\"sourcedId\"}, \"score\", \"scoreStatus\", \"scoreDate\"}}.",
+      "query": []
+    }
+  ]
+}

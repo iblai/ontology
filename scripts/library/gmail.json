@@ -1,0 +1,102 @@
+{
+  "id": "gmail",
+  "name": "Gmail",
+  "abbr": "Gm",
+  "color": "#EA4335",
+  "baseUrl": "https://gmail.googleapis.com",
+  "example": "https://gmail.googleapis.com",
+  "hint": "A web OAuth client in your Google Cloud project with the Gmail API enabled, and one account’s refresh token for this scope under https://www.googleapis.com/auth/: gmail.modify, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://gmail.googleapis.com/$discovery/rest?version=v1"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /gmail/v1/users/{userId}/messages",
+      "name": "list_messages",
+      "says": "Lists the mailbox’s messages as an id and threadId each; get_message returns one’s content. q takes Gmail search-box syntax, e.g. from:ann@example.com is:unread, and userId is me.",
+      "query": ["q", "labelIds", "maxResults", "pageToken", "includeSpamTrash"]
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/messages/{id}",
+      "name": "get_message",
+      "says": "Returns one message; userId is me. format is full (the default: headers and body parts in payload, each body’s data base64url-encoded), metadata (labels and headers only, those in metadataHeaders if given), minimal or raw.",
+      "query": ["format", "metadataHeaders"]
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/threads",
+      "name": "list_threads",
+      "says": "Lists the mailbox’s conversations without their messages; get_thread returns one’s messages. q takes Gmail search-box syntax, e.g. from:ann@example.com is:unread, and userId is me.",
+      "query": ["q", "labelIds", "maxResults", "pageToken", "includeSpamTrash"]
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/threads/{id}",
+      "name": "get_thread",
+      "says": "Returns one conversation with all its messages; userId is me. format is full (the default: headers and body parts in payload, each body’s data base64url-encoded), metadata (labels and headers only, those in metadataHeaders if given) or minimal.",
+      "query": ["format", "metadataHeaders"]
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/labels",
+      "name": "list_labels",
+      "says": "Lists the mailbox’s labels, system and user, each with its id, name and type; those ids are what labelIds and modify_message_labels take. userId is me.",
+      "query": []
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/labels/{id}",
+      "name": "get_label",
+      "says": "Returns one label with its total and unread counts of messages and threads. userId is me.",
+      "query": []
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/drafts",
+      "name": "list_drafts",
+      "says": "Lists drafts as an id each, with only the id and threadId of its message; get_draft returns one’s content. q takes Gmail search-box syntax, and userId is me.",
+      "query": ["q", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/drafts/{id}",
+      "name": "get_draft",
+      "says": "Returns one draft and its message; userId is me. format is full (the default: headers and body parts in payload, each body’s data base64url-encoded), metadata, minimal or raw.",
+      "query": ["format"]
+    },
+    {
+      "op": "GET /gmail/v1/users/{userId}/profile",
+      "name": "get_profile",
+      "says": "Returns the signed-in account’s email address and its total messages and threads. userId is me.",
+      "query": []
+    },
+    {
+      "op": "POST /gmail/v1/users/{userId}/messages/send",
+      "name": "send_message",
+      "says": "Sends an email to the recipients in its To, Cc and Bcc headers; userId is me. A reply stays in its thread only with the thread’s threadId, In-Reply-To and References headers in the raw message, and the same Subject. Body: {\"raw\": \"<base64url of an RFC 2822 message>\", \"threadId\"}.",
+      "query": []
+    },
+    {
+      "op": "POST /gmail/v1/users/{userId}/drafts",
+      "name": "create_draft",
+      "says": "Saves an email as a draft without sending it; userId is me. A reply stays in its thread as in send_message. Body: {\"message\": {\"raw\": \"<base64url of an RFC 2822 message>\", \"threadId\"}}.",
+      "query": []
+    },
+    {
+      "op": "POST /gmail/v1/users/{userId}/messages/{id}/modify",
+      "name": "modify_message_labels",
+      "says": "Adds or removes labels on one message, up to 100 of each, by the ids list_labels returns, INBOX and UNREAD included; userId is me. Body: {\"addLabelIds\": [label ids], \"removeLabelIds\": [label ids]}.",
+      "query": []
+    },
+    {
+      "op": "POST /gmail/v1/users/{userId}/labels",
+      "name": "create_label",
+      "says": "Creates a user label, whose name may not be a system label’s; userId is me. Body: {\"name\", \"labelListVisibility\": \"labelShow\", \"messageListVisibility\": \"show\"}.",
+      "query": []
+    }
+  ]
+}

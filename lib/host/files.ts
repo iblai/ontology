@@ -123,12 +123,23 @@ export async function readEnv(): Promise<Record<string, string>> {
   return env;
 }
 
-// ponytail: one queue per process for the env and the labels, so two writes never lose each
-// other; a file lock for two processes.
-let envQueue: Promise<unknown> = Promise.resolve();
+// ponytail: one queue per name per process, so two changes of a file never lose each other; a
+// file lock for two processes. On globalThis: route bundles may each load this file.
+const turns = globalThis as { ontologyTurns?: Map<string, Promise<unknown>> };
 
-/** Sets one secret in the env file (0600), keeping the others. */
-export async function setEnv(name: string, value: string): Promise<void> {
+/** Runs `change` once every change queued before it under the same name has run. */
+export function inTurn<T>(name: string, change: () => Promise<T>): Promise<T> {
+  const queues = (turns.ontologyTurns ??= new Map());
+  const run = (queues.get(name) ?? Promise.resolve()).then(change);
+  queues.set(
+    name,
+    run.catch(() => undefined),
+  );
+  return run;
+}
+
+/** Sets one secret in the env file (0600), keeping the others; with `only`, while it is still that. */
+export async function setEnv(name: string, value: string, only?: string): Promise<void> {
   if (!ENV_NAME.test(name)) {
     throw new HostError(400, `${name} is not an env name: capitals, digits and _, capital first.`);
   }
@@ -138,15 +149,15 @@ export async function setEnv(name: string, value: string): Promise<void> {
       `The value of ${name} holds a line break: the env file keeps one line.`,
     );
   }
-  const write = envQueue.then(async () => {
-    const env = { ...(await readEnv()), [name]: value };
+  await inTurn("env", async () => {
+    const before = await readEnv();
+    if (only !== undefined && before[name] !== only) return;
+    const env = { ...before, [name]: value };
     const text = Object.entries(env)
       .map(([key, kept]) => `${key}=${kept}\n`)
       .join("");
     await writeAtomic(homePath("env"), text, 0o600);
   });
-  envQueue = write.catch(() => undefined);
-  await write;
 }
 
 /** What admins call their systems, by the database's name; a system without one is not in it. */
@@ -164,7 +175,7 @@ export async function readLabels(): Promise<Record<string, string>> {
 
 /** Keeps a system's label; an empty one, or the name itself, forgets it. */
 export async function setLabel(name: string, label: string): Promise<void> {
-  const write = envQueue.then(async () => {
+  await inTurn("env", async () => {
     const labels = await readLabels();
     const before = labels[name];
     if (label && label !== name) labels[name] = label;
@@ -172,13 +183,23 @@ export async function setLabel(name: string, label: string): Promise<void> {
     if (labels[name] === before) return;
     await writeAtomic(homePath("labels.json"), `${JSON.stringify(labels, null, 2)}\n`);
   });
-  envQueue = write.catch(() => undefined);
-  await write;
 }
 
+const OAUTH = ["OAUTH_CLIENT_SECRET", "OAUTH_REFRESH_TOKEN"] as const;
+
 /** The env name for a system's password or an API's key: "sis-eu" → "SIS_EU_DB_PASSWORD". */
-export function envName(name: string, suffix: "DB_PASSWORD" | "API_KEY"): string {
+export function envName(
+  name: string,
+  suffix: "DB_PASSWORD" | "API_KEY" | (typeof OAUTH)[number],
+): string {
   const upper = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   // An env name starts with a letter; a database's name may start with a digit.
   return `${/^[A-Z]/.test(upper) ? upper : `X${upper}`}_${suffix}`;
+}
+
+/** The env file without the OAuth secrets, which the gateway alone uses: the runtime's share. */
+export function runtimeEnv(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(([name]) => !OAUTH.some((suffix) => name.endsWith(`_${suffix}`))),
+  );
 }

@@ -1,0 +1,134 @@
+{
+  "id": "google-admin",
+  "name": "Google Workspace Admin",
+  "abbr": "Ad",
+  "color": "#4285F4",
+  "baseUrl": "https://admin.googleapis.com",
+  "example": "https://admin.googleapis.com",
+  "hint": "A web OAuth client in your Google Cloud project with the Admin SDK API enabled, and a Workspace admin’s refresh token for these scopes under https://www.googleapis.com/auth/: admin.directory.user.readonly, admin.directory.group.readonly, admin.directory.group.member, admin.directory.orgunit.readonly, admin.directory.device.chromeos.readonly, admin.directory.device.mobile.readonly, admin.directory.domain.readonly, admin.directory.rolemanagement.readonly, admin.reports.audit.readonly, admin.reports.usage.readonly, for example from the OAuth 2.0 Playground; an External app left in Testing gets tokens that end after 7 days.",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://admin.googleapis.com/$discovery/rest?version=directory_v1"
+    },
+    {
+      "url": "https://admin.googleapis.com/$discovery/rest?version=reports_v1"
+    }
+  ],
+  "pick": [
+    {
+      "op": "GET /admin/directory/v1/users",
+      "name": "list_users",
+      "says": "Lists the users. Give customer my_customer for the account’s own organization, or domain for one domain; query searches, e.g. email:ada* or orgUnitPath=/Students. Without fields each user comes back whole: fields=users(primaryEmail,name/fullName,orgUnitPath,suspended),nextPageToken keeps the answer small.",
+      "query": [
+        "customer",
+        "domain",
+        "query",
+        "maxResults",
+        "orderBy",
+        "pageToken",
+        "projection",
+        "viewType",
+        "fields"
+      ]
+    },
+    {
+      "op": "GET /admin/directory/v1/users/{userKey}",
+      "name": "get_user",
+      "says": "Returns one user, by primary email, alias or ID; projection full adds the custom schema fields.",
+      "query": ["projection"]
+    },
+    {
+      "op": "GET /admin/directory/v1/groups",
+      "name": "list_groups",
+      "says": "Lists groups. Give customer my_customer for the account’s own organization, or domain; for the groups one user is in, give userKey and no customer. query searches, e.g. email:support* or name:contact*.",
+      "query": ["customer", "domain", "userKey", "query", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /admin/directory/v1/groups/{groupKey}",
+      "name": "get_group",
+      "says": "Returns one group, by email address, alias or ID.",
+      "query": []
+    },
+    {
+      "op": "GET /admin/directory/v1/groups/{groupKey}/members",
+      "name": "list_group_members",
+      "says": "Lists a group’s members, users and groups, each with its role: OWNER, MANAGER or MEMBER. includeDerivedMembership true also lists indirect members.",
+      "query": ["roles", "includeDerivedMembership", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /admin/directory/v1/customer/{customerId}/orgunits",
+      "name": "list_org_units",
+      "says": "Lists organizational units. customerId my_customer is the account’s own organization; type all lists every level under orgUnitPath, the default only the immediate children.",
+      "query": ["orgUnitPath", "type"]
+    },
+    {
+      "op": "GET /admin/reports/v1/activity/users/{userKey}/applications/{applicationName}",
+      "name": "list_activities",
+      "says": "Lists the audit events of one application, applicationName such as login, drive (Google says its report is only available for Google Workspace Business and Enterprise customers), admin or groups, for userKey all or one user’s email; eventName and filters narrow it, e.g. login_success and is_suspicious==true. startTime and endTime are RFC 3339 and reach back 180 days; gmail needs both, at most 30 days apart.",
+      "query": ["startTime", "endTime", "eventName", "filters", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /admin/reports/v1/usage/users/{userKey}/dates/{date}",
+      "name": "get_user_usage",
+      "says": "Returns usage statistics per user for one day: userKey all or one user’s email, date yyyy-mm-dd in Pacific Standard Time; parameters picks them, e.g. accounts:timestamp_last_login. A day whose data is not ready comes back with a warning.",
+      "query": ["parameters", "filters", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /admin/reports/v1/usage/dates/{date}",
+      "name": "get_customer_usage",
+      "says": "Returns the organization’s usage statistics for one day: date yyyy-mm-dd in Pacific Standard Time; parameters picks them, e.g. accounts:num_30day_logins. A day whose data is not ready comes back with a warning.",
+      "query": ["parameters", "pageToken"]
+    },
+    {
+      "op": "GET /admin/directory/v1/customer/{customerId}/devices/chromeos",
+      "name": "list_chromeos_devices",
+      "says": "Lists ChromeOS devices. customerId my_customer is the account’s own organization; query filters, e.g. status:provisioned or recent_user:ada@school.edu, and projection FULL returns every field.",
+      "query": [
+        "query",
+        "orgUnitPath",
+        "includeChildOrgunits",
+        "projection",
+        "maxResults",
+        "pageToken"
+      ]
+    },
+    {
+      "op": "GET /admin/directory/v1/customer/{customerId}/devices/mobile",
+      "name": "list_mobile_devices",
+      "says": "Lists user-owned mobile devices; company-owned ones need Google’s Cloud Identity Devices API. customerId my_customer is the account’s own organization; query filters, e.g. os:Android or status:approved.",
+      "query": ["query", "projection", "maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /admin/directory/v1/customer/{customer}/domains",
+      "name": "list_domains",
+      "says": "Lists the organization’s domains, with whether each is primary and verified. customer my_customer is the account’s own organization.",
+      "query": []
+    },
+    {
+      "op": "GET /admin/directory/v1/customer/{customer}/roles",
+      "name": "list_admin_roles",
+      "says": "Lists the admin roles, prebuilt and custom, with the privileges each grants. customer my_customer is the account’s own organization.",
+      "query": ["maxResults", "pageToken"]
+    },
+    {
+      "op": "GET /admin/directory/v1/customer/{customer}/roleassignments",
+      "name": "list_role_assignments",
+      "says": "Lists who holds which admin role, by role ID and assignee ID; userKey narrows it to one user or group. customer my_customer is the account’s own organization.",
+      "query": ["userKey", "roleId", "includeIndirectRoleAssignments", "maxResults", "pageToken"]
+    },
+    {
+      "op": "POST /admin/directory/v1/groups/{groupKey}/members",
+      "name": "add_group_member",
+      "says": "Adds a user or another group to a group. Body: {\"email\", \"role\": \"MEMBER\"}.",
+      "query": []
+    }
+  ]
+}

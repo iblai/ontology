@@ -1,0 +1,67 @@
+{
+  "id": "socrata",
+  "name": "Socrata Open Data",
+  "abbr": "So",
+  "color": "#2C5697",
+  "baseUrl": "",
+  "example": "https://data.cityofnewyork.us",
+  "hint": "An app token from the developer settings of your profile on the data site.",
+  "auth": {
+    "header": "X-App-Token: "
+  },
+  "ask": ["query_dataset"],
+  "sources": [
+    {
+      "url": "https://dev.socrata.com/apis/metadata.yaml",
+      "version": "1.0.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "get_dataset_metadata",
+      "method": "GET",
+      "path": "/api/views/metadata/v1/{uuid}",
+      "description": "Returns a dataset’s metadata: its name, description and custom fields, by its four-by-four ID (abcd-1234).",
+      "query": [],
+      "notes": {
+        "uuid": "The eight-character unique ID of the dataset. This API returns this identifier under the `id` field."
+      }
+    },
+    {
+      "name": "search_datasets",
+      "method": "GET",
+      "path": "/api/catalog/v1",
+      "description": "Searches the catalog of datasets, charts and maps; set domains and search_context to this site’s name to stay on it.",
+      "query": [
+        "q",
+        "only",
+        "categories",
+        "tags",
+        "domains",
+        "search_context",
+        "names",
+        "ids",
+        "limit",
+        "offset",
+        "order"
+      ],
+      "notes": {
+        "q": "Words to search for.",
+        "only": "The kind of asset, e.g. dataset, chart or map.",
+        "domains": "The data sites to search, by name, comma-separated.",
+        "search_context": "The site whose categories and tags apply.",
+        "ids": "Four-by-four IDs, comma-separated."
+      }
+    },
+    {
+      "name": "query_dataset",
+      "method": "POST",
+      "path": "/api/v3/views/{id}/query.json",
+      "description": "Runs a SoQL query over a dataset and returns its rows. Body: {\"query\": \"SELECT * WHERE … LIMIT 100\", \"page\": {\"pageNumber\": 1, \"pageSize\": 100}}.",
+      "query": [],
+      "notes": {
+        "id": "The dataset’s four-by-four ID (abcd-1234)."
+      }
+    }
+  ]
+}

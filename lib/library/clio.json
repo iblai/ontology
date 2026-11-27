@@ -1,0 +1,186 @@
+{
+  "id": "clio",
+  "name": "Clio Manage",
+  "abbr": "Cm",
+  "color": "#0070E0",
+  "baseUrl": "https://app.clio.com/api/v4",
+  "example": "https://app.clio.com/api/v4",
+  "hint": "An application’s key and secret from the Clio developer portal, and a refresh token; outside the US use your region’s host (eu, ca or au.app.clio.com).",
+  "auth": {
+    "oauth": {
+      "grant": "refresh_token",
+      "tokenUrl": "/oauth/token",
+      "clientAuth": "body",
+      "scope": ""
+    }
+  },
+  "sources": [
+    {
+      "url": "https://docs.developers.clio.com/openapi.json",
+      "version": "v4"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_matters",
+      "method": "GET",
+      "path": "/matters.json",
+      "description": "Lists matters. Clio returns only id and etag unless fields names more, e.g. id,display_number,description,status,client{name}.",
+      "query": ["query", "status", "client_id", "limit", "fields"],
+      "notes": {
+        "query": "Wildcard search for `display_number`, `number` or `description` matching a given string, as well as the `first_name`, `last_name` or `name` of the associated client.",
+        "status": "Filter Matter records to those with a given status. It accepts comma-separated statuses, e.g. `open,pending`.",
+        "client_id": "The unique identifier for a single Contact. The keyword `null` is not valid for this field. The list will be filtered to include only the Matter records with the matching property.",
+        "limit": "A limit on the number of Matter records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "get_matter",
+      "method": "GET",
+      "path": "/matters/{id}.json",
+      "description": "Returns one matter. Clio returns only id and etag unless fields names more.",
+      "query": ["fields"],
+      "notes": {
+        "id": "The unique identifier for the Matter.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_contacts",
+      "method": "GET",
+      "path": "/contacts.json",
+      "description": "Lists contacts: the people and companies linked to matters. Clio returns only id and etag unless fields names more, e.g. id,name,type,primary_email_address.",
+      "query": ["query", "type", "limit", "fields"],
+      "notes": {
+        "query": "Wildcard search for name, title, email address, address, phone number, web site, instant messenger address, custom fields, related matter name, or company name matching a given string.",
+        "type": "Filter Contact records to those that match the given type.",
+        "limit": "A limit on the number of Contact records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "get_contact",
+      "method": "GET",
+      "path": "/contacts/{id}.json",
+      "description": "Returns one contact. Clio returns only id and etag unless fields names more.",
+      "query": ["fields"],
+      "notes": {
+        "id": "The unique identifier for the Contact.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_activities",
+      "method": "GET",
+      "path": "/activities.json",
+      "description": "Lists time entries and expenses, for one matter or all. Clio returns only id and etag unless fields names more, e.g. id,type,date,quantity,total,note.",
+      "query": ["matter_id", "type", "limit", "fields"],
+      "notes": {
+        "matter_id": "The unique identifier for a single Matter. Use the keyword `null` to match those without a Activity. The list will be filtered to include only the Activity records with the matching property.",
+        "type": "Filter Activity records to those of a specific type.",
+        "limit": "A limit on the number of Activity records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_documents",
+      "method": "GET",
+      "path": "/documents.json",
+      "description": "Lists documents’ metadata. Clio returns only id and etag unless fields names more, e.g. id,name,created_at,matter{display_number}.",
+      "query": ["matter_id", "query", "limit", "fields"],
+      "notes": {
+        "matter_id": "The unique identifier for a single Matter. Use the keyword `null` to match those without a Document. The list will be filtered to include only the Document records with the matching property.",
+        "query": "Wildcard search for `name` matching the given string.",
+        "limit": "A limit on the number of Document records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_tasks",
+      "method": "GET",
+      "path": "/tasks.json",
+      "description": "Lists tasks. Clio returns only id and etag unless fields names more, e.g. id,name,due_at,status,assignee{name}.",
+      "query": ["matter_id", "complete", "limit", "fields"],
+      "notes": {
+        "matter_id": "The unique identifier for a single Matter. Use the keyword `null` to match those without a Task. The list will be filtered to include only the Task records with the matching property.",
+        "complete": "Filter Task records to those which are complete or not.",
+        "limit": "A limit on the number of Task records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_calendar_entries",
+      "method": "GET",
+      "path": "/calendar_entries.json",
+      "description": "Lists calendar entries. Clio returns only id and etag unless fields names more, e.g. id,summary,start_at,end_at.",
+      "query": ["matter_id", "from", "to", "limit", "fields"],
+      "notes": {
+        "matter_id": "The unique identifier for a single Matter. Use the keyword `null` to match those without a CalendarEntry. The list will be filtered to include only the CalendarEntry records with the matching property.",
+        "from": "Filter CalendarEntry records to those that end on or after the provided time (Expects an ISO-8601 timestamp).",
+        "to": "Filter CalendarEntry records to those that begin on or before the provided time (Expects an ISO-8601 timestamp).",
+        "limit": "A limit on the number of CalendarEntry records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_notes",
+      "method": "GET",
+      "path": "/notes.json",
+      "description": "Lists notes on a matter or a contact; type is Matter or Contact. Clio returns only id and etag unless fields names more, e.g. id,subject,detail,date.",
+      "query": ["type", "matter_id", "contact_id", "query", "limit", "fields"],
+      "notes": {
+        "type": "Filter Note records to those of the specified type.",
+        "matter_id": "The unique identifier for a single Matter. The keyword `null` is not valid for this field. The list will be filtered to include only the Note records with the matching property.",
+        "contact_id": "The unique identifier for a single Contact. The keyword `null` is not valid for this field. The list will be filtered to include only the Note records with the matching property.",
+        "query": "Wildcard search across note subject and detail.",
+        "limit": "A limit on the number of Note records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "list_communications",
+      "method": "GET",
+      "path": "/communications.json",
+      "description": "Lists logged emails and phone calls. Clio returns only id and etag unless fields names more, e.g. id,subject,body,type,date.",
+      "query": ["matter_id", "contact_id", "limit", "fields"],
+      "notes": {
+        "matter_id": "The unique identifier for a single Matter. Use the keyword `null` to match those without a Communication. The list will be filtered to include only the Communication records with the matching property.",
+        "contact_id": "The unique identifier for a single Contact. The keyword `null` is not valid for this field. The list will be filtered to include only the Communication records with the matching property.",
+        "limit": "A limit on the number of Communication records to be returned. Limit can range between 1 and 200. Default: `200`.",
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "who_am_i",
+      "method": "GET",
+      "path": "/users/who_am_i.json",
+      "description": "Returns the user this sign-in acts as. Clio returns only id and etag unless fields names more.",
+      "query": ["fields"],
+      "notes": {
+        "fields": "The fields to be returned. See response samples for what fields are available. For more information see the [fields section](#section/Fields)."
+      }
+    },
+    {
+      "name": "create_activity",
+      "method": "POST",
+      "path": "/activities.json",
+      "description": "Creates a time or expense entry. Body: {\"data\": {\"type\": \"TimeEntry\", \"date\", \"quantity\" (seconds), \"note\", \"matter\": {\"id\"}}}.",
+      "query": []
+    },
+    {
+      "name": "create_task",
+      "method": "POST",
+      "path": "/tasks.json",
+      "description": "Creates a task. Body: {\"data\": {\"name\", \"description\", \"due_at\", \"priority\", \"assignee\": {\"id\", \"type\": \"User\"}, \"matter\": {\"id\"}}}.",
+      "query": []
+    },
+    {
+      "name": "create_note",
+      "method": "POST",
+      "path": "/notes.json",
+      "description": "Adds a note to a matter or a contact. Body: {\"data\": {\"type\": \"Matter\", \"subject\", \"detail\", \"matter\": {\"id\"}}}.",
+      "query": []
+    }
+  ]
+}

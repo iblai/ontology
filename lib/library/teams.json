@@ -1,0 +1,195 @@
+{
+  "id": "teams",
+  "name": "Microsoft Teams",
+  "abbr": "Te",
+  "color": "#5059C9",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Team.ReadBasic.All, Channel.ReadBasic.All, TeamMember.Read.All, ChannelMember.Read.All, ChannelMessage.Read.All, Chat.Read.All, and Channel.Create, TeamMember.ReadWriteNonOwnerRole.All for the writes; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Teams.yml",
+      "version": "v1.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_teams",
+      "method": "GET",
+      "path": "/teams",
+      "description": "Lists the teams in the organization with only id, displayName, description and visibility filled; get_team returns the rest.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_team",
+      "method": "GET",
+      "path": "/teams/{team_id}",
+      "description": "Returns one team’s properties, by its ID.",
+      "query": ["$select"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_channels",
+      "method": "GET",
+      "path": "/teams/{team_id}/channels",
+      "description": "Lists a team’s channels. A select without email makes it faster, e.g. id,displayName,description,membershipType.",
+      "query": ["$filter", "$select"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "$filter": "Filter items by property values",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_channel",
+      "method": "GET",
+      "path": "/teams/{team_id}/channels/{channel_id}",
+      "description": "Returns one channel. Its summary comes back only when select names it, and leaving email out of select makes it faster.",
+      "query": ["$select"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "channel_id": "The unique identifier of channel",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_channel_messages",
+      "method": "GET",
+      "path": "/teams/{team_id}/channels/{channel_id}/messages",
+      "description": "Lists a channel’s messages without their replies, 20 to a page or up to 50 by top; expand=replies brings the replies along.",
+      "query": ["$top", "$expand"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "channel_id": "The unique identifier of channel",
+        "$top": "Show only the first n items",
+        "$expand": "Expand related entities"
+      }
+    },
+    {
+      "name": "list_message_replies",
+      "method": "GET",
+      "path": "/teams/{team_id}/channels/{channel_id}/messages/{chatMessage_id}/replies",
+      "description": "Lists the replies to one channel message, up to 50 by top.",
+      "query": ["$top"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "channel_id": "The unique identifier of channel",
+        "chatMessage_id": "The unique identifier of chatMessage",
+        "$top": "Show only the first n items"
+      }
+    },
+    {
+      "name": "get_channel_message",
+      "method": "GET",
+      "path": "/teams/{team_id}/channels/{channel_id}/messages/{chatMessage_id}",
+      "description": "Returns one message in a channel.",
+      "query": [],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "channel_id": "The unique identifier of channel",
+        "chatMessage_id": "The unique identifier of chatMessage"
+      }
+    },
+    {
+      "name": "list_team_members",
+      "method": "GET",
+      "path": "/teams/{team_id}/members",
+      "description": "Lists a team’s members, 100 to a page or up to 999 by top; roles holds owner or guest where a member is one.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_channel_members",
+      "method": "GET",
+      "path": "/teams/{team_id}/channels/{channel_id}/members",
+      "description": "Lists a channel’s direct members, 100 to a page or up to 999 by top.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "team_id": "The unique identifier of team",
+        "channel_id": "The unique identifier of channel",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_joined_teams",
+      "method": "GET",
+      "path": "/users/{user_id}/joinedTeams",
+      "description": "Lists the teams a user is a direct member of, by user ID or sign-in name (ada@school.edu), with only id, displayName, description, isArchived and the directory ID filled; get_team returns the rest.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user"
+      }
+    },
+    {
+      "name": "list_user_chats",
+      "method": "GET",
+      "path": "/users/{user_id}/chats",
+      "description": "Lists the chats a user is part of, by user ID or sign-in name. top is at most 50, expand takes members (25 at most) or lastMessagePreview, and orderby only lastMessagePreview/createdDateTime desc.",
+      "query": ["$filter", "$top", "$orderby", "$expand"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$orderby": "Order items by property values",
+        "$expand": "Expand related entities"
+      }
+    },
+    {
+      "name": "list_chat_messages",
+      "method": "GET",
+      "path": "/chats/{chat_id}/messages",
+      "description": "Lists a chat’s messages, last changed first, up to 50 by top. filter works only beside an orderby on the same field: createdDateTime desc with lt, or lastModifiedDateTime desc with gt and lt.",
+      "query": ["$top", "$orderby", "$filter"],
+      "notes": {
+        "chat_id": "The unique identifier of chat",
+        "$top": "Show only the first n items",
+        "$orderby": "Order items by property values",
+        "$filter": "Filter items by property values"
+      }
+    },
+    {
+      "name": "create_channel",
+      "method": "POST",
+      "path": "/teams/{team_id}/channels",
+      "description": "Creates a channel in a team; displayName is at most 50 characters. Body: {\"displayName\", \"description\", \"membershipType\": \"standard\"}.",
+      "query": [],
+      "notes": {
+        "team_id": "The unique identifier of team"
+      }
+    },
+    {
+      "name": "add_team_member",
+      "method": "POST",
+      "path": "/teams/{team_id}/members",
+      "description": "Adds a user to a team as a member; guests cannot be added this way, and the member list can take a while to show it. Body: {\"@odata.type\": \"#microsoft.graph.aadUserConversationMember\", \"roles\": [], \"user@odata.bind\": \"https://graph.microsoft.com/v1.0/users('<user ID>')\"}.",
+      "query": [],
+      "notes": {
+        "team_id": "The unique identifier of team"
+      }
+    }
+  ]
+}

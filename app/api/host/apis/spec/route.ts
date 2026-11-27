@@ -2,12 +2,18 @@
 
 import { parse } from "yaml";
 import { apiAddress } from "@/lib/host/address";
-import { askForSpec, endpointsFromSpec, specHeader, type SpecMiss } from "@/lib/host/apis";
+import {
+  askForSpec,
+  endpointsFromSpec,
+  specHeader,
+  specToken,
+  type SpecMiss,
+} from "@/lib/host/apis";
 import { fail, HostError, json } from "@/lib/host/errors";
 import { readEnv } from "@/lib/host/files";
 import { asConsole } from "@/lib/host/guard";
 import type { HostSpec } from "@/lib/host/types";
-import { optionalText, readBody, text } from "../../body";
+import { oauthInput, optionalText, readBody, text } from "../../body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,8 +31,12 @@ export async function POST(request: Request) {
       // ponytail: the name is resolved again by fetch; pin the checked address if rebinding matters.
       await apiAddress(url);
       const auth = optionalText(body, "authHeader");
+      const baseUrl = optionalText(body, "baseUrl");
+      const oauth = oauthInput(body);
       const env = auth.trim() ? await readEnv() : {};
-      const { headers, withheld } = specHeader(url, optionalText(body, "baseUrl"), auth, env);
+      const { headers, withheld } = oauth
+        ? await specToken(url, baseUrl, oauth)
+        : specHeader(url, baseUrl, auth, env);
       const secret = Object.values(headers)[0] ?? "";
       const get = async (sent: Record<string, string>): Promise<Response | SpecMiss> => {
         try {
@@ -55,8 +65,12 @@ export async function POST(request: Request) {
         }
         if ("reason" in got) throw new HostError(400, `${url} did not answer: ${got.reason}`);
         const denied = got.status === 401 || got.status === 403;
-        const why =
-          withheld && denied ? " The auth header is sent only to the API’s own address." : "";
+        // Why no credential went with a request that was refused for want of one.
+        let why = "";
+        if (denied && withheld) why = " The auth header is sent only to the API’s own address.";
+        else if (denied && oauth && oauth.grant !== "client_credentials") {
+          why = " With a refresh token, Fetch Spec sends no token, so none is spent before a save.";
+        }
         throw new HostError(400, `${url} answered ${got.status}.${why}`);
       }
       const source = await readCapped(got);

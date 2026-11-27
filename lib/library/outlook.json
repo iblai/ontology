@@ -1,0 +1,265 @@
+{
+  "id": "outlook",
+  "name": "Microsoft Outlook",
+  "abbr": "Ol",
+  "color": "#0078D4",
+  "baseUrl": "https://graph.microsoft.com/v1.0",
+  "example": "https://graph.microsoft.com/v1.0",
+  "hint": "An app registration in Microsoft Entra with these application permissions, admin-consented: Mail.Read, Calendars.Read, Contacts.Read, and Mail.Send, Calendars.ReadWrite, Contacts.ReadWrite for the writes; the token address holds your directory ID.",
+  "auth": {
+    "oauth": {
+      "grant": "client_credentials",
+      "tokenUrl": "",
+      "tokenExample": "https://login.microsoftonline.com/your-directory-id/oauth2/v2.0/token",
+      "clientAuth": "body",
+      "scope": "https://graph.microsoft.com/.default"
+    }
+  },
+  "ask": ["get_schedule"],
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Mail.yml",
+      "version": "v1.0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Calendar.yml",
+      "version": "v1.0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/PersonalContacts.yml",
+      "version": "v1.0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Users.Actions.yml",
+      "version": "v1.0"
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "list_messages",
+      "method": "GET",
+      "path": "/users/{user_id}/messages",
+      "description": "Lists the messages in a user’s mailbox, Deleted Items included, 10 at a time or up to 1,000 with top; the user is an ID or sign-in name, and bodies come in HTML. search takes words or KQL in double quotes, such as \"from:ada\"; orderby beside filter must sort by properties that come first in filter, in the same order.",
+      "query": ["$filter", "$search", "$orderby", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "$filter": "Filter items by property values",
+        "$search": "Search items by search phrases",
+        "$orderby": "Order items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_message",
+      "method": "GET",
+      "path": "/users/{user_id}/messages/{message_id}",
+      "description": "Returns one message, its body in HTML; select names the fields to return, such as subject,from,toRecipients,body.",
+      "query": ["$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "message_id": "The unique identifier of message",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_folder_messages",
+      "method": "GET",
+      "path": "/users/{user_id}/mailFolders/{mailFolder_id}/messages",
+      "description": "Lists the messages in one mail folder, by its ID or a well-known name such as inbox, sentitems, drafts or archive; filter takes isRead eq false or receivedDateTime ge 2026-01-01.",
+      "query": ["$filter", "$orderby", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "mailFolder_id": "The unique identifier of mailFolder",
+        "$filter": "Filter items by property values",
+        "$orderby": "Order items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_mail_folders",
+      "method": "GET",
+      "path": "/users/{user_id}/mailFolders",
+      "description": "Lists the mail folders at the top of a user’s mailbox with their unread and total counts; hidden folders and subfolders are left out.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_child_folders",
+      "method": "GET",
+      "path": "/users/{user_id}/mailFolders/{mailFolder_id}/childFolders",
+      "description": "Lists the folders inside one mail folder, by its ID or a well-known name such as inbox, with their unread and total counts; hidden folders are left out.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "mailFolder_id": "The unique identifier of mailFolder",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_attachments",
+      "method": "GET",
+      "path": "/users/{user_id}/messages/{message_id}/attachments",
+      "description": "Lists a message’s attachments with their names, types and sizes; a file’s content comes in contentBytes, base64-encoded.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "message_id": "The unique identifier of message",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_calendar_view",
+      "method": "GET",
+      "path": "/users/{user_id}/calendarView",
+      "description": "Lists the events in a user’s default calendar between two times, each written as ISO 8601, with recurring events expanded into their occurrences. A time without an offset is read as UTC, and times come back in UTC.",
+      "query": ["startDateTime", "endDateTime", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "startDateTime": "The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00",
+        "endDateTime": "The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_events",
+      "method": "GET",
+      "path": "/users/{user_id}/events",
+      "description": "Lists the events in a user’s mailbox: single events and the masters of recurring series, not each occurrence, which the calendar view lists. Times come back in UTC and bodies in HTML; filter takes start/dateTime ge '2026-07-01T08:00'.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_event",
+      "method": "GET",
+      "path": "/users/{user_id}/events/{event_id}",
+      "description": "Returns one event, its start and end in UTC and its body in HTML.",
+      "query": ["$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "event_id": "The unique identifier of event",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_calendars",
+      "method": "GET",
+      "path": "/users/{user_id}/calendars",
+      "description": "Lists all of a user’s calendars.",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "list_events_in_calendar",
+      "method": "GET",
+      "path": "/users/{user_id}/calendars/{calendar_id}/calendarView",
+      "description": "Lists the events in one of a user’s calendars, by the calendar’s ID, between two times written as ISO 8601, with recurring events expanded into their occurrences; times come back in UTC.",
+      "query": ["startDateTime", "endDateTime", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "calendar_id": "The unique identifier of calendar",
+        "startDateTime": "The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00",
+        "endDateTime": "The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_schedule",
+      "method": "POST",
+      "path": "/users/{user_id}/calendar/microsoft.graph.getSchedule",
+      "description": "Returns the free/busy availability of users, distribution lists or rooms, by email address, over a period; times come back in UTC. Body: {\"schedules\": [addresses], \"startTime\": {\"dateTime\", \"timeZone\"}, \"endTime\": {\"dateTime\", \"timeZone\"}}.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user"
+      }
+    },
+    {
+      "name": "list_contacts",
+      "method": "GET",
+      "path": "/users/{user_id}/contacts",
+      "description": "Lists the contacts in a user’s default Contacts folder; to find one by address, filter with emailAddresses/any(a:a/address eq 'ada@school.edu').",
+      "query": ["$filter", "$top", "$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "$filter": "Filter items by property values",
+        "$top": "Show only the first n items",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "get_contact",
+      "method": "GET",
+      "path": "/users/{user_id}/contacts/{contact_id}",
+      "description": "Returns one contact.",
+      "query": ["$select"],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "contact_id": "The unique identifier of contact",
+        "$select": "Select properties to be returned"
+      }
+    },
+    {
+      "name": "send_mail",
+      "method": "POST",
+      "path": "/users/{user_id}/microsoft.graph.sendMail",
+      "description": "Sends an email as the user, by ID or sign-in name, and saves it in Sent Items. Body: {\"message\": {\"subject\", \"body\": {\"contentType\": \"Text\", \"content\"}, \"toRecipients\": [{\"emailAddress\": {\"address\"}}]}}.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user"
+      }
+    },
+    {
+      "name": "reply_to_message",
+      "method": "POST",
+      "path": "/users/{user_id}/messages/{message_id}/microsoft.graph.reply",
+      "description": "Replies to a message’s sender, or to its replyTo addresses when it has them, and saves the reply in Sent Items. Body: {\"comment\"}.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user",
+        "message_id": "The unique identifier of message"
+      }
+    },
+    {
+      "name": "create_event",
+      "method": "POST",
+      "path": "/users/{user_id}/events",
+      "description": "Creates an event in a user’s default calendar; Graph sends an invitation to each attendee, and this can’t be turned off. Body: {\"subject\", \"start\": {\"dateTime\", \"timeZone\"}, \"end\": {\"dateTime\", \"timeZone\"}, \"attendees\": [{\"emailAddress\": {\"address\"}}]}.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user"
+      }
+    },
+    {
+      "name": "create_contact",
+      "method": "POST",
+      "path": "/users/{user_id}/contacts",
+      "description": "Adds a contact to a user’s default Contacts folder. Body: {\"givenName\", \"surname\", \"emailAddresses\": [{\"address\", \"name\"}], \"businessPhones\": [numbers]}.",
+      "query": [],
+      "notes": {
+        "user_id": "The unique identifier of user"
+      }
+    }
+  ]
+}
