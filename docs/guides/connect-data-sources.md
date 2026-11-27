@@ -186,7 +186,8 @@ description so agents connect the two.
 The Microsoft systems call Microsoft Graph v1.0 as an app, with client credentials. The Google
 systems call Google's APIs as one account, with its refresh token.
 
-**Microsoft**, set up once:
+**Microsoft**, set up once (step by step, with every click:
+[Connect Outlook and Microsoft 365](connect-microsoft-365.md)):
 
 1. Register an app in Microsoft Entra (**App registrations**) and give it a client secret.
 2. Add the Microsoft Graph **application** permissions of each system you use (below), then grant

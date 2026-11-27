@@ -179,7 +179,7 @@ export function SetupHelp({
   const guide =
     s.vendor === "google"
       ? `${GUIDES}/connect-google-workspace.md`
-      : `${GUIDES}/connect-data-sources.md#google-and-microsoft`;
+      : `${GUIDES}/connect-microsoft-365.md`;
   return (
     <Popover.Root
       open={open}

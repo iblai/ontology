@@ -99,7 +99,8 @@ The same app and a single sign-in serve Google Drive, Calendar, Classroom, Sheet
 Admin. Enable their APIs at step 1, paste every system's permissions together at step 2,
 separated by spaces, and enter the same three values on each system's tile at step 3. Each
 system's permissions are listed in
-[Connect data sources](connect-data-sources.md#google-and-microsoft), which also covers Microsoft 365.
+[Connect data sources](connect-data-sources.md#google-and-microsoft). Microsoft 365 has its own
+guide: [Connect Outlook and Microsoft 365](connect-microsoft-365.md).
 
 ## Good to know
 
